@@ -15,6 +15,8 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include "GPU/Common/VR.h"
+
 #include <WinNls.h>
 #include <math.h>
 #include <Wbemidl.h>
@@ -506,6 +508,9 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	comm.dwICC = ICC_BAR_CLASSES | ICC_LISTVIEW_CLASSES | ICC_TAB_CLASSES;
 	InitCommonControlsEx(&comm);
 	timeBeginPeriod(1);
+
+	InitVR();
+
 	MainWindow::Init(_hInstance);
 
 	g_hPopupMenus = LoadMenu(_hInstance, (LPCWSTR)IDR_POPUPMENUS);
@@ -600,6 +605,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	}
 
 	g_Config.Save();
+	ShutdownVR();
 	LogManager::Shutdown();
 
 	if (g_Config.bRestartRequired) {

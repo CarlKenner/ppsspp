@@ -57,7 +57,7 @@ static char hmd_device_name[MAX_PATH] = "";
 void NewVRFrame()
 {
 	g_new_tracking_frame = true;
-	ClearDebugProj();
+	//ClearDebugProj();
 }
 
 void InitVR()

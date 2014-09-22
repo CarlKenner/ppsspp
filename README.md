@@ -1,11 +1,17 @@
-﻿PPSSPP - a fast and portable PSP emulator
-=========================================
+﻿PPSSPP VR - a fast and portable PSP emulator
+for the Oculus Rift
+============================================
 
-Created by Henrik Rydgård
+Virtual Reality support by Carl Kenner
+
+PPSSPP Created by Henrik Rydgård
 
 Additional code by many contributors, see the Credits screen
 
 Originally released under the GPL 2.0 (and later) in November 2012
+
+VR Branch:
+https://github.com/CarlKenner/ppsspp/tree/VR
 
 Official website:
 http://www.ppsspp.org/
@@ -15,6 +21,13 @@ No BIOS file required to play, PPSSPP is in many ways a "HLE" emulator.
 To contribute, see [the development page](http://www.ppsspp.org/development.html).
 
 For the latest source code, see [our github page](https://github.com/hrydgard/ppsspp).
+
+Building
+--------
+Update the submodules in Git.
+Extract the LibOVR folder from the Oculus SDK 0.4.2 or above into the /ext folder.
+Open /Windows/PPSSPP.sln in Visual Studio 2013 Update 3.
+Use the Build > Configuration Manager menu to choose Release and x64, or whatever you want.
 
 For build instructions and other development tutorials, see the [wiki](https://github.com/hrydgard/ppsspp/wiki).
 

@@ -29,7 +29,7 @@ const float DEFAULT_VR_UNITS_PER_METRE = 1.0f, DEFAULT_VR_HUD_DISTANCE = 1.5f, D
 #include "Kernel/OVR_Math.h"
 #endif
 
-#include <mutex>
+#include "Common/StdMutex.h"
 
 //#include "Common/MathUtil.h"
 
