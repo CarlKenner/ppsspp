@@ -25,8 +25,8 @@
 #include "Kernel/OVR_Math.h"
 #endif
 
+#include "Common/Common.h"
 #include "Core/Config.h"
-
 #include "GPU/Common/VR.h"
 
 void ClearDebugProj();

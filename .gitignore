@@ -36,6 +36,9 @@ PPSSPPControls.dat
 # Qt Linguist files
 *.qm
 
+# Oculus SDK
+ext/LibOVR
+
 Logs
 Memstick
 memstick
