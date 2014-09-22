@@ -70,6 +70,7 @@ enum LOG_TYPE {
 	MEMMAP,
 	TIME,
 	SASMIX,
+	VR,
 
 	NUMBER_OF_LOGS,  // Must be last
 };

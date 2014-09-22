@@ -83,6 +83,7 @@ static const LogNameTableEntry logTable[] = {
 	{LogTypes::MEMMAP     ,"MM",      "Memory Map"},
 	{LogTypes::TIME       ,"TIME",    "CoreTiming"},
 	{LogTypes::SASMIX     ,"SASMIX",  "Sound Mixer (Sas)"},
+	{LogTypes::VR         ,"VR",      "VR"},
 };
 
 LogManager::LogManager() {

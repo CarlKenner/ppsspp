@@ -177,6 +177,8 @@
     <ClInclude Include="Common\TextureCacheCommon.h" />
     <ClInclude Include="Common\TransformCommon.h" />
     <ClInclude Include="Common\VertexDecoderCommon.h" />
+    <ClInclude Include="Common\VR.h" />
+    <ClInclude Include="Common\VR920.h" />
     <ClInclude Include="Debugger\Breakpoints.h" />
     <ClInclude Include="Debugger\Stepping.h" />
     <ClInclude Include="Directx9\GPU_DX9.h" />
@@ -241,6 +243,8 @@
     </ClCompile>
     <ClCompile Include="Common\VertexDecoderCommon.cpp" />
     <ClCompile Include="Common\VertexDecoderX86.cpp" />
+    <ClCompile Include="Common\VR.cpp" />
+    <ClCompile Include="Common\VR920.cpp" />
     <ClCompile Include="Debugger\Breakpoints.cpp" />
     <ClCompile Include="Debugger\Stepping.cpp" />
     <ClCompile Include="Directx9\GPU_DX9.cpp" />
