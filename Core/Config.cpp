@@ -457,6 +457,53 @@ static ConfigSetting graphicsSettings[] = {
 	ConfigSetting(false),
 };
 
+static ConfigSetting vrSettings[] = {
+	ConfigSetting("ForceVR", &g_Config.bForceVR, false),
+	ReportedConfigSetting("Scale", &g_Config.fScale, 1.0f),
+	ReportedConfigSetting("LeanBackAngle", &g_Config.fLeanBackAngle, 0.0f),
+	ReportedConfigSetting("AsynchronousTimewarp", &g_Config.bAsynchronousTimewarp, false),
+	ReportedConfigSetting("EnableVR", &g_Config.bEnableVR, true),
+	ReportedConfigSetting("LowPersistence", &g_Config.bLowPersistence, true),
+	ReportedConfigSetting("DynamicPrediction", &g_Config.bDynamicPrediction, true),
+	ReportedConfigSetting("OrientationTracking", &g_Config.bOrientationTracking, true),
+	ReportedConfigSetting("MagYawCorrection", &g_Config.bMagYawCorrection, true),
+	ReportedConfigSetting("PositionTracking", &g_Config.bPositionTracking, true),
+	ReportedConfigSetting("Chromatic", &g_Config.bChromatic, true),
+	ReportedConfigSetting("Timewarp", &g_Config.bTimewarp, true),
+	ReportedConfigSetting("Vignette", &g_Config.bVignette, false),
+	ReportedConfigSetting("NoRestore", &g_Config.bNoRestore, false),
+	ReportedConfigSetting("FlipVertical", &g_Config.bFlipVertical, false),
+	ReportedConfigSetting("SRGB", &g_Config.bSRGB, false),
+	ReportedConfigSetting("Overdrive", &g_Config.bOverdrive, false),
+	ReportedConfigSetting("HqDistortion", &g_Config.bHqDistortion, false),
+
+	ConfigSetting(false),
+};
+
+static ConfigSetting vrGameSettings[] = {
+	ReportedConfigSetting("UnitsPerMetre", &g_Config.fUnitsPerMetre, 1.0f),
+	ReportedConfigSetting("HudThickness", &g_Config.fHudThickness, 0.5f),
+	ReportedConfigSetting("HudDistance", &g_Config.fHudDistance, 1.5f),
+	ReportedConfigSetting("CameraForward", &g_Config.fCameraForward, 0.0f),
+	ReportedConfigSetting("CameraPitch", &g_Config.fCameraPitch, 0.0f),
+	ReportedConfigSetting("AimDistance", &g_Config.fAimDistance, 7.0f),
+	ReportedConfigSetting("ScreenHeight", &g_Config.fScreenHeight, 2.0f),
+	ReportedConfigSetting("ScreenThickness", &g_Config.fScreenThickness, 0.5f),
+	ReportedConfigSetting("ScreenDistance", &g_Config.fScreenDistance, 1.5f),
+	ReportedConfigSetting("ScreenRight", &g_Config.fScreenRight, 0.0f),
+	ReportedConfigSetting("ScreenUp", &g_Config.fScreenUp, 0.0f),
+	ReportedConfigSetting("ScreenPitch", &g_Config.fScreenPitch, 0.0f),
+	ReportedConfigSetting("TelescopeMaxFOV", &g_Config.fTelescopeMaxFOV, 0.0f),
+	ReportedConfigSetting("Disable3D", &g_Config.bDisable3D, false),
+	ReportedConfigSetting("HudFullscreen", &g_Config.bHudFullscreen, false),
+	ReportedConfigSetting("TelescopeEye", &g_Config.iTelescopeEye, 0),
+	ReportedConfigSetting("MetroidPrime", &g_Config.iMetroidPrime, 0),
+	ConfigSetting("SelectedLayer", &g_Config.iSelectedLayer, -1),
+	ConfigSetting("FlashState", &g_Config.iFlashState, 0),
+	
+	ConfigSetting(false),
+};
+
 static ConfigSetting soundSettings[] = {
 	ConfigSetting("Enable", &g_Config.bEnableSound, true),
 	ConfigSetting("AudioLatency", &g_Config.iAudioLatency, 1),
@@ -654,6 +701,8 @@ static ConfigSectionSettings sections[] = {
 	{"General", generalSettings},
 	{"CPU", cpuSettings},
 	{"Graphics", graphicsSettings},
+	{"VR", vrSettings},
+	{"VR", vrGameSettings},
 	{"Sound", soundSettings},
 	{"Control", controlSettings},
 	{"Network", networkSettings},

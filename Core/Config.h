@@ -172,6 +172,50 @@ public:
 	int iSplineBezierQuality; // 0 = low , 1 = Intermediate , 2 = High
 	std::string sPostShaderName;  // Off for off.
 
+	// VR command line
+	bool bForceVR;
+
+	// VR global
+	float fScale;
+	float fLeanBackAngle;
+	bool bAsynchronousTimewarp;
+	bool bEnableVR;
+	bool bLowPersistence;
+	bool bDynamicPrediction;
+	bool bOrientationTracking;
+	bool bMagYawCorrection;
+	bool bPositionTracking;
+	bool bChromatic;
+	bool bTimewarp;
+	bool bVignette;
+	bool bNoRestore;
+	bool bFlipVertical;
+	bool bSRGB;
+	bool bOverdrive;
+	bool bHqDistortion;
+
+	// VR Game specific
+	float fUnitsPerMetre;
+	float fHudThickness;
+	float fHudDistance;
+	float fCameraForward;
+	float fCameraPitch;
+	float fAimDistance;
+	float fScreenHeight;
+	float fScreenThickness;
+	float fScreenDistance;
+	float fScreenRight;
+	float fScreenUp;
+	float fScreenPitch;
+	float fTelescopeMaxFOV;
+	bool bDisable3D;
+	bool bHudFullscreen;
+	int iTelescopeEye;
+	int iMetroidPrime;
+	// VR layer debugging
+	int iSelectedLayer;
+	int iFlashState;
+
 	// Sound
 	bool bEnableSound;
 	int iAudioLatency; // 0 = low , 1 = medium(default) , 2 = high

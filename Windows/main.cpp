@@ -445,6 +445,22 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 
 		if (wideArgs[i][0] == L'-') {
 			switch (wideArgs[i][1]) {
+			case L'v':
+				if (wideArgs[i] == L"-vr")
+					g_Config.bForceVR = true;
+				break;
+			case L'f':
+				if (wideArgs[i] == L"-force-d3d9")
+				{
+					g_Config.iGPUBackend = GPU_BACKEND_DIRECT3D9;
+					g_Config.bSoftwareRendering = false;
+				}
+				else if (wideArgs[i] == L"-force-opengl")
+				{
+					g_Config.iGPUBackend = GPU_BACKEND_OPENGL;
+					g_Config.bSoftwareRendering = false;
+				}
+				break;
 			case L'l':
 				showLog = true;
 				g_Config.bEnableLogging = true;
