@@ -19,6 +19,7 @@
 
 #include "Core/Reporting.h"
 #include "Core/Config.h"
+#include "GPU/Common/GPUStateUtils.h"
 #include "GPU/Directx9/helper/global.h"
 #include "GPU/Directx9/PixelShaderGeneratorDX9.h"
 #include "GPU/ge_constants.h"
@@ -30,82 +31,6 @@
 
 namespace DX9 {
 
-
-// Dest factors where it's safe to eliminate the alpha test under certain conditions
-static const bool safeDestFactors[16] = {
-	true, // GE_DSTBLEND_SRCCOLOR,
-	true, // GE_DSTBLEND_INVSRCCOLOR,
-	false, // GE_DSTBLEND_SRCALPHA,
-	true, // GE_DSTBLEND_INVSRCALPHA,
-	true, // GE_DSTBLEND_DSTALPHA,
-	true, // GE_DSTBLEND_INVDSTALPHA,
-	false, // GE_DSTBLEND_DOUBLESRCALPHA,
-	false, // GE_DSTBLEND_DOUBLEINVSRCALPHA,
-	true, // GE_DSTBLEND_DOUBLEDSTALPHA,
-	true, // GE_DSTBLEND_DOUBLEINVDSTALPHA,
-	true, //GE_DSTBLEND_FIXB,
-};
-
-bool IsAlphaTestTriviallyTrue() {
-	switch (gstate.getAlphaTestFunction()) {
-	case GE_COMP_NEVER:
-		return false;
-
-	case GE_COMP_ALWAYS:
-		return true;
-
-	case GE_COMP_GEQUAL:
-		if (gstate_c.vertexFullAlpha && (gstate_c.textureFullAlpha || !gstate.isTextureAlphaUsed()))
-			return true;  // If alpha is full, it doesn't matter what the ref value is.
-		return gstate.getAlphaTestRef() == 0;
-
-	// Non-zero check. If we have no depth testing (and thus no depth writing), and an alpha func that will result in no change if zero alpha, get rid of the alpha test.
-	// Speeds up Lumines by a LOT on PowerVR.
-	case GE_COMP_NOTEQUAL:
-		if (gstate.getAlphaTestRef() == 255) {
-			// Likely to be rare. Let's just skip the vertexFullAlpha optimization here instead of adding
-			// complicated code to discard the draw or whatnot.
-			return false;
-		}
-		// Fallthrough on purpose
-
-	case GE_COMP_GREATER:
-		{
-#if 0
-			// Easy way to check the values in the debugger without ruining && early-out
-			bool doTextureAlpha = gstate.isTextureAlphaUsed();
-			bool stencilTest = gstate.isStencilTestEnabled();
-			bool depthTest = gstate.isDepthTestEnabled();
-			GEComparison depthTestFunc = gstate.getDepthTestFunction();
-			int alphaRef = gstate.getAlphaTestRef();
-			int blendA = gstate.getBlendFuncA();
-			bool blendEnabled = gstate.isAlphaBlendEnabled();
-			int blendB = gstate.getBlendFuncA();
-#endif
-			return (gstate_c.vertexFullAlpha && (gstate_c.textureFullAlpha || !gstate.isTextureAlphaUsed())) || (
-					(!gstate.isStencilTestEnabled() &&
-					!gstate.isDepthTestEnabled() &&
-					gstate.getAlphaTestRef() == 0 &&
-					gstate.isAlphaBlendEnabled() &&
-					gstate.getBlendFuncA() == GE_SRCBLEND_SRCALPHA &&
-					safeDestFactors[(int)gstate.getBlendFuncB()]));
-		}
-
-	case GE_COMP_LEQUAL:
-		return gstate.getAlphaTestRef() == 255;
-
-	case GE_COMP_EQUAL:
-	case GE_COMP_LESS:
-		return false;
-
-	default:
-		return false;
-	}
-}
-
-bool IsAlphaTestAgainstZero() {
-	return gstate.getAlphaTestRef() == 0 && gstate.getAlphaTestMask() == 0xFF;
-}
 
 const bool nonAlphaSrcFactors[16] = {
 	true,  // GE_SRCBLEND_DSTCOLOR,
@@ -217,23 +142,7 @@ StencilValueType ReplaceAlphaWithStencilType() {
 	return STENCIL_VALUE_KEEP;
 }
 
-bool IsColorTestTriviallyTrue() {
-	switch (gstate.getColorTestFunction()) {
-	case GE_COMP_NEVER:
-		return false;
-
-	case GE_COMP_ALWAYS:
-		return true;
-
-	case GE_COMP_EQUAL:
-	case GE_COMP_NOTEQUAL:
-		return false;
-	default:
-		return false;
-	}
-}
-
-ReplaceBlendType ReplaceBlendWithShader() {
+ReplaceBlendType ReplaceBlendWithShader(bool allowShaderBlend) {
 	if (!gstate.isAlphaBlendEnabled() || gstate.isModeClear()) {
 		return REPLACE_BLEND_NO;
 	}
@@ -245,7 +154,7 @@ ReplaceBlendType ReplaceBlendWithShader() {
 	// Let's get the non-factor modes out of the way first.
 	switch (eq) {
 	case GE_BLENDMODE_ABSDIFF:
-		return !gstate_c.allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
+		return !allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
 
 	case GE_BLENDMODE_MIN:
 	case GE_BLENDMODE_MAX:
@@ -264,11 +173,11 @@ ReplaceBlendType ReplaceBlendWithShader() {
 		case GE_DSTBLEND_SRCCOLOR:
 		case GE_DSTBLEND_INVSRCCOLOR:
 			// Can't double, we need the source color to be correct.
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_2X_ALPHA : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_2X_ALPHA : REPLACE_BLEND_COPY_FBO;
 
 		case GE_DSTBLEND_DOUBLEDSTALPHA:
 		case GE_DSTBLEND_DOUBLEINVDSTALPHA:
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_2X_ALPHA : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_2X_ALPHA : REPLACE_BLEND_COPY_FBO;
 
 		case GE_DSTBLEND_DOUBLESRCALPHA:
 		case GE_DSTBLEND_DOUBLEINVSRCALPHA:
@@ -287,17 +196,17 @@ ReplaceBlendType ReplaceBlendWithShader() {
 		case GE_DSTBLEND_SRCCOLOR:
 		case GE_DSTBLEND_INVSRCCOLOR:
 			// Can't double, we need the source color to be correct.
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
 
 		case GE_DSTBLEND_DOUBLEDSTALPHA:
 		case GE_DSTBLEND_DOUBLEINVDSTALPHA:
 		case GE_DSTBLEND_DOUBLESRCALPHA:
 		case GE_DSTBLEND_DOUBLEINVSRCALPHA:
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_2X_SRC : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_2X_SRC : REPLACE_BLEND_COPY_FBO;
 
 		default:
 			// We can't technically do this correctly (due to clamping) without reading the dst alpha.
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_2X_SRC : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_2X_SRC : REPLACE_BLEND_COPY_FBO;
 		}
 
 	case GE_SRCBLEND_FIXA:
@@ -305,11 +214,11 @@ ReplaceBlendType ReplaceBlendWithShader() {
 		case GE_DSTBLEND_DOUBLESRCALPHA:
 		case GE_DSTBLEND_DOUBLEINVSRCALPHA:
 			// Can't safely double alpha, will clamp.
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_2X_ALPHA : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_2X_ALPHA : REPLACE_BLEND_COPY_FBO;
 
 		case GE_DSTBLEND_DOUBLEDSTALPHA:
 		case GE_DSTBLEND_DOUBLEINVDSTALPHA:
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
 
 		case GE_DSTBLEND_FIXB:
 			if (gstate.getFixA() == 0xFFFFFF && gstate.getFixB() == 0x000000) {
@@ -341,7 +250,7 @@ ReplaceBlendType ReplaceBlendWithShader() {
 
 		case GE_DSTBLEND_DOUBLEDSTALPHA:
 		case GE_DSTBLEND_DOUBLEINVDSTALPHA:
-			return !gstate_c.allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
+			return !allowShaderBlend ? REPLACE_BLEND_STANDARD : REPLACE_BLEND_COPY_FBO;
 
 		default:
 			return REPLACE_BLEND_STANDARD;
@@ -376,6 +285,33 @@ static bool CanDoubleSrcBlendMode() {
 	}
 }
 
+enum LogicOpReplaceType {
+	LOGICOPTYPE_NORMAL,
+	LOGICOPTYPE_ONE,
+	LOGICOPTYPE_INVERT,
+};
+
+static inline LogicOpReplaceType ReplaceLogicOpType() {
+	if (gstate.isLogicOpEnabled()) {
+		switch (gstate.getLogicOp()) {
+		case GE_LOGIC_COPY_INVERTED:
+		case GE_LOGIC_AND_INVERTED:
+		case GE_LOGIC_OR_INVERTED:
+		case GE_LOGIC_NOR:
+		case GE_LOGIC_NAND:
+		case GE_LOGIC_EQUIV:
+			return LOGICOPTYPE_INVERT;
+		case GE_LOGIC_INVERTED:
+			return LOGICOPTYPE_ONE;
+		case GE_LOGIC_SET:
+			return LOGICOPTYPE_ONE;
+		default:
+			return LOGICOPTYPE_NORMAL;
+		}
+	}
+	return LOGICOPTYPE_NORMAL;
+}
+
 // Here we must take all the bits of the gstate that determine what the fragment shader will
 // look like, and concatenate them together into an ID.
 void ComputeFragmentShaderIDDX9(FragmentShaderIDDX9 *id) {
@@ -385,15 +321,14 @@ void ComputeFragmentShaderIDDX9(FragmentShaderIDDX9 *id) {
 		// We only need one clear shader, so let's ignore the rest of the bits.
 		id0 = 1;
 	} else {
-		bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled();
+		bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled() && !gstate.isModeThrough();
 		bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough();
 		bool enableAlphaTest = gstate.isAlphaTestEnabled() && !IsAlphaTestTriviallyTrue() && !g_Config.bDisableAlphaTest;
-		bool alphaTestAgainstZero = IsAlphaTestAgainstZero();
 		bool enableColorTest = gstate.isColorTestEnabled() && !IsColorTestTriviallyTrue();
 		bool enableColorDoubling = gstate.isColorDoublingEnabled();
 		bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 		bool doTextureAlpha = gstate.isTextureAlphaUsed();
-		ReplaceBlendType replaceBlend = ReplaceBlendWithShader();
+		ReplaceBlendType replaceBlend = ReplaceBlendWithShader(gstate_c.allowShaderBlend);
 		ReplaceAlphaType stencilToAlpha = ReplaceAlphaWithStencil(replaceBlend);
 
 		// All texfuncs except replace are the same for RGB as for RGBA with full alpha.
@@ -420,35 +355,36 @@ void ComputeFragmentShaderIDDX9(FragmentShaderIDDX9 *id) {
 		id0 |= (lmode & 1) << 11;
 #if !defined(DX9_USE_HW_ALPHA_TEST)
 		if (enableAlphaTest) {
-			// 4 bits total.
+			// 5 bits total.
 			id0 |= 1 << 12;
 			id0 |= gstate.getAlphaTestFunction() << 13;
+			id0 |= (IsAlphaTestAgainstZero() & 1) << 16;
 		}
 #endif
 		if (enableColorTest) {
-			// 3 bits total.
-			id0 |= 1 << 16;
-			id0 |= gstate.getColorTestFunction() << 17;
+			// 4 bits total.
+			id0 |= 1 << 17;
+			id0 |= gstate.getColorTestFunction() << 18;
+			id0 |= (IsColorTestAgainstZero() & 1) << 20;
 		}
-		id0 |= (enableFog & 1) << 19;
-		id0 |= (doTextureProjection & 1) << 20;
-		id0 |= (enableColorDoubling & 1) << 21;
+		id0 |= (enableFog & 1) << 21;
+		id0 |= (doTextureProjection & 1) << 22;
+		id0 |= (enableColorDoubling & 1) << 23;
 		// 2 bits
-		id0 |= (stencilToAlpha) << 22;
+		id0 |= (stencilToAlpha) << 24;
 
 		if (stencilToAlpha != REPLACE_ALPHA_NO) {
 			// 4 bits
-			id0 |= ReplaceAlphaWithStencilType() << 24;
+			id0 |= ReplaceAlphaWithStencilType() << 26;
 		}
 
-		id0 |= (alphaTestAgainstZero & 1) << 28;
 		if (enableAlphaTest)
 			gpuStats.numAlphaTestedDraws++;
 		else
 			gpuStats.numNonAlphaTestedDraws++;
 
-		id0 |= (gstate_c.bgraTexture & 1) << 29;
-		// 30 and 31 are free.
+		// 2 bits.
+		id0 |= ReplaceLogicOpType() << 30;
 
 		// 3 bits.
 		id1 |= replaceBlend << 0;
@@ -458,6 +394,10 @@ void ComputeFragmentShaderIDDX9(FragmentShaderIDDX9 *id) {
 			id1 |= gstate.getBlendFuncA() << 6;
 			id1 |= gstate.getBlendFuncB() << 10;
 		}
+
+		// TODO: Flat shading?
+
+		id1 |= (gstate_c.bgraTexture & 1) << 15;
 	}
 
 	id->d[0] = id0;
@@ -469,17 +409,18 @@ void ComputeFragmentShaderIDDX9(FragmentShaderIDDX9 *id) {
 void GenerateFragmentShaderDX9(char *buffer) {
 	char *p = buffer;
 
-	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled();
+	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled() && !gstate.isModeThrough();
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 	bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough() && !gstate.isModeClear();
 	bool enableAlphaTest = gstate.isAlphaTestEnabled() && !IsAlphaTestTriviallyTrue() && !gstate.isModeClear() && !g_Config.bDisableAlphaTest;
 	bool alphaTestAgainstZero = IsAlphaTestAgainstZero();
 	bool enableColorTest = gstate.isColorTestEnabled() && !IsColorTestTriviallyTrue() && !gstate.isModeClear();
+	bool colorTestAgainstZero = IsColorTestAgainstZero();
 	bool enableColorDoubling = gstate.isColorDoublingEnabled() && gstate.isTextureMapEnabled();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 	bool doTextureAlpha = gstate.isTextureAlphaUsed();
 	bool textureAtOffset = gstate_c.curTextureXOffset != 0 || gstate_c.curTextureYOffset != 0;
-	ReplaceBlendType replaceBlend = ReplaceBlendWithShader();
+	ReplaceBlendType replaceBlend = ReplaceBlendWithShader(gstate_c.allowShaderBlend);
 	ReplaceAlphaType stencilToAlpha = ReplaceAlphaWithStencil(replaceBlend);
 
 	if (gstate_c.textureFullAlpha && gstate.getTextureFunction() != GE_TEXFUNC_REPLACE)
@@ -685,15 +626,31 @@ void GenerateFragmentShaderDX9(char *buffer) {
 		}
 #endif
 		if (enableColorTest) {
-			GEComparison colorTestFunc = gstate.getColorTestFunction();
-			const char *colorTestFuncs[] = { "#", "#", " != ", " == " };	// never/always don't make sense
-			u32 colorTestMask = gstate.getColorTestMask();
-			if (colorTestFuncs[colorTestFunc][0] != '#') {
-				const char * test = colorTestFuncs[colorTestFunc];
-				WRITE(p, "  float3 colortest = roundAndScaleTo255v(v.rgb);\n");
-				WRITE(p, "  if ((colortest.r %s u_alphacolorref.r) && (colortest.g %s u_alphacolorref.g) && (colortest.b %s u_alphacolorref.b ))  clip(-1);\n", test, test, test);
+			if (colorTestAgainstZero) {
+				GEComparison colorTestFunc = gstate.getColorTestFunction();
+				// When testing against 0 (common), we can avoid some math.
+				// 0.002 is approximately half of 1.0 / 255.0.
+				if (colorTestFunc == GE_COMP_NOTEQUAL) {
+					WRITE(p, "  if (v.r < 0.002 && v.g < 0.002 && v.b < 0.002) clip(-1);\n");
+				} else if (colorTestFunc != GE_COMP_NEVER) {
+					// Anything else is a test for == 0.
+					WRITE(p, "  if (v.r > 0.002 || v.g > 0.002 || v.b > 0.002) clip(-1);\n");
+				} else {
+					// NEVER has been logged as used by games, although it makes little sense - statically failing.
+					// Maybe we could discard the drawcall, but it's pretty rare.  Let's just statically discard here.
+					WRITE(p, "  clip(-1);\n");
+				}
 			} else {
-				WRITE(p, "  clip(-1);\n");
+				GEComparison colorTestFunc = gstate.getColorTestFunction();
+				const char *colorTestFuncs[] = { "#", "#", " != ", " == " };	// never/always don't make sense
+				u32 colorTestMask = gstate.getColorTestMask();
+				if (colorTestFuncs[colorTestFunc][0] != '#') {
+					const char * test = colorTestFuncs[colorTestFunc];
+					WRITE(p, "  float3 colortest = roundAndScaleTo255v(v.rgb);\n");
+					WRITE(p, "  if ((colortest.r %s u_alphacolorref.r) && (colortest.g %s u_alphacolorref.g) && (colortest.b %s u_alphacolorref.b )) clip(-1);\n", test, test, test);
+				} else {
+					WRITE(p, "  clip(-1);\n");
+				}
 			}
 		}
 
@@ -730,7 +687,8 @@ void GenerateFragmentShaderDX9(char *buffer) {
 			WRITE(p, "  v.rgb = v.rgb * %s;\n", srcFactor);
 		}
 
-		// Can't really do REPLACE_BLEND_COPY_FBO in ps_2_0...
+		// Can do REPLACE_BLEND_COPY_FBO in ps_2_0, but need to apply viewport in the vertex shader
+		// so that we can have the output position here to sample the texture at.
 
 		if (replaceBlend == REPLACE_BLEND_2X_ALPHA || replaceBlend == REPLACE_BLEND_PRE_SRC_2X_ALPHA) {
 			WRITE(p, "  v.a = v.a * 2.0;\n");
@@ -787,6 +745,17 @@ void GenerateFragmentShaderDX9(char *buffer) {
 
 	case REPLACE_ALPHA_NO:
 		// Do nothing, v is already fine.
+		break;
+	}
+
+	switch (ReplaceLogicOpType()) {
+	case LOGICOPTYPE_ONE:
+		WRITE(p, "  v.rgb = float3(1.0, 1.0, 1.0);\n");
+		break;
+	case LOGICOPTYPE_INVERT:
+		WRITE(p, "  v.rgb = float3(1.0, 1.0, 1.0) - v.rgb;\n");
+		break;
+	case LOGICOPTYPE_NORMAL:
 		break;
 	}
 

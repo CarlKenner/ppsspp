@@ -1,9 +1,11 @@
 #include <algorithm>
-#include "native/base/mutex.h"
-#include "native/base/timeutil.h"
-#include "GeDisasm.h"
-#include "GPUCommon.h"
-#include "GPUState.h"
+#include "base/mutex.h"
+#include "base/timeutil.h"
+#include "Common/ColorConv.h"
+#include "GPU/GeDisasm.h"
+#include "GPU/GPU.h"
+#include "GPU/GPUCommon.h"
+#include "GPU/GPUState.h"
 #include "ChunkFile.h"
 #include "Core/Config.h"
 #include "Core/CoreTiming.h"
@@ -21,7 +23,13 @@ GPUCommon::GPUCommon() :
 	dumpThisFrame_(false)
 {
 	Reinitialize();
+	SetupColorConv();
 	SetThreadEnabled(g_Config.bSeparateCPUThread);
+	InitGfxState();
+}
+
+GPUCommon::~GPUCommon() {
+	ShutdownGfxState();
 }
 
 void GPUCommon::Reinitialize() {
@@ -69,7 +77,7 @@ bool GPUCommon::BusyDrawing() {
 }
 
 u32 GPUCommon::DrawSync(int mode) {
-	if (g_Config.bSeparateCPUThread) {
+	if (ThreadEnabled()) {
 		// Sync first, because the CPU is usually faster than the emulated GPU.
 		SyncThread();
 	}
@@ -124,7 +132,7 @@ void GPUCommon::CheckDrawSync() {
 }
 
 int GPUCommon::ListSync(int listid, int mode) {
-	if (g_Config.bSeparateCPUThread) {
+	if (ThreadEnabled()) {
 		// Sync first, because the CPU is usually faster than the emulated GPU.
 		SyncThread();
 	}
@@ -533,6 +541,8 @@ bool GPUCommon::InterpretList(DisplayList &list) {
 		}
 	}
 
+	FinishDeferred();
+
 	// We haven't run the op at list.pc, so it shouldn't count.
 	if (cycleLastPC != list.pc) {
 		UpdatePC(list.pc - 4, list.pc);
@@ -570,7 +580,7 @@ void GPUCommon::SlowRunLoop(DisplayList &list)
 				prev = 0;
 			}
 			GeDisassembleOp(list.pc, op, prev, temp, 256);
-			NOTICE_LOG(G3D, "%s", temp);
+			NOTICE_LOG(G3D, "%08x: %s", op, temp);
 		}
 		gstate.cmdmem[cmd] = op;
 
@@ -610,7 +620,6 @@ void GPUCommon::ReapplyGfxState() {
 }
 
 void GPUCommon::ReapplyGfxStateInternal() {
-	// ShaderManager_DirtyShader();
 	// The commands are embedded in the command memory so we can just reexecute the words. Convenient.
 	// To be safe we pass 0xFFFFFFFF as the diff.
 
@@ -635,7 +644,7 @@ void GPUCommon::ReapplyGfxStateInternal() {
 	// Let's just skip the transfer size stuff, it's just values.
 }
 
-inline void GPUCommon::UpdateState(GPUState state) {
+inline void GPUCommon::UpdateState(GPURunState state) {
 	gpuState = state;
 	if (state != GPUSTATE_RUNNING)
 		downcount = 0;
@@ -687,7 +696,7 @@ void GPUCommon::ProcessDLQueueInternal() {
 
 	for (int listIndex = GetNextListIndex(); listIndex != -1; listIndex = GetNextListIndex()) {
 		DisplayList &l = dls[listIndex];
-		DEBUG_LOG(G3D, "Okay, starting DL execution at %08x - stall = %08x", l.pc, l.stall);
+		DEBUG_LOG(G3D, "Starting DL execution at %08x - stall = %08x", l.pc, l.stall);
 		if (!InterpretList(l)) {
 			return;
 		} else {
@@ -756,6 +765,10 @@ void GPUCommon::Execute_Call(u32 op, u32 diff) {
 	// Saint Seiya needs correct support for relative calls.
 	const u32 retval = currentList->pc + 4;
 	const u32 target = gstate_c.getRelativeAddress(op & 0x00FFFFFC);
+	if (!Memory::IsValidAddress(target)) {
+		ERROR_LOG_REPORT(G3D, "CALL to illegal address %08x - ignoring! data=%06x", target, op & 0x00FFFFFF);
+		return;
+	}
 
 	// Bone matrix optimization - many games will CALL a bone matrix (!).
 	if ((Memory::ReadUnchecked_U32(target) >> 24) == GE_CMD_BONEMATRIXDATA) {
@@ -770,8 +783,6 @@ void GPUCommon::Execute_Call(u32 op, u32 diff) {
 
 	if (currentList->stackptr == ARRAY_SIZE(currentList->stack)) {
 		ERROR_LOG_REPORT(G3D, "CALL: Stack full!");
-	} else if (!Memory::IsValidAddress(target)) {
-		ERROR_LOG_REPORT(G3D, "CALL to illegal address %08x - ignoring! data=%06x", target, op & 0x00FFFFFF);
 	} else {
 		auto &stackEntry = currentList->stack[currentList->stackptr++];
 		stackEntry.pc = retval;

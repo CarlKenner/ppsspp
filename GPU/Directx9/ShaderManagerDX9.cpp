@@ -23,6 +23,7 @@
 #include "helper/global.h"
 #include "base/logging.h"
 #include "math/lin/matrix4x4.h"
+#include "math/math_util.h"
 #include "util/text/utf8.h"
 
 #include "Common/Common.h"
@@ -175,6 +176,10 @@ void ShaderManagerDX9::VSSetColorUniform3(int creg, u32 color) {
 	pD3Ddevice->SetVertexShaderConstantF(creg, col, 1);
 }
 
+void ShaderManagerDX9::VSSetFloatUniform4(int creg, float data[4]) {
+	pD3Ddevice->SetVertexShaderConstantF(creg, data, 1);
+}
+
 void ShaderManagerDX9::VSSetFloat24Uniform3(int creg, const u32 data[3]) {
 	const u32 col[4] = {
 		data[0] >> 8, data[1] >> 8, data[2] >> 8, 0
@@ -222,14 +227,18 @@ void ShaderManagerDX9::VSSetMatrix(int creg, const float* pMatrix) {
 }
 
 // Depth in ogl is between -1;1 we need between 0;1 and optionally reverse it
-static void ConvertProjMatrixToD3D(Matrix4x4 & in, bool invertedX, bool invertedY, bool invertedZ) {
-	Matrix4x4 s;
-	Matrix4x4 t;
-	s.setScaling(Vec3(1, 1, invertedZ ? -0.5 : 0.5f));
+static void ConvertProjMatrixToD3D(Matrix4x4 &in, bool invertedX, bool invertedY, bool invertedZ) {
 	float xoff = 0.5f / gstate_c.curRTRenderWidth;
+	xoff = gstate_c.vpXOffset + (invertedX ? xoff : -xoff);
+	float yoff = -0.5f / gstate_c.curRTRenderHeight;
+	yoff = gstate_c.vpYOffset + (invertedY ? yoff : -yoff);
+	in.translateAndScale(Vec3(xoff, yoff, 0.5f), Vec3(gstate_c.vpWidthScale, gstate_c.vpHeightScale, invertedZ ? -0.5 : 0.5f));
+}
+
+static void ConvertProjMatrixToD3DThrough(Matrix4x4 &in) {
+	float xoff = -0.5f / gstate_c.curRTRenderWidth;
 	float yoff = 0.5f / gstate_c.curRTRenderHeight;
-	t.setTranslation(Vec3(invertedX ? xoff : -xoff, invertedY ? -yoff : yoff, 0.5f));
-	in = in * s * t;
+	in.translateAndScale(Vec3(xoff, yoff, 0.5f), Vec3(1.0f, 1.0f, 0.5f));
 }
 
 void ShaderManagerDX9::PSUpdateUniforms(int dirtyUniforms) {
@@ -291,7 +300,7 @@ void ShaderManagerDX9::VSUpdateUniforms(int dirtyUniforms) {
 		memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 
 		const bool invertedY = gstate_c.vpHeight < 0;
-		if (invertedY) {
+		if (!invertedY) {
 			flippedMatrix[5] = -flippedMatrix[5];
 			flippedMatrix[13] = -flippedMatrix[13];
 		}
@@ -299,6 +308,38 @@ void ShaderManagerDX9::VSUpdateUniforms(int dirtyUniforms) {
 		if (invertedX) {
 			flippedMatrix[0] = -flippedMatrix[0];
 			flippedMatrix[12] = -flippedMatrix[12];
+		}
+
+		// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
+		// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
+		if (g_Config.bDepthRangeHack) {
+			float zScale = gstate.getViewportZScale() / 65535.0f;
+			float zCenter = gstate.getViewportZCenter() / 65535.0f;
+
+			// if far depth range < 0
+			if (zCenter + zScale < 0.0f) {
+				// if perspective projection
+				if (flippedMatrix[11] < 0.0f) {
+					float depthMax = gstate.getDepthRangeMax() / 65535.0f;
+					float depthMin = gstate.getDepthRangeMin() / 65535.0f;
+
+					float a = flippedMatrix[10];
+					float b = flippedMatrix[14];
+
+					float n = b / (a - 1.0f);
+					float f = b / (a + 1.0f);
+
+					f = (n * f) / (n + ((zCenter + zScale) * (n - f) / (depthMax - depthMin)));
+
+					a = (n + f) / (n - f);
+					b = (2.0f * n * f) / (n - f);
+
+					if (!my_isnan(a) && !my_isnan(b)) {
+						flippedMatrix[10] = a;
+						flippedMatrix[14] = b;
+					}
+				}
+			}
 		}
 
 		const bool invertedZ = gstate_c.vpDepth < 0;
@@ -310,7 +351,7 @@ void ShaderManagerDX9::VSUpdateUniforms(int dirtyUniforms) {
 		Matrix4x4 proj_through;
 		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0, 1);
 
-		ConvertProjMatrixToD3D(proj_through, false, false, false);
+		ConvertProjMatrixToD3DThrough(proj_through);
 
 		VSSetMatrix(CONST_VS_PROJ_THROUGH, proj_through.getReadPtr());
 	}
@@ -325,11 +366,26 @@ void ShaderManagerDX9::VSUpdateUniforms(int dirtyUniforms) {
 		VSSetMatrix4x3_3(CONST_VS_TEXMTX, gstate.tgenMatrix);
 	}
 	if (dirtyUniforms & DIRTY_FOGCOEF) {
-		const float fogcoef[2] = {
+		float fogcoef[2] = {
 			getFloat24(gstate.fog1),
 			getFloat24(gstate.fog2),
 		};
-		// TODO: Handle NAN/INF?
+		if (my_isinf(fogcoef[1])) {
+			// not really sure what a sensible value might be.
+			fogcoef[1] = fogcoef[1] < 0.0f ? -10000.0f : 10000.0f;
+		} else if (my_isnan(fogcoef[1])) {
+			// Workaround for https://github.com/hrydgard/ppsspp/issues/5384#issuecomment-38365988
+			// Just put the fog far away at a large finite distance.
+			// Infinities and NaNs are rather unpredictable in shaders on many GPUs
+			// so it's best to just make it a sane calculation.
+			fogcoef[0] = 100000.0f;
+			fogcoef[1] = 1.0f;
+		}
+#ifndef MOBILE_DEVICE
+		else if (my_isnanorinf(fogcoef[1]) || my_isnanorinf(fogcoef[0])) {
+			ERROR_LOG_REPORT_ONCE(fognan, G3D, "Unhandled fog NaN/INF combo: %f %f", fogcoef[0], fogcoef[1]);
+		}
+#endif
 		VSSetFloatArray(CONST_VS_FOGCOEF, fogcoef, 2);
 	}
 	// TODO: Could even set all bones in one go if they're all dirty.
@@ -423,6 +479,30 @@ void ShaderManagerDX9::VSUpdateUniforms(int dirtyUniforms) {
 		VSSetFloatArray(CONST_VS_UVSCALEOFFSET, uvscaleoff, 4);
 	}
 
+	if (dirtyUniforms & DIRTY_DEPTHRANGE)	{
+		float viewZScale = gstate.getViewportZScale();
+		float viewZCenter = gstate.getViewportZCenter();
+
+		// Given the way we do the rounding, the integer part of the offset is probably mostly irrelevant as we cancel
+		// it afterwards anyway.
+		// It seems that we should adjust for D3D projection matrix. We got squashed up to only 0-1, so we divide
+		// the scale factor by 2, and add an offset. But, this doesn't work! I get near-perfect results not doing it.
+		// viewZScale *= 2.0f;
+
+		// Need to take the possibly inverted proj matrix into account.
+		if (gstate_c.vpDepth < 0.0)
+			viewZScale *= -1.0f;
+		viewZCenter -= 32767.5f;
+		float viewZInvScale;
+		if (viewZScale != 0.0) {
+			viewZInvScale = 1.0f / viewZScale;
+		} else {
+			viewZInvScale = 0.0;
+		}
+
+		float data[4] = { viewZScale, viewZCenter, viewZCenter, viewZInvScale };
+		VSSetFloatUniform4(CONST_VS_DEPTHRANGE, data);
+	}
 	// Lighting
 	if (dirtyUniforms & DIRTY_AMBIENT) {
 		VSSetColorUniform3Alpha(CONST_VS_AMBIENT, gstate.ambientcolor, gstate.getAmbientA());
@@ -514,7 +594,7 @@ VSShader *ShaderManagerDX9::ApplyShader(int prim, u32 vertType) {
 	bool useHWTransform = CanUseHardwareTransformDX9(prim);
 
 	VertexShaderIDDX9 VSID;
-	ComputeVertexShaderIDDX9(&VSID, vertType, prim, useHWTransform);
+	ComputeVertexShaderIDDX9(&VSID, vertType, useHWTransform);
 	FragmentShaderIDDX9 FSID;
 	ComputeFragmentShaderIDDX9(&FSID);
 

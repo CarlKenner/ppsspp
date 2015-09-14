@@ -16,6 +16,8 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "math/lin/matrix4x4.h"
+
+#include "Common/ColorConv.h"
 #include "Core/Host.h"
 #include "Core/MemMap.h"
 #include "Core/Config.h"
@@ -26,7 +28,7 @@
 #include "GPU/Debugger/Stepping.h"
 
 #include "helper/dx_state.h"
-#include "helper/fbo.h"
+#include "helper/dx_fbo.h"
 
 #include "GPU/Common/FramebufferCommon.h"
 #include "GPU/Common/TextureDecoder.h"
@@ -38,60 +40,7 @@
 #include <algorithm>
 
 namespace DX9 {
-	inline u16 RGBA8888toRGB565(u32 px) {
-		return ((px >> 3) & 0x001F) | ((px >> 5) & 0x07E0) | ((px >> 8) & 0xF800);
-	}
-
-	inline u16 RGBA8888toRGBA4444(u32 px) {
-		return ((px >> 4) & 0x000F) | ((px >> 8) & 0x00F0) | ((px >> 12) & 0x0F00) | ((px >> 16) & 0xF000);
-	}
-
-	inline u16 RGBA8888toRGBA5551(u32 px) {
-		return ((px >> 3) & 0x001F) | ((px >> 6) & 0x03E0) | ((px >> 9) & 0x7C00) | ((px >> 16) & 0x8000);
-	}
-
-	inline u16 BGRA8888toRGB565(u32 px) {
-		return ((px >> 19) & 0x001F) | ((px >> 5) & 0x07E0) | ((px << 8) & 0xF800);
-	}
-
-	inline u16 BGRA8888toRGBA4444(u32 px) {
-		return ((px >> 20) & 0x000F) | ((px >> 8) & 0x00F0) | ((px << 4) & 0x0F00) | ((px >> 16) & 0xF000);
-	}
-
 	static void ConvertFromRGBA8888(u8 *dst, u8 *src, u32 dstStride, u32 srcStride, u32 width, u32 height, GEBufferFormat format);
-
-	void CenterRect(float *x, float *y, float *w, float *h,
-                float origW, float origH, float frameW, float frameH) {
-		if (g_Config.bStretchToDisplay) {
-				*x = 0;
-				*y = 0;
-				*w = frameW;
-				*h = frameH;
-				return;
-		}
-
-		float origRatio = origW/origH;
-		float frameRatio = frameW/frameH;
-
-		if (origRatio > frameRatio) {
-				// Image is wider than frame. Center vertically.
-				float scale = origW / frameW;
-				*x = 0.0f;
-				*w = frameW;
-				*h = frameW / origRatio;
-				// Stretch a little bit
-				if (g_Config.bPartialStretch)
-						*h = (frameH + *h) / 2.0f; // (408 + 720) / 2 = 564
-				*y = (frameH - *h) / 2.0f;
-		} else {
-				// Image is taller than frame. Center horizontally.
-				float scale = origH / frameH;
-				*y = 0.0f;
-				*h = frameH;
-				*w = frameH * origRatio;
-				*x = (frameW - *w) / 2.0f;
-		}
-	}
 
 	void FramebufferManagerDX9::ClearBuffer() {
 		dxstate.scissorTest.disable();
@@ -99,7 +48,7 @@ namespace DX9 {
 		dxstate.colorMask.set(true, true, true, true);
 		dxstate.stencilFunc.set(D3DCMP_ALWAYS, 0, 0);
 		dxstate.stencilMask.set(0xFF);
-		pD3Ddevice->Clear(0, NULL, D3DCLEAR_STENCIL|D3DCLEAR_TARGET |D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0, 0, 0), 0, 0);
+		pD3Ddevice->Clear(0, NULL, D3DCLEAR_STENCIL|D3DCLEAR_TARGET |D3DCLEAR_ZBUFFER, D3DCOLOR_ARGB(0, 0, 0, 0), 0, 0);
 	}
 
 	void FramebufferManagerDX9::ClearDepthBuffer() {
@@ -107,7 +56,7 @@ namespace DX9 {
 		dxstate.depthWrite.set(TRUE);
 		dxstate.colorMask.set(false, false, false, false);
 		dxstate.stencilFunc.set(D3DCMP_NEVER, 0, 0);
-		pD3Ddevice->Clear(0, NULL, D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0, 0, 0), 0, 0);
+		pD3Ddevice->Clear(0, NULL, D3DCLEAR_ZBUFFER, D3DCOLOR_ARGB(0, 0, 0, 0), 0, 0);
 	}
 
 	void FramebufferManagerDX9::DisableState() {
@@ -149,24 +98,6 @@ namespace DX9 {
 		}
 	}
 
-	static inline void ARGB8From4444(u16 c, u32 * dst) {
-		*dst = ((c & 0xf) << 4) | (((c >> 4) & 0xf) << 12) | (((c >> 8) & 0xf) << 20) | ((c >> 12) << 28);
-	}
-	static inline void ARGB8From565(u16 c, u32 * dst) {
-		*dst = ((c & 0x001f) << 19) | (((c >> 5) & 0x003f) << 11) | ((((c >> 10) & 0x001f) << 3)) | 0xFF000000;
-	}
-	static inline void ARGB8From5551(u16 c, u32 * dst) {
-		*dst = ((c & 0x001f) << 19) | (((c >> 5) & 0x001f) << 11) | ((((c >> 10) & 0x001f) << 3)) | 0xFF000000;
-	}
-
-	// TODO: Swizzle the texture access instead.
-	static inline u32 RGBA2BGRA(u32 src) {
-		const u32 r = (src & 0x000000FF) << 16;
-		const u32 ga = src & 0xFF00FF00;
-		const u32 b = (src & 0x00FF0000) >> 16;
-		return r | ga | b;
-	}
-
 	void FramebufferManagerDX9::MakePixelTexture(const u8 *srcPixels, GEBufferFormat srcPixelFormat, int srcStride, int width, int height) {
 		u8 *convBuf = NULL;
 		D3DLOCKED_RECT rect;
@@ -202,20 +133,14 @@ namespace DX9 {
 		convBuf = (u8*)rect.pBits;
 
 		// Final format is BGRA(directx)
-
-		// TODO: We can just change the texture format and flip some bits around instead of this.
 		if (srcPixelFormat != GE_FORMAT_8888 || srcStride != 512) {
 			for (int y = 0; y < height; y++) {
 				switch (srcPixelFormat) {
-					// not tested
 				case GE_FORMAT_565:
 					{
 						const u16_le *src = (const u16_le *)srcPixels + srcStride * y;
 						u32 *dst = (u32 *)(convBuf + rect.Pitch * y);
-						for (int x = 0; x < width; x++) {
-							u16_le col0 = src[x+0];
-							ARGB8From565(col0, &dst[x + 0]);
-						}
+						ConvertRGB565ToBGRA8888(dst, src, width);
 					}
 					break;
 					// faster
@@ -223,24 +148,14 @@ namespace DX9 {
 					{
 						const u16_le *src = (const u16_le *)srcPixels + srcStride * y;
 						u32 *dst = (u32 *)(convBuf + rect.Pitch * y);
-						for (int x = 0; x < width; x++) {
-							u16_le col0 = src[x+0];
-							ARGB8From5551(col0, &dst[x + 0]);
-						}
+						ConvertRGBA5551ToBGRA8888(dst, src, width);
 					}
 					break;
 				case GE_FORMAT_4444:
 					{
 						const u16_le *src = (const u16_le *)srcPixels + srcStride * y;
 						u8 *dst = (u8 *)(convBuf + rect.Pitch * y);
-						for (int x = 0; x < width; x++)
-						{
-							u16_le col = src[x];
-							dst[x * 4 + 0] = (col >> 12) << 4;
-							dst[x * 4 + 1] = ((col >> 8) & 0xf) << 4;
-							dst[x * 4 + 2] = ((col >> 4) & 0xf) << 4;
-							dst[x * 4 + 3] = (col & 0xf) << 4;
-						}
+						ConvertRGBA4444ToBGRA8888((u32 *)dst, src, width);
 					}
 					break;
 
@@ -248,10 +163,7 @@ namespace DX9 {
 					{
 						const u32_le *src = (const u32_le *)srcPixels + srcStride * y;
 						u32 *dst = (u32 *)(convBuf + rect.Pitch * y);
-						for (int x = 0; x < width; x++)
-						{
-							dst[x] = RGBA2BGRA(src[x]);
-						}
+						ConvertRGBA8888ToBGRA8888(dst, src, width);
 					}
 					break;
 				}
@@ -260,10 +172,7 @@ namespace DX9 {
 			for (int y = 0; y < height; y++) {
 				const u32_le *src = (const u32_le *)srcPixels + srcStride * y;
 				u32 *dst = (u32 *)(convBuf + rect.Pitch * y);
-				for (int x = 0; x < width; x++)
-				{
-					dst[x] = RGBA2BGRA(src[x]);
-				}
+				ConvertRGBA8888ToBGRA8888(dst, src, width);
 			}
 		}
 
@@ -291,25 +200,12 @@ namespace DX9 {
 		// Should try to unify this path with the regular path somehow, but this simple solution works for most of the post shaders
 		// (it always runs at output resolution so FXAA may look odd).
 		float x, y, w, h;
-		CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight);
-		DrawActiveTexture(drawPixelsTex_, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, false, 0.0f, 0.0f, 480.0f / 512.0f);
+		int uvRotation = (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) ? g_Config.iInternalScreenRotation : ROTATION_LOCKED_HORIZONTAL;
+		CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, uvRotation);
+		DrawActiveTexture(drawPixelsTex_, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, false, 0.0f, 0.0f, 480.0f / 512.0f, uvRotation);
 	}
 
-	// Depth in ogl is between -1;1 we need between 0;1
-	static void ConvertMatrices(Matrix4x4 & in) {
-		/*
-		in.zz *= 0.5f;
-		in.wz += 1.f;
-		*/
-		Matrix4x4 s;
-		Matrix4x4 t;
-		s.setScaling(Vec3(1, 1, 0.5f));
-		t.setTranslation(Vec3(0, 0, 0.5f));
-		in = in * s;
-		in = in * t;
-	}
-
-	void FramebufferManagerDX9::DrawActiveTexture(LPDIRECT3DTEXTURE9 tex, float x, float y, float w, float h, float destW, float destH, bool flip, float u0, float v0, float u1, float v1) {
+	void FramebufferManagerDX9::DrawActiveTexture(LPDIRECT3DTEXTURE9 tex, float x, float y, float w, float h, float destW, float destH, bool flip, float u0, float v0, float u1, float v1, int uvRotation) {
 		if (flip) {
 			std::swap(v0, v1);
 		}
@@ -322,16 +218,37 @@ namespace DX9 {
 			x,y+h,0, u0,v1,
 		};
 
+		static const short indices[4] = { 0, 1, 3, 2 };
+
+		if (uvRotation != ROTATION_LOCKED_HORIZONTAL) {
+			float temp[8];
+			int rotation = 0;
+			switch (uvRotation) {
+			case ROTATION_LOCKED_HORIZONTAL180: rotation = 2; break;
+			case ROTATION_LOCKED_VERTICAL: rotation = 1; break;
+			case ROTATION_LOCKED_VERTICAL180: rotation = 3; break;
+			}
+
+			for (int i = 0; i < 4; i++) {
+				temp[i * 2] = coord[((i + rotation) & 3) * 5 + 3];
+				temp[i * 2 + 1] = coord[((i + rotation) & 3) * 5 + 4];
+			}
+
+			for (int i = 0; i < 4; i++) {
+				coord[i * 5 + 3] = temp[i * 2];
+				coord[i * 5 + 4] = temp[i * 2 + 1];
+			}
+		}
+
 		float invDestW = 1.0f / (destW * 0.5f);
 		float invDestH = 1.0f / (destH * 0.5f);
 		float halfPixelX = invDestW * 0.5f;
 		float halfPixelY = invDestH * 0.5f;
 		for (int i = 0; i < 4; i++) {
-			coord[i * 5] = coord[i * 5] * invDestW - 1.0f + halfPixelX;
+			coord[i * 5] = coord[i * 5] * invDestW - 1.0f - halfPixelX;
 			coord[i * 5 + 1] = -(coord[i * 5 + 1] * invDestH - 1.0f - halfPixelY);
 		}
 
-		//pD3Ddevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
 		pD3Ddevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 		pD3Ddevice->SetVertexDeclaration(pFramebufferVertexDecl);
 		pD3Ddevice->SetPixelShader(pFramebufferPixelShader);
@@ -375,8 +292,6 @@ namespace DX9 {
 	}
 
 	void FramebufferManagerDX9::ResizeFramebufFBO(VirtualFramebuffer *vfb, u16 w, u16 h, bool force) {
-		float renderWidthFactor = (float)vfb->renderWidth / (float)vfb->bufferWidth;
-		float renderHeightFactor = (float)vfb->renderHeight / (float)vfb->bufferHeight;
 		VirtualFramebuffer old = *vfb;
 
 		if (force) {
@@ -392,8 +307,7 @@ namespace DX9 {
 			vfb->bufferHeight = std::max(vfb->bufferHeight, h);
 		}
 
-		vfb->renderWidth = vfb->bufferWidth * renderWidthFactor;
-		vfb->renderHeight = vfb->bufferHeight * renderHeightFactor;
+		SetRenderSize(vfb);
 
 		bool trueColor = g_Config.bTrueColor;
 		if (hackForce04154000Download_ && vfb->fb_address == 0x00154000) {
@@ -473,7 +387,7 @@ namespace DX9 {
 		}
 	}
 
-	void FramebufferManagerDX9::NotifyRenderFramebufferSwitched(VirtualFramebuffer *prevVfb, VirtualFramebuffer *vfb) {
+	void FramebufferManagerDX9::NotifyRenderFramebufferSwitched(VirtualFramebuffer *prevVfb, VirtualFramebuffer *vfb, bool isClearingDepth) {
 		if (ShouldDownloadFramebuffer(vfb) && !vfb->memoryUpdated) {
 			ReadFramebufferToMemory(vfb, true, 0, 0, vfb->width, vfb->height);
 		}
@@ -506,12 +420,17 @@ namespace DX9 {
 
 		// Copy depth pixel value from the read framebuffer to the draw framebuffer
 		if (prevVfb && !g_Config.bDisableSlowFramebufEffects) {
-			BlitFramebufferDepth(prevVfb, vfb);
+			if (!prevVfb->fbo || !vfb->fbo || !useBufferedRendering_ || !prevVfb->depthUpdated || isClearingDepth) {
+				// If depth wasn't updated, then we're at least "two degrees" away from the data.
+				// This is an optimization: it probably doesn't need to be copied in this case.
+			} else {
+				// TODO: Needs work
+				BlitFramebufferDepth(prevVfb, vfb);
+			}
 		}
 		if (vfb->drawnFormat != vfb->format) {
 			// TODO: Might ultimately combine this with the resize step in DoSetRenderFrameBuffer().
-			// TODO
-			//ReformatFramebufferFrom(vfb, vfb->drawnFormat);
+			ReformatFramebufferFrom(vfb, vfb->drawnFormat);
 		}
 
 		// ugly...
@@ -528,8 +447,7 @@ namespace DX9 {
 		if (vfbFormatChanged) {
 			textureCache_->NotifyFramebuffer(vfb->fb_address, vfb, NOTIFY_FB_UPDATED);
 			if (vfb->drawnFormat != vfb->format) {
-				// TODO
-				//ReformatFramebufferFrom(vfb, vfb->drawnFormat);
+				ReformatFramebufferFrom(vfb, vfb->drawnFormat);
 			}
 		}
 
@@ -543,66 +461,109 @@ namespace DX9 {
 		}
 	}
 
+	void FramebufferManagerDX9::ReformatFramebufferFrom(VirtualFramebuffer *vfb, GEBufferFormat old) {
+		if (!useBufferedRendering_ || !vfb->fbo) {
+			return;
+		}
+
+		fbo_bind_as_render_target(vfb->fbo);
+
+		// Technically, we should at this point re-interpret the bytes of the old format to the new.
+		// That might get tricky, and could cause unnecessary slowness in some games.
+		// For now, we just clear alpha/stencil from 565, which fixes shadow issues in Kingdom Hearts.
+		// (it uses 565 to write zeros to the buffer, than 4444 to actually render the shadow.)
+		//
+		// The best way to do this may ultimately be to create a new FBO (combine with any resize?)
+		// and blit with a shader to that, then replace the FBO on vfb.  Stencil would still be complex
+		// to exactly reproduce in 4444 and 8888 formats.
+
+		if (old == GE_FORMAT_565) {
+			dxstate.scissorTest.disable();
+			dxstate.depthWrite.set(FALSE);
+			dxstate.colorMask.set(false, false, false, true);
+			dxstate.stencilFunc.set(D3DCMP_ALWAYS, 0, 0);
+			dxstate.stencilMask.set(0xFF);
+
+			float coord[20] = {
+				-1.0f,-1.0f,0, 0,0,
+				1.0f,-1.0f,0, 0,0,
+				1.0f,1.0f,0, 0,0,
+				-1.0f,1.0f,0, 0,0,
+			};
+
+			dxstate.cullMode.set(false, false);
+			pD3Ddevice->SetVertexDeclaration(pFramebufferVertexDecl);
+			pD3Ddevice->SetPixelShader(pFramebufferPixelShader);
+			pD3Ddevice->SetVertexShader(pFramebufferVertexShader);
+			shaderManager_->DirtyLastShader();
+			pD3Ddevice->SetTexture(0, nullptr);
+
+			D3DVIEWPORT9 vp;
+			vp.MinZ = 0;
+			vp.MaxZ = 1;
+			vp.X = 0;
+			vp.Y = 0;
+			vp.Width = vfb->renderWidth;
+			vp.Height = vfb->renderHeight;
+			pD3Ddevice->SetViewport(&vp);
+
+			// This should clear stencil and alpha without changing the other colors.
+			HRESULT hr = pD3Ddevice->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, coord, 5 * sizeof(float));
+			if (FAILED(hr)) {
+				ERROR_LOG_REPORT(G3D, "ReformatFramebufferFrom() failed: %08x", hr);
+			}
+		}
+
+		RebindFramebuffer();
+	}
+
 	void FramebufferManagerDX9::BlitFramebufferDepth(VirtualFramebuffer *src, VirtualFramebuffer *dst) {
-		if (!src->fbo || !dst->fbo || !useBufferedRendering_) {
-			return;
-		}
-
-		// If depth wasn't updated, then we're at least "two degrees" away from the data.
-		// This is an optimization: it probably doesn't need to be copied in this case.
-		if (!src->depthUpdated) {
-			return;
-		}
-
 		if (src->z_address == dst->z_address &&
 			src->z_stride != 0 && dst->z_stride != 0 &&
 			src->renderWidth == dst->renderWidth &&
 			src->renderHeight == dst->renderHeight) {
 
-			// Let's only do this if not clearing.
-			if (!gstate.isModeClear() || !gstate.isClearModeDepthMask()) {
-				// Doesn't work.  Use a shader maybe?
-				/*fbo_unbind();
+			// Doesn't work.  Use a shader maybe?
+			/*fbo_unbind();
 
-				LPDIRECT3DTEXTURE9 srcTex = fbo_get_depth_texture(src->fbo);
-				LPDIRECT3DTEXTURE9 dstTex = fbo_get_depth_texture(dst->fbo);
+			LPDIRECT3DTEXTURE9 srcTex = fbo_get_depth_texture(src->fbo);
+			LPDIRECT3DTEXTURE9 dstTex = fbo_get_depth_texture(dst->fbo);
 
-				if (srcTex && dstTex) {
-					D3DSURFACE_DESC srcDesc;
-					srcTex->GetLevelDesc(0, &srcDesc);
-					D3DSURFACE_DESC dstDesc;
-					dstTex->GetLevelDesc(0, &dstDesc);
+			if (srcTex && dstTex) {
+				D3DSURFACE_DESC srcDesc;
+				srcTex->GetLevelDesc(0, &srcDesc);
+				D3DSURFACE_DESC dstDesc;
+				dstTex->GetLevelDesc(0, &dstDesc);
 
-					D3DLOCKED_RECT srcLock;
-					D3DLOCKED_RECT dstLock;
-					HRESULT srcLockRes = srcTex->LockRect(0, &srcLock, nullptr, D3DLOCK_READONLY);
-					HRESULT dstLockRes = dstTex->LockRect(0, &dstLock, nullptr, 0);
-					if (SUCCEEDED(srcLockRes) && SUCCEEDED(dstLockRes)) {
-						int pitch = std::min(srcLock.Pitch, dstLock.Pitch);
-						u32 h = std::min(srcDesc.Height, dstDesc.Height);
-						const u8 *srcp = (const u8 *)srcLock.pBits;
-						u8 *dstp = (u8 *)dstLock.pBits;
-						for (u32 y = 0; y < h; ++y) {
-							memcpy(dstp, srcp, pitch);
-							dstp += dstLock.Pitch;
-							srcp += srcLock.Pitch;
-						}
-					}
-					if (SUCCEEDED(srcLockRes)) {
-						srcTex->UnlockRect(0);
-					}
-					if (SUCCEEDED(dstLockRes)) {
-						dstTex->UnlockRect(0);
+				D3DLOCKED_RECT srcLock;
+				D3DLOCKED_RECT dstLock;
+				HRESULT srcLockRes = srcTex->LockRect(0, &srcLock, nullptr, D3DLOCK_READONLY);
+				HRESULT dstLockRes = dstTex->LockRect(0, &dstLock, nullptr, 0);
+				if (SUCCEEDED(srcLockRes) && SUCCEEDED(dstLockRes)) {
+					int pitch = std::min(srcLock.Pitch, dstLock.Pitch);
+					u32 h = std::min(srcDesc.Height, dstDesc.Height);
+					const u8 *srcp = (const u8 *)srcLock.pBits;
+					u8 *dstp = (u8 *)dstLock.pBits;
+					for (u32 y = 0; y < h; ++y) {
+						memcpy(dstp, srcp, pitch);
+						dstp += dstLock.Pitch;
+						srcp += srcLock.Pitch;
 					}
 				}
-
-				RebindFramebuffer();*/
+				if (SUCCEEDED(srcLockRes)) {
+					srcTex->UnlockRect(0);
+				}
+				if (SUCCEEDED(dstLockRes)) {
+					dstTex->UnlockRect(0);
+				}
 			}
+
+			RebindFramebuffer();*/
 		}
 	}
 
 	FBO *FramebufferManagerDX9::GetTempFBO(u16 w, u16 h, FBOColorDepth depth) {
-		u64 key = ((u64)depth << 32) | (w << 16) | h;
+		u64 key = ((u64)depth << 32) | ((u32)w << 16) | h;
 		auto it = tempFBOs_.find(key);
 		if (it != tempFBOs_.end()) {
 			it->second.last_frame_used = gpuStats.numFlips;
@@ -620,9 +581,13 @@ namespace DX9 {
 		return fbo;
 	}
 
-	LPDIRECT3DSURFACE9 FramebufferManagerDX9::GetOffscreenSurface(LPDIRECT3DSURFACE9 similarSurface) {
-		D3DSURFACE_DESC desc;
-		similarSurface->GetDesc(&desc);
+	LPDIRECT3DSURFACE9 FramebufferManagerDX9::GetOffscreenSurface(LPDIRECT3DSURFACE9 similarSurface, VirtualFramebuffer *vfb) {
+		D3DSURFACE_DESC desc = {};
+		HRESULT hr = similarSurface->GetDesc(&desc);
+		if (FAILED(hr)) {
+			ERROR_LOG_REPORT(G3D, "Unable to get size for offscreen surface at %08x", vfb->fb_address);
+			return nullptr;
+		}
 
 		u64 key = ((u64)desc.Format << 32) | (desc.Width << 16) | desc.Height;
 		auto it = offscreenSurfaces_.find(key);
@@ -633,7 +598,7 @@ namespace DX9 {
 
 		textureCache_->ForgetLastTexture();
 		LPDIRECT3DSURFACE9 offscreen = nullptr;
-		HRESULT hr = pD3Ddevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &offscreen, NULL);
+		hr = pD3Ddevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &offscreen, NULL);
 		if (FAILED(hr) || !offscreen) {
 			ERROR_LOG_REPORT(G3D, "Unable to create offscreen surface %dx%d @%d", desc.Width, desc.Height, desc.Format);
 			return nullptr;
@@ -643,7 +608,7 @@ namespace DX9 {
 		return offscreen;
 	}
 
-	void FramebufferManagerDX9::BindFramebufferColor(int stage, VirtualFramebuffer *framebuffer, bool skipCopy) {
+	void FramebufferManagerDX9::BindFramebufferColor(int stage, VirtualFramebuffer *framebuffer, int flags) {
 		if (framebuffer == NULL) {
 			framebuffer = currentRenderVfb_;
 		}
@@ -656,6 +621,7 @@ namespace DX9 {
 
 		// currentRenderVfb_ will always be set when this is called, except from the GE debugger.
 		// Let's just not bother with the copy in that case.
+		bool skipCopy = (flags & BINDFBCOLOR_MAY_COPY) == 0;
 		if (GPUStepping::IsStepping() || g_Config.bDisableSlowFramebufEffects) {
 			skipCopy = true;
 		}
@@ -665,7 +631,28 @@ namespace DX9 {
 			if (renderCopy) {
 				VirtualFramebuffer copyInfo = *framebuffer;
 				copyInfo.fbo = renderCopy;
-				BlitFramebuffer(&copyInfo, 0, 0, framebuffer, 0, 0, framebuffer->drawnWidth, framebuffer->drawnHeight, 0, false);
+
+				int x = 0;
+				int y = 0;
+				int w = framebuffer->drawnWidth;
+				int h = framebuffer->drawnHeight;
+
+				// If max is not > min, we probably could not detect it.  Skip.
+				// See the vertex decoder, where this is updated.
+				if ((flags & BINDFBCOLOR_MAY_COPY_WITH_UV) != 0 && gstate_c.vertBounds.maxU > gstate_c.vertBounds.minU) {
+					x = gstate_c.vertBounds.minU;
+					y = gstate_c.vertBounds.minV;
+					w = gstate_c.vertBounds.maxU - x;
+					h = gstate_c.vertBounds.maxV - y;
+
+					// If we bound a framebuffer, apply the byte offset as pixels to the copy too.
+					if (flags & BINDFBCOLOR_APPLY_TEX_OFFSET) {
+						x += gstate_c.curTextureXOffset;
+						y += gstate_c.curTextureYOffset;
+					}
+				}
+
+				BlitFramebuffer(&copyInfo, x, y, framebuffer, x, y, w, h, 0, false);
 
 				RebindFramebuffer();
 				pD3Ddevice->SetTexture(stage, fbo_get_color_texture(renderCopy));
@@ -751,6 +738,7 @@ namespace DX9 {
 		}
 
 		vfb->usageFlags |= FB_USAGE_DISPLAYED_FRAMEBUFFER;
+		vfb->last_frame_displayed = gpuStats.numFlips;
 		vfb->dirtyAfterDisplay = false;
 		vfb->reallyDirtyAfterDisplay = false;
 
@@ -773,10 +761,8 @@ namespace DX9 {
 
 			// Output coordinates
 			float x, y, w, h;
-			CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight);
-
-			// TODO ES3: Use glInvalidateFramebuffer to discard depth/stencil data at the end of frame.
-			// and to discard extraFBOs_ after using them.
+			int uvRotation = (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) ? g_Config.iInternalScreenRotation : ROTATION_LOCKED_HORIZONTAL;
+			CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, uvRotation);
 
 			const float u0 = offsetX / (float)vfb->bufferWidth;
 			const float v0 = offsetY / (float)vfb->bufferHeight;
@@ -790,7 +776,7 @@ namespace DX9 {
 				const RECT dstRect = {x * rw / w, y * rh / h, (x + w) * rw / w, (y + h) * rh / h};
 				HRESULT hr = fbo_blit_color(vfb->fbo, &srcRect, nullptr, &dstRect, g_Config.iBufFilter == SCALE_LINEAR ? D3DTEXF_LINEAR : D3DTEXF_POINT);
 				if (FAILED(hr)) {
-					ERROR_LOG_REPORT(G3D, "fbo_blit_color failed on display: %08x", hr);
+					ERROR_LOG_REPORT_ONCE(blit_fail, G3D, "fbo_blit_color failed on display: %08x", hr);
 					dxstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
 					// These are in the output display coordinates
 					if (g_Config.iBufFilter == SCALE_LINEAR) {
@@ -802,7 +788,7 @@ namespace DX9 {
 					}
 					dxstate.texMipFilter.set(D3DTEXF_NONE);
 					dxstate.texMipLodBias.set(0);
-					DrawActiveTexture(colorTexture, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, false, u0, v0, u1, v1);
+					DrawActiveTexture(colorTexture, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, false, u0, v0, u1, v1, uvRotation);
 				}
 			}
 			/* 
@@ -811,7 +797,7 @@ namespace DX9 {
 			fbo_bind_as_render_target(extraFBOs_[0]);
 			int fbo_w, fbo_h;
 			fbo_get_dimensions(extraFBOs_[0], &fbo_w, &fbo_h);
-			glstate.viewport.set(0, 0, fbo_w, fbo_h);
+			dxstate.viewport.set(0, 0, fbo_w, fbo_h);
 			DrawActiveTexture(colorTexture, 0, 0, fbo_w, fbo_h, fbo_w, fbo_h, true, 1.0f, 1.0f, postShaderProgram_);
 
 			fbo_unbind();
@@ -823,12 +809,12 @@ namespace DX9 {
 			return;
 			}
 			colorTexture = fbo_get_color_texture(extraFBOs_[0]);
-			glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
+			dxstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
 			// These are in the output display coordinates
 			DrawActiveTexture(colorTexture, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, true, 480.0f / (float)vfb->width, 272.0f / (float)vfb->height);
 			} else {
 			// Use post-shader, but run shader at output resolution.
-			glstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
+			dxstate.viewport.set(0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
 			// These are in the output display coordinates
 			DrawActiveTexture(colorTexture, x, y, w, h, (float)PSP_CoreParameter().pixelWidth, (float)PSP_CoreParameter().pixelHeight, true, 480.0f / (float)vfb->width, 272.0f / (float)vfb->height, postShaderProgram_);
 			}
@@ -853,7 +839,7 @@ namespace DX9 {
 			// We maintain a separate vector of framebuffer objects for blitting.
 			for (size_t i = 0; i < bvfbs_.size(); ++i) {
 				VirtualFramebuffer *v = bvfbs_[i];
-				if (MaskedEqual(v->fb_address, vfb->fb_address) && v->format == vfb->format) {
+				if (v->fb_address == vfb->fb_address && v->format == vfb->format) {
 					if (v->bufferWidth == vfb->bufferWidth && v->bufferHeight == vfb->bufferHeight) {
 						nvfb = v;
 						v->fb_stride = vfb->fb_stride;
@@ -874,8 +860,8 @@ namespace DX9 {
 				nvfb->z_stride = vfb->z_stride;
 				nvfb->width = vfb->width;
 				nvfb->height = vfb->height;
-				nvfb->renderWidth = vfb->width;
-				nvfb->renderHeight = vfb->height;
+				nvfb->renderWidth = vfb->bufferWidth;
+				nvfb->renderHeight = vfb->bufferHeight;
 				nvfb->bufferWidth = vfb->bufferWidth;
 				nvfb->bufferHeight = vfb->bufferHeight;
 				nvfb->format = vfb->format;
@@ -891,6 +877,7 @@ namespace DX9 {
 				nvfb->fbo = fbo_create(nvfb->width, nvfb->height, 1, true, (FBOColorDepth)nvfb->colorDepth);
 				if (!(nvfb->fbo)) {
 					ERROR_LOG(SCEGE, "Error creating FBO! %i x %i", nvfb->renderWidth, nvfb->renderHeight);
+					delete nvfb;
 					return;
 				}
 
@@ -1048,9 +1035,7 @@ namespace DX9 {
 			switch (format) {
 			case GE_FORMAT_565: // BGR 565
 				for (u32 y = 0; y < height; ++y) {
-					for (u32 x = 0; x < width; ++x) {
-						dst16[x] = BGRA8888toRGB565(src32[x]);
-					}
+					ConvertBGRA8888ToRGB565(dst16, src32, width);
 					src32 += srcStride;
 					dst16 += dstStride;
 				}
@@ -1064,9 +1049,7 @@ namespace DX9 {
 				break;
 			case GE_FORMAT_4444: // ABGR 4444
 				for (u32 y = 0; y < height; ++y) {
-					for (u32 x = 0; x < width; ++x) {
-						dst16[x] = BGRA8888toRGBA4444(src32[x]);
-					}
+					ConvertBGRA8888ToRGBA4444(dst16, src32, width);
 					src32 += srcStride;
 					dst16 += dstStride;
 				}
@@ -1097,7 +1080,7 @@ namespace DX9 {
 		D3DSURFACE_DESC desc;
 		renderTarget->GetDesc(&desc);
 
-		LPDIRECT3DSURFACE9 offscreen = GetOffscreenSurface(renderTarget);
+		LPDIRECT3DSURFACE9 offscreen = GetOffscreenSurface(renderTarget, vfb);
 		if (offscreen) {
 			HRESULT hr = pD3Ddevice->GetRenderTargetData(renderTarget, offscreen);
 			if (SUCCEEDED(hr)) {
@@ -1170,14 +1153,16 @@ namespace DX9 {
 				ReadFramebufferToMemory(vfb, false, 0, 0, vfb->width, vfb->height);
 			}
 
-			if (vfb == displayFramebuf_ || vfb == prevDisplayFramebuf_ || vfb == prevPrevDisplayFramebuf_) {
-				continue;
-			}
 
-			if (age > FBO_OLD_AGE) {
-				INFO_LOG(SCEGE, "Decimating FBO for %08x (%i x %i x %i), age %i", vfb->fb_address, vfb->width, vfb->height, vfb->format, age);
-				DestroyFramebuf(vfb);
-				vfbs_.erase(vfbs_.begin() + i--);
+			// Let's also "decimate" the usageFlags.
+			UpdateFramebufUsage(vfb);
+
+			if (vfb != displayFramebuf_ && vfb != prevDisplayFramebuf_ && vfb != prevPrevDisplayFramebuf_) {
+				if (age > FBO_OLD_AGE) {
+					INFO_LOG(SCEGE, "Decimating FBO for %08x (%i x %i x %i), age %i", vfb->fb_address, vfb->width, vfb->height, vfb->format, age);
+					DestroyFramebuf(vfb);
+					vfbs_.erase(vfbs_.begin() + i--);
+				}
 			}
 		}
 
@@ -1248,14 +1233,17 @@ namespace DX9 {
 	void FramebufferManagerDX9::FlushBeforeCopy() {
 		// Flush anything not yet drawn before blitting, downloading, or uploading.
 		// This might be a stalled list, or unflushed before a block transfer, etc.
-		SetRenderFrameBuffer();
+
+		// TODO: It's really bad that we are calling SetRenderFramebuffer here with
+		// all the irrelevant state checking it'll use to decide what to do. Should
+		// do something more focused here.
+		SetRenderFrameBuffer(gstate_c.framebufChanged, gstate_c.skipDrawReason);
 		transformDraw_->Flush();
 	}
 
 	void FramebufferManagerDX9::Resized() {
 		resized_ = true;
 	}
-
 
 	bool FramebufferManagerDX9::GetCurrentFramebuffer(GPUDebugBuffer &buffer) {
 		u32 fb_address = gstate.getFrameBufRawAddress();
@@ -1272,26 +1260,49 @@ namespace DX9 {
 			return true;
 		}
 
-		LPDIRECT3DSURFACE9 renderTarget = nullptr;
-		HRESULT hr;
-		hr = pD3Ddevice->GetRenderTarget(0, &renderTarget);
-		if (!renderTarget || !SUCCEEDED(hr))
-			return false;
+		LPDIRECT3DSURFACE9 renderTarget = vfb->fbo ? fbo_get_color_for_read(vfb->fbo) : nullptr;
+		bool success = false;
+		if (renderTarget) {
+			LPDIRECT3DSURFACE9 offscreen = GetOffscreenSurface(renderTarget, vfb);
+			if (offscreen) {
+				success = GetRenderTargetFramebuffer(renderTarget, offscreen, vfb->renderWidth, vfb->renderHeight, buffer);
+			}
+		}
 
+		return success;
+	}
+
+	bool FramebufferManagerDX9::GetDisplayFramebuffer(GPUDebugBuffer &buffer) {
+		fbo_unbind();
+
+		LPDIRECT3DSURFACE9 renderTarget = nullptr;
+		HRESULT hr = pD3Ddevice->GetRenderTarget(0, &renderTarget);
+		bool success = false;
+		if (renderTarget && SUCCEEDED(hr)) {
+			D3DSURFACE_DESC desc;
+			renderTarget->GetDesc(&desc);
+
+			LPDIRECT3DSURFACE9 offscreen = nullptr;
+			HRESULT hr = pD3Ddevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &offscreen, NULL);
+			if (offscreen && SUCCEEDED(hr)) {
+				success = GetRenderTargetFramebuffer(renderTarget, offscreen, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight, buffer);
+				offscreen->Release();
+			}
+			renderTarget->Release();
+		}
+
+		return success;
+	}
+
+	bool FramebufferManagerDX9::GetRenderTargetFramebuffer(LPDIRECT3DSURFACE9 renderTarget, LPDIRECT3DSURFACE9 offscreen, int w, int h, GPUDebugBuffer &buffer) {
 		D3DSURFACE_DESC desc;
 		renderTarget->GetDesc(&desc);
 
-		LPDIRECT3DSURFACE9 offscreen = GetOffscreenSurface(renderTarget);
-		if (!offscreen) {
-			renderTarget->Release();
-			return false;
-		}
-
 		bool success = false;
-		hr = pD3Ddevice->GetRenderTargetData(renderTarget, offscreen);
+		HRESULT hr = pD3Ddevice->GetRenderTargetData(renderTarget, offscreen);
 		if (SUCCEEDED(hr)) {
 			D3DLOCKED_RECT locked;
-			RECT rect = {0, 0, vfb->renderWidth, vfb->renderHeight};
+			RECT rect = {0, 0, w, h};
 			hr = offscreen->LockRect(&locked, &rect, D3DLOCK_READONLY);
 			if (SUCCEEDED(hr)) {
 				// TODO: Handle the other formats?  We don't currently create them, I think.
@@ -1301,8 +1312,6 @@ namespace DX9 {
 				success = true;
 			}
 		}
-
-		renderTarget->Release();
 
 		return success;
 	}

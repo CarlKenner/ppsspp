@@ -43,7 +43,7 @@ bool CanUseHardwareTransformDX9(int prim) {
 }
 
 // prim so we can special case for RECTANGLES :(
-void ComputeVertexShaderIDDX9(VertexShaderIDDX9 *id, u32 vertType, int prim, bool useHWTransform) {
+void ComputeVertexShaderIDDX9(VertexShaderIDDX9 *id, u32 vertType, bool useHWTransform) {
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 	bool doShadeMapping = gstate.getUVGenMode() == GE_TEXMAP_ENVIRONMENT_MAP;
@@ -133,7 +133,7 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 	char *p = buffer;
 	const u32 vertType = gstate.vertType;
 
-	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled();
+	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled() && !gstate.isModeThrough();
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 	bool doShadeMapping = gstate.getUVGenMode() == GE_TEXMAP_ENVIRONMENT_MAP;
@@ -226,16 +226,18 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 		}
 	}
 
+	if (!gstate.isModeThrough()) {
+		WRITE(p, "float4 u_depthRange : register(c%i);\n", CONST_VS_DEPTHRANGE);
+	}
+
+	// And the "varyings".
 	if (useHWTransform) {
 		WRITE(p, "struct VS_IN {                              \n");
 		if (vertTypeIsSkinningEnabled(vertType)) {
 			WRITE(p, "%s", boneWeightAttrDecl[TranslateNumBones(vertTypeGetNumBoneWeights(vertType))]);
 		}
 		if (doTexture && hasTexcoord) {
-			if (doTextureProjection)
-				WRITE(p, "  float3 texcoord : TEXCOORD0;\n");
-			else
-				WRITE(p, "  float2 texcoord : TEXCOORD0;\n");
+			WRITE(p, "  float2 texcoord : TEXCOORD0;\n");
 		}
 		if (hasColor)  {
 			WRITE(p, "  float4 color0 : COLOR0;\n");
@@ -249,10 +251,19 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 	} else {
 		WRITE(p, "struct VS_IN {\n");
 		WRITE(p, "  float4 position : POSITION;\n");
-		WRITE(p, "  float3 texcoord : TEXCOORD0;\n");
-		WRITE(p, "  float4 color0 : COLOR0;\n");
+		if (doTexture && hasTexcoord) {
+			if (doTextureProjection && !throughmode)
+				WRITE(p, "  float3 texcoord : TEXCOORD0;\n");
+			else
+				WRITE(p, "  float2 texcoord : TEXCOORD0;\n");
+		}
+		if (hasColor) {
+			WRITE(p, "  float4 color0 : COLOR0;\n");
+		}
 		// only software transform supplies color1 as vertex data
-		WRITE(p, "  float4 color1 : COLOR1;\n");
+		if (lmode) {
+			WRITE(p, "  float4 color1 : COLOR1;\n");
+		}
 		WRITE(p, "};\n");
 	}
 
@@ -265,7 +276,7 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 			WRITE(p, "  float2 v_texcoord: TEXCOORD0;\n");
 	}
 	WRITE(p, "  float4 v_color0    : COLOR0;\n");
-	if (lmode) 
+	if (lmode)
 		WRITE(p, "  float3 v_color1    : COLOR1;\n");
 
 	if (enableFog) {
@@ -273,13 +284,31 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 	}
 	WRITE(p, "};\n");
 
+	// Confirmed: Through mode gets through exactly the same in GL and D3D in Phantasy Star: Text is 38023.0 in the test scene.
+
+	if (!gstate.isModeThrough()) {
+		// Apply the projection and viewport to get the Z buffer value, floor to integer, undo the viewport and projection.
+		// The Z range in D3D is different but we compensate for that using parameters.
+		WRITE(p, "\nfloat4 depthRoundZVP(float4 v) {\n");
+		WRITE(p, "  float z = v.z / v.w;\n");
+		WRITE(p, "  z = (z * u_depthRange.x + u_depthRange.y);\n");
+		WRITE(p, "  z = floor(z);\n");
+		WRITE(p, "  z = (z - u_depthRange.z) * u_depthRange.w;\n");
+		WRITE(p, "  return float4(v.x, v.y, z * v.w, v.w);\n");
+		WRITE(p, "}\n\n");
+	}
+
 	WRITE(p, "VS_OUT main(VS_IN In) {\n");
 	WRITE(p, "  VS_OUT Out = (VS_OUT)0;							   \n");  
 	if (!useHWTransform) {
 		// Simple pass-through of vertex data to fragment shader
 		if (doTexture) {
 			if (doTextureProjection) {
-				WRITE(p, "  Out.v_texcoord = In.texcoord;\n");
+				if (throughmode) {
+					WRITE(p, "  Out.v_texcoord = float3(In.texcoord.x, In.texcoord.y, 1.0);\n");
+				} else {
+					WRITE(p, "  Out.v_texcoord = In.texcoord;\n");
+				}
 			} else {
 				WRITE(p, "  Out.v_texcoord = In.texcoord.xy;\n");
 			}
@@ -299,7 +328,7 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 		if (gstate.isModeThrough())	{
 			WRITE(p, "  Out.gl_Position = mul(float4(In.position.xyz, 1.0), u_proj_through);\n");
 		} else {
-			WRITE(p, "  Out.gl_Position = mul(float4(In.position.xyz, 1.0), u_proj);\n");
+			WRITE(p, "  Out.gl_Position = depthRoundZVP(mul(float4(In.position.xyz, 1.0), u_proj));\n");
 		}
 	}  else {
 		// Step 1: World Transform / Skinning
@@ -371,7 +400,6 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 #endif
 
 #endif
-
 			WRITE(p, ";\n");
 
 			// Trying to simplify this results in bugs in LBP...
@@ -380,16 +408,16 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 
 			if (hasNormal) {
 				WRITE(p, "  float3 skinnednormal = mul(float4(%sIn.normal, 0.0), skinMatrix);\n", flipNormal ? "-" : "");
-				WRITE(p, "  float3 worldnormal = normalize(mul(float4(skinnednormal, 0.0), u_world));\n");
 			} else {
-				WRITE(p, "  float3 worldnormal = mul( mul( float4(0.0, 0.0, 1.0, 0.0), skinMatrix), u_world);\n");
+				WRITE(p, "  float3 skinnednormal = mul(float4(0.0, 0.0, %s1.0, 0.0), skinMatrix);\n", flipNormal ? "-" : "");
 			}
+			WRITE(p, "  float3 worldnormal = normalize(mul(float4(skinnednormal, 0.0), u_world));\n");
 		}
 
 		WRITE(p, "  float4 viewPos = float4(mul(float4(worldpos, 1.0), u_view), 1.0);\n");
 
 		// Final view and projection transforms.
-		WRITE(p, "  Out.gl_Position = mul(viewPos, u_proj);\n");
+		WRITE(p, "  Out.gl_Position = depthRoundZVP(mul(viewPos, u_proj));\n");
 
 		// TODO: Declare variables for dots for shade mapping if needed.
 
@@ -572,7 +600,7 @@ void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform) {
 				break;
 
 			case GE_TEXMAP_ENVIRONMENT_MAP:  // Shade mapping - use dots from light sources.
-				WRITE(p, "  Out.v_texcoord.xy = u_uvscaleoffset.xy * float2(1.0 + dot(normalize(u_lightpos%i), worldnormal), 1.0 - dot(normalize(u_lightpos%i), worldnormal)) * 0.5;\n", gstate.getUVLS0(), gstate.getUVLS1());
+				WRITE(p, "  Out.v_texcoord.xy = u_uvscaleoffset.xy * float2(1.0 + dot(normalize(u_lightpos%i), worldnormal), 1.0 + dot(normalize(u_lightpos%i), worldnormal)) * 0.5;\n", gstate.getUVLS0(), gstate.getUVLS1());
 				break;
 
 			default:

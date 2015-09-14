@@ -14,11 +14,11 @@
 
 typedef ThreadEventQueue<GPUInterface, GPUEvent, GPUEventType, GPU_EVENT_INVALID, GPU_EVENT_SYNC_THREAD, GPU_EVENT_FINISH_EVENT_LOOP> GPUThreadEventQueue;
 
-class GPUCommon : public GPUThreadEventQueue, public GPUDebugInterface
-{
+class GPUCommon : public GPUThreadEventQueue, public GPUDebugInterface {
 public:
 	GPUCommon();
-	virtual ~GPUCommon() {}
+	virtual ~GPUCommon();
+
 	virtual void Reinitialize();
 
 	virtual void InterruptStart(int listid);
@@ -111,7 +111,7 @@ public:
 	const std::list<int>& GetDisplayLists() {
 		return dlQueue;
 	}
-	virtual bool DecodeTexture(u8* dest, GPUgstate state) {
+	virtual bool DecodeTexture(u8* dest, const GPUgstate &state) {
 		return false;
 	}
 	std::vector<FramebufferInfo> GetFramebufferList() {
@@ -128,16 +128,18 @@ protected:
 	void UpdatePC(u32 currentPC) {
 		UpdatePC(currentPC, currentPC);
 	}
-	void UpdateState(GPUState state);
+	void UpdateState(GPURunState state);
 	void PopDLQueue();
 	void CheckDrawSync();
 	int  GetNextListIndex();
 	void ProcessDLQueueInternal();
-	void ReapplyGfxStateInternal();
+	virtual void ReapplyGfxStateInternal();
 	virtual void FastLoadBoneMatrix(u32 target);
 	virtual void ProcessEvent(GPUEvent ev);
 	virtual bool ShouldExitEventLoop() {
 		return coreState != CORE_RUNNING;
+	}
+	virtual void FinishDeferred() {
 	}
 
 	// Allows early unlocking with a guard.  Do not double unlock.
@@ -161,7 +163,7 @@ protected:
 	recursive_mutex listLock;
 
 	bool interruptRunning;
-	GPUState gpuState;
+	GPURunState gpuState;
 	bool isbreak;
 	u64 drawCompleteTicks;
 	u64 busyTicks;

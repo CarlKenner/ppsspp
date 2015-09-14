@@ -29,7 +29,6 @@
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/MIPSInt.h"
 #include "Core/MIPS/MIPSTables.h"
-#include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/Reporting.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/HLETables.h"
@@ -74,29 +73,13 @@ int MIPS_SingleStep()
 #else
 	MIPSOpcode op = Memory::Read_Opcode_JIT(mipsr4k.pc);
 #endif
-	/*
-	// Choke on VFPU
-	MIPSInfo info = MIPSGetInfo(op);
-	if (info & IS_VFPU)
-	{
-		if (!Core_IsStepping() && !GetAsyncKeyState(VK_LSHIFT))
-		{
-			Core_EnableStepping(true);
-			return;
-		}
-	}*/
-
-	if (mipsr4k.inDelaySlot)
-	{
+	if (mipsr4k.inDelaySlot) {
 		MIPSInterpret(op);
-		if (mipsr4k.inDelaySlot)
-		{
+		if (mipsr4k.inDelaySlot) {
 			mipsr4k.pc = mipsr4k.nextPC;
 			mipsr4k.inDelaySlot = false;
 		}
-	}
-	else
-	{
+	} else {
 		MIPSInterpret(op);
 	}
 	return 1;
@@ -315,7 +298,8 @@ namespace MIPSInt
 			DelayBranchTo(addr);
 			break;
 		case 9: //jalr
-			R(rd) = PC + 8;
+			if (rd != 0)
+				R(rd) = PC + 8;
 			DelayBranchTo(addr);
 			break;
 		}
@@ -527,12 +511,42 @@ namespace MIPSInt
 		int fs = _FS;
 		int rt = _RT;
 
-		switch((op>>21)&0x1f) 
-		{
-		case 0: if (rt != 0) R(rt) = FI(fs); break; //mfc1
-		case 2: if (rt != 0) R(rt) = currentMIPS->ReadFCR(fs); break; //cfc1
-		case 4: FI(fs) = R(rt);	break; //mtc1
-		case 6: currentMIPS->WriteFCR(fs, R(rt)); break; //ctc1
+		switch ((op>>21)&0x1f) {
+		case 0: //mfc1
+			if (rt != 0)
+				R(rt) = FI(fs);
+			break;
+
+		case 2: //cfc1
+			if (rt != 0) {
+				if (fs == 31) {
+					currentMIPS->fcr31 = (currentMIPS->fcr31 & ~(1<<23)) | ((currentMIPS->fpcond & 1)<<23);
+					R(rt) = currentMIPS->fcr31;
+				} else if (fs == 0) {
+					R(rt) = MIPSState::FCR0_VALUE;
+				} else {
+					WARN_LOG_REPORT(CPU, "ReadFCR: Unexpected reg %d", fs);
+					R(rt) = 0;
+				}
+				break;
+			}
+
+		case 4: //mtc1
+			FI(fs) = R(rt);
+			break;
+
+		case 6: //ctc1
+			{
+				u32 value = R(rt);
+				if (fs == 31) {
+					currentMIPS->fcr31 = value & 0x0181FFFF;
+					currentMIPS->fpcond = (value >> 23) & 1;
+				} else {
+					WARN_LOG_REPORT(CPU, "WriteFCR: Unexpected reg %d (value %08x)", fs, value);
+				}
+				DEBUG_LOG(CPU, "FCR%i written to, value %08x", fs, value);
+				break;
+			}
 		
 		default:
 			_dbg_assert_msg_(CPU,0,"Trying to interpret instruction that can't be interpreted");
@@ -559,7 +573,7 @@ namespace MIPSInt
 			{ //TODO: verify
 				int x = 31;
 				int count=0;
-				while (!(R(rs) & (1<<x)) && x >= 0)
+				while (x >= 0 && !(R(rs) & (1<<x)))
 				{
 					count++;
 					x--;
@@ -571,7 +585,7 @@ namespace MIPSInt
 			{ //TODO: verify
 				int x = 31;
 				int count=0;
-				while ((R(rs) & (1<<x)) && x >= 0)
+				while (x >= 0 && (R(rs) & (1<<x)))
 				{
 					count++;
 					x--;
@@ -649,9 +663,9 @@ namespace MIPSInt
 				HI = (u32)(result>>32);
 			}
 			break;
-		case 16: R(rd) = HI; break; //mfhi
+		case 16: if (rd != 0) R(rd) = HI; break; //mfhi
 		case 17: HI = R(rs); break; //mthi
-		case 18: R(rd) = LO; break; //mflo
+		case 18: if (rd != 0) R(rd) = LO; break; //mflo
 		case 19: LO = R(rs); break; //mtlo
 		case 26: //div
 			{
@@ -818,14 +832,14 @@ namespace MIPSInt
 		static int reported = 0;
 		switch (op & 0x3F)
 		{
-		case 36:
+		case 36:  // mfic
 			if (!reported) {
 				Reporting::ReportMessage("MFIC instruction hit (%08x) at %08x", op, currentMIPS->pc);
 				WARN_LOG(CPU,"MFIC Disable/Enable Interrupt CPU instruction");
 				reported = 1;
 			}
 			break;
-		case 38:
+		case 38:  // mtic
 			if (!reported) {
 				Reporting::ReportMessage("MTIC instruction hit (%08x) at %08x", op, currentMIPS->pc);
 				WARN_LOG(CPU,"MTIC Disable/Enable Interrupt CPU instruction");
@@ -843,25 +857,24 @@ namespace MIPSInt
 		int pos = _POS;
 
 		// Don't change $zr.
-		if (rt == 0)
-		{
+		if (rt == 0) {
 			PC += 4;
 			return;
 		}
 
-		switch (op & 0x3f)
-		{
+		switch (op & 0x3f) {
 		case 0x0: //ext
 			{
 				int size = _SIZE + 1;
-				R(rt) = (R(rs) >> pos) & ((1<<size) - 1);
+				u32 sourcemask = 0xFFFFFFFFUL >> (32 - size);
+				R(rt) = (R(rs) >> pos) & sourcemask;
 			}
 			break;
 		case 0x4: //ins
 			{
 				int size = (_SIZE + 1) - pos;
-				int sourcemask = (1 << size) - 1;
-				int destmask = sourcemask << pos;
+				u32 sourcemask = 0xFFFFFFFFUL >> (32 - size);
+				u32 destmask = sourcemask << pos;
 				R(rt) = (R(rt) & ~destmask) | ((R(rs)&sourcemask) << pos);
 			}
 			break;
@@ -996,10 +1009,10 @@ namespace MIPSInt
 
 		switch (op & 0x3f)
 		{
-		case 0: F(fd) = F(fs) + F(ft); break; //add
-		case 1: F(fd) = F(fs) - F(ft); break; //sub
-		case 2: F(fd) = F(fs) * F(ft); break; //mul
-		case 3: F(fd) = F(fs) / F(ft); break; //div
+		case 0: F(fd) = F(fs) + F(ft); break; // add.s
+		case 1: F(fd) = F(fs) - F(ft); break; // sub.s
+		case 2: F(fd) = F(fs) * F(ft); break; // mul.s
+		case 3: F(fd) = F(fs) / F(ft); break; // div.s
 		default:
 			_dbg_assert_msg_(CPU,0,"Trying to interpret FPU3Op instruction that can't be interpreted");
 			break;
@@ -1031,7 +1044,7 @@ namespace MIPSInt
 		// It's a replacement func!
 		int index = op.encoding & 0xFFFFFF;
 		const ReplacementTableEntry *entry = GetReplacementFunc(index);
-		if (entry && entry->replaceFunc) {
+		if (entry && entry->replaceFunc && (entry->flags & REPFLAG_DISABLED) == 0) {
 			entry->replaceFunc();
 
 			if (entry->flags & (REPFLAG_HOOKENTER | REPFLAG_HOOKEXIT)) {
@@ -1041,7 +1054,11 @@ namespace MIPSInt
 				PC = currentMIPS->r[MIPS_REG_RA];
 			}
 		} else {
-			ERROR_LOG(CPU, "Bad replacement function index %i", index);
+			if (!entry || !entry->replaceFunc) {
+				ERROR_LOG(CPU, "Bad replacement function index %i", index);
+			}
+			// Interpret the original instruction under it.
+			MIPSInterpret(Memory::Read_Instruction(PC, true));
 		}
 	}
 

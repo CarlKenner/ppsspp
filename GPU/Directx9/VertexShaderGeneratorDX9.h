@@ -52,7 +52,7 @@ struct VertexShaderIDDX9
 
 bool CanUseHardwareTransformDX9(int prim);
 
-void ComputeVertexShaderIDDX9(VertexShaderIDDX9 *id, u32 vertType, int prim, bool useHWTransform);
+void ComputeVertexShaderIDDX9(VertexShaderIDDX9 *id, u32 vertType, bool useHWTransform);
 void GenerateVertexShaderDX9(int prim, char *buffer, bool useHWTransform);
 
 // Collapse to less skinning shaders to reduce shader switching, which is expensive.
@@ -87,5 +87,6 @@ int TranslateNumBonesDX9(int bones);
 #define CONST_VS_LIGHTDIFFUSE 71
 #define CONST_VS_LIGHTSPECULAR 75
 #define CONST_VS_LIGHTAMBIENT 79
+#define CONST_VS_DEPTHRANGE 83
 
 };

@@ -1,6 +1,9 @@
-#include "global.h"
-#include "fbo.h"
+
+
+#include "GPU/Directx9/helper/global.h"
+#include "GPU/Directx9/helper/dx_fbo.h"
 #include "thin3d/d3dx9_loader.h"
+#include "Common/CommonFuncs.h"
 
 namespace DX9 {
 
@@ -34,7 +37,6 @@ static const char * pscode =
   "};\n"
   "float4 main( PS_IN In ) : COLOR {\n"
   "  float4 c =  tex2D(s, In.Uv);\n"
-  "  c.a = 1.0f;\n"
   "  return c;\n"
   "}\n";
 
@@ -60,16 +62,14 @@ LPDIRECT3DVERTEXSHADER9      pFramebufferVertexShader = NULL; // Vertex Shader
 LPDIRECT3DPIXELSHADER9       pFramebufferPixelShader = NULL;  // Pixel Shader
 
 bool CompilePixelShader(const char *code, LPDIRECT3DPIXELSHADER9 *pShader, LPD3DXCONSTANTTABLE *pShaderTable, std::string &errorMessage) {
-	ID3DXBuffer* pShaderCode = NULL;
-	ID3DXBuffer* pErrorMsg = NULL;
-
-	HRESULT hr = -1;
+	ID3DXBuffer *pShaderCode = nullptr;
+	ID3DXBuffer *pErrorMsg = nullptr;
 
 	// Compile pixel shader.
-	hr = dyn_D3DXCompileShader(code,
+	HRESULT hr = dyn_D3DXCompileShader(code,
 		(UINT)strlen(code),
-		NULL,
-		NULL,
+		nullptr,
+		nullptr,
 		"main",
 		"ps_2_0",
 		0,
@@ -80,11 +80,13 @@ bool CompilePixelShader(const char *code, LPDIRECT3DPIXELSHADER9 *pShader, LPD3D
 	if (pErrorMsg) {
 		errorMessage = (CHAR *)pErrorMsg->GetBufferPointer();
 		pErrorMsg->Release();
+	} else if (FAILED(hr)) {
+		errorMessage = GetStringErrorMsg(hr);
 	} else {
 		errorMessage = "";
 	}
 
-	if (FAILED(hr)) {
+	if (FAILED(hr) || !pShaderCode) {
 		if (pShaderCode)
 			pShaderCode->Release();
 		return false;
@@ -100,16 +102,14 @@ bool CompilePixelShader(const char *code, LPDIRECT3DPIXELSHADER9 *pShader, LPD3D
 }
 
 bool CompileVertexShader(const char *code, LPDIRECT3DVERTEXSHADER9 *pShader, LPD3DXCONSTANTTABLE *pShaderTable, std::string &errorMessage) {
-	ID3DXBuffer* pShaderCode = NULL;
-	ID3DXBuffer* pErrorMsg = NULL;
-
-	HRESULT hr = -1;
+	ID3DXBuffer *pShaderCode = nullptr;
+	ID3DXBuffer *pErrorMsg = nullptr;
 
 	// Compile pixel shader.
-	hr = dyn_D3DXCompileShader(code,
+	HRESULT hr = dyn_D3DXCompileShader(code,
 		(UINT)strlen(code),
-		NULL,
-		NULL,
+		nullptr,
+		nullptr,
 		"main",
 		"vs_2_0",
 		0,
@@ -120,11 +120,13 @@ bool CompileVertexShader(const char *code, LPDIRECT3DVERTEXSHADER9 *pShader, LPD
 	if (pErrorMsg) {
 		errorMessage = (CHAR *)pErrorMsg->GetBufferPointer();
 		pErrorMsg->Release();
+	} else if (FAILED(hr)) {
+		errorMessage = GetStringErrorMsg(hr);
 	} else {
 		errorMessage = "";
 	}
 
-	if (FAILED(hr)) {
+	if (FAILED(hr) || !pShaderCode) {
 		if (pShaderCode)
 			pShaderCode->Release();
 		return false;
@@ -139,23 +141,25 @@ bool CompileVertexShader(const char *code, LPDIRECT3DVERTEXSHADER9 *pShader, LPD
 	return true;
 }
 
-void CompileShaders() {
-	std::string errorMsg;
-	HRESULT hr = -1;
-
+bool CompileShaders(std::string &errorMsg) {
 	if (!CompileVertexShader(vscode, &pFramebufferVertexShader, NULL, errorMsg)) {
 		OutputDebugStringA(errorMsg.c_str());
-		DebugBreak();
+		return false;
 	}
 
 	if (!CompilePixelShader(pscode, &pFramebufferPixelShader, NULL, errorMsg)) {
 		OutputDebugStringA(errorMsg.c_str());
-		DebugBreak();
+		if (pFramebufferVertexShader) {
+			pFramebufferVertexShader->Release();
+		}
+		return false;
 	}
 
 	pD3Ddevice->CreateVertexDeclaration(VertexElements, &pFramebufferVertexDecl);
 	pD3Ddevice->SetVertexDeclaration(pFramebufferVertexDecl);
 	pD3Ddevice->CreateVertexDeclaration(SoftTransVertexElements, &pSoftVertexDecl);
+
+	return true;
 }
 
 void DestroyShaders() {
@@ -208,7 +212,8 @@ void DirectxInit(HWND window) {
 	pD3Ddevice->SetRingBufferParameters( &d3dr );
 #endif
 
-	CompileShaders();
+	std::string errorMessage;
+	CompileShaders(errorMessage);
 
 	fbo_init(pD3D);
 }

@@ -27,20 +27,23 @@
 
 #include "base/logging.h"
 #include "math/math_util.h"
-#include "gfx_es2/gl_state.h"
 #include "math/lin/matrix4x4.h"
+#include "profiler/profiler.h"
 
 #include "Core/Config.h"
 #include "Core/Reporting.h"
 #include "GPU/Math3D.h"
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
+#include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/GLES/TransformPipeline.h"
 #include "UI/OnScreenDisplay.h"
 #include "Framebuffer.h"
+#include "i18n/i18n.h"
 
-Shader::Shader(const char *code, uint32_t shaderType, bool useHWTransform) : failed_(false), useHWTransform_(useHWTransform) {
+Shader::Shader(const char *code, uint32_t shaderType, bool useHWTransform, const ShaderID &shaderID) : failed_(false), useHWTransform_(useHWTransform), id_(shaderID) {
+	PROFILE_THIS_SCOPE("shadercomp");
 	source_ = code;
 #ifdef SHADERLOG
 	OutputDebugStringUTF8(code);
@@ -81,6 +84,8 @@ Shader::~Shader() {
 
 LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous)
 		: useHWTransform_(useHWTransform), program(0), dirtyUniforms(0) {
+	PROFILE_THIS_SCOPE("shaderlink");
+
 	program = glCreateProgram();
 	vs_ = vs;
 	glAttachShader(program, vs->shader);
@@ -98,7 +103,7 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTrans
 	glBindAttribLocation(program, ATTR_COLOR1, "color1");
 
 #ifndef USING_GLES2
-	if (gl_extensions.ARB_blend_func_extended) {
+	if (gstate_c.featureFlags & GPU_SUPPORTS_DUALSOURCE_BLEND) {
 		// Dual source alpha
 		glBindFragDataLocationIndexed(program, 0, 0, "fragColor0");
 		glBindFragDataLocationIndexed(program, 0, 1, "fragColor1");
@@ -162,6 +167,7 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTrans
 		numBones = TranslateNumBones(vertTypeGetNumBoneWeights(vertType));
 	else
 		numBones = 0;
+	u_depthRange = glGetUniformLocation(program, "u_depthRange");
 
 #ifdef USE_BONE_ARRAY
 	u_bone = glGetUniformLocation(program, "u_bone");
@@ -228,6 +234,8 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTrans
 	if (u_texmtx != -1) availableUniforms |= DIRTY_TEXMATRIX;
 	if (u_stencilReplaceValue != -1) availableUniforms |= DIRTY_STENCILREPLACEVALUE;
 	if (u_blendFixA != -1 || u_blendFixB != -1 || u_fbotexSize != -1) availableUniforms |= DIRTY_SHADERBLEND;
+	if (u_depthRange != -1)
+		availableUniforms |= DIRTY_DEPTHRANGE;
 
 	// Looping up to numBones lets us avoid checking u_bone[i]
 #ifdef USE_BONE_ARRAY
@@ -338,10 +346,20 @@ static void SetFloat24Uniform3(int uniform, const u32 data[3]) {
 	glUniform3fv(uniform, 1, (const GLfloat *)&col[0]);
 }
 
+static void SetFloatUniform4(int uniform, float data[4]) {
+	glUniform4fv(uniform, 1, data);
+}
+
 static void SetMatrix4x3(int uniform, const float *m4x3) {
 	float m4x4[16];
 	ConvertMatrix4x3To4x4(m4x4, m4x3);
 	glUniformMatrix4fv(uniform, 1, GL_FALSE, m4x4);
+}
+
+static inline void ScaleProjMatrix(Matrix4x4 &in) {
+	const Vec3 trans(gstate_c.vpXOffset, gstate_c.vpYOffset, 0.0f);
+	const Vec3 scale(gstate_c.vpWidthScale, gstate_c.vpHeightScale, 1.0);
+	in.translateAndScale(trans, scale);
 }
 
 void LinkedShader::use(u32 vertType, LinkedShader *previous) {
@@ -378,22 +396,60 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 
 	// Update any dirty uniforms before we draw
 	if (dirty & DIRTY_PROJMATRIX) {
-		float flippedMatrix[16];
-		memcpy(flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
-		if (gstate_c.vpHeight < 0) {
+		Matrix4x4 flippedMatrix;
+		memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
+
+		const bool invertedY = gstate_c.vpHeight < 0;
+		if (invertedY) {
 			flippedMatrix[5] = -flippedMatrix[5];
 			flippedMatrix[13] = -flippedMatrix[13];
 		}
-		if (gstate_c.vpWidth < 0) {
+		const bool invertedX = gstate_c.vpWidth < 0;
+		if (invertedX) {
 			flippedMatrix[0] = -flippedMatrix[0];
 			flippedMatrix[12] = -flippedMatrix[12];
 		}
-		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix);
+
+		// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
+		// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
+		if (g_Config.bDepthRangeHack) {
+			float zScale = gstate.getViewportZScale() / 65535.0f;
+			float zCenter = gstate.getViewportZCenter() / 65535.0f;
+
+			// if far depth range < 0
+			if (zCenter + zScale < 0.0f) {
+				// if perspective projection
+				if (flippedMatrix[11] < 0.0f) {
+					float depthMax = gstate.getDepthRangeMax() / 65535.0f;
+					float depthMin = gstate.getDepthRangeMin() / 65535.0f;
+
+					float a = flippedMatrix[10];
+					float b = flippedMatrix[14];
+
+					float n = b / (a - 1.0f);
+					float f = b / (a + 1.0f);
+
+					f = (n * f) / (n + ((zCenter + zScale) * (n - f) / (depthMax - depthMin)));
+
+					a = (n + f) / (n - f);
+					b = (2.0f * n * f) / (n - f);
+
+					if (!my_isnan(a) && !my_isnan(b)) {
+						flippedMatrix[10] = a;
+						flippedMatrix[14] = b;
+					}
+				}
+			}
+		}
+
+		ScaleProjMatrix(flippedMatrix);
+
+		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 	}
 	if (dirty & DIRTY_PROJTHROUGHMATRIX)
 	{
 		Matrix4x4 proj_through;
-		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0, 1);
+		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0.0f, 1.0f);
 		glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, proj_through.getReadPtr());
 	}
 	if (dirty & DIRTY_TEXENV) {
@@ -498,7 +554,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 		glUniform4fv(u_uvscaleoffset, 1, uvscaleoff);
 	}
 
-	if (dirty & DIRTY_TEXCLAMP) {
+	if ((dirty & DIRTY_TEXCLAMP) && u_texclamp != -1) {
 		const float invW = 1.0f / (float)gstate_c.curTextureWidth;
 		const float invH = 1.0f / (float)gstate_c.curTextureHeight;
 		const int w = gstate.getTextureWidth(0);
@@ -532,6 +588,18 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 	}
 	if (dirty & DIRTY_TEXMATRIX) {
 		SetMatrix4x3(u_texmtx, gstate.tgenMatrix);
+	}
+	if ((dirty & DIRTY_DEPTHRANGE) && u_depthRange != -1) {
+		float viewZScale = gstate.getViewportZScale();
+		float viewZCenter = gstate.getViewportZCenter();
+		float viewZInvScale;
+		if (viewZScale != 0.0) {
+			viewZInvScale = 1.0f / viewZScale;
+		} else {
+			viewZInvScale = 0.0;
+		}
+		float data[4] = { viewZScale, viewZCenter, viewZCenter, viewZInvScale };
+		SetFloatUniform4(u_depthRange, data);
 	}
 
 	if (dirty & DIRTY_STENCILREPLACEVALUE) {
@@ -608,22 +676,20 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 
 	for (int i = 0; i < 4; i++) {
 		if (dirty & (DIRTY_LIGHT0 << i)) {
-			if (u_lightpos[i] != -1) {
-				if (gstate.isDirectionalLight(i)) {
-					// Prenormalize
-					float x = getFloat24(gstate.lpos[i * 3 + 0]);
-					float y = getFloat24(gstate.lpos[i * 3 + 1]);
-					float z = getFloat24(gstate.lpos[i * 3 + 2]);
-					float len = sqrtf(x*x + y*y + z*z);
-					if (len == 0.0f)
-						len = 1.0f;
-					else
-						len = 1.0f / len;
-					float vec[3] = { x * len, y * len, z * len };
-					glUniform3fv(u_lightpos[i], 1, vec);
-				} else {
-					SetFloat24Uniform3(u_lightpos[i], &gstate.lpos[i * 3]);
-				}
+			if (gstate.isDirectionalLight(i)) {
+				// Prenormalize
+				float x = getFloat24(gstate.lpos[i * 3 + 0]);
+				float y = getFloat24(gstate.lpos[i * 3 + 1]);
+				float z = getFloat24(gstate.lpos[i * 3 + 2]);
+				float len = sqrtf(x*x + y*y + z*z);
+				if (len == 0.0f)
+					len = 1.0f;
+				else
+					len = 1.0f / len;
+				float vec[3] = { x * len, y * len, z * len };
+				glUniform3fv(u_lightpos[i], 1, vec);
+			} else {
+				SetFloat24Uniform3(u_lightpos[i], &gstate.lpos[i * 3]);
 			}
 			if (u_lightdir[i] != -1) SetFloat24Uniform3(u_lightdir[i], &gstate.ldir[i * 3]);
 			if (u_lightatt[i] != -1) SetFloat24Uniform3(u_lightatt[i], &gstate.latt[i * 3]);
@@ -681,6 +747,24 @@ void ShaderManager::DirtyLastShader() { // disables vertex arrays
 	if (lastShader_)
 		lastShader_->stop();
 	lastShader_ = 0;
+	lastVShaderSame_ = false;
+}
+
+// This is to be used when debugging why incompatible shaders are being linked, like is
+// happening as I write this in Tactics Ogre
+bool ShaderManager::DebugAreShadersCompatibleForLinking(Shader *vs, Shader *fs) {
+	// Check clear mode flag just for starters.
+	ShaderID vsid = vs->ID();
+	ShaderID fsid = fs->ID();
+
+	// TODO: Make the flag fields more similar?
+	// Check DoTexture
+	if (((vsid.d[0] >> 4) & 1) != ((fsid.d[0] >> 1) & 1)) {
+		ERROR_LOG(G3D, "Texture enable flag mismatch!");
+		return false;
+	}
+
+	return true;
 }
 
 Shader *ShaderManager::ApplyVertexShader(int prim, u32 vertType) {
@@ -698,13 +782,13 @@ Shader *ShaderManager::ApplyVertexShader(int prim, u32 vertType) {
 
 	bool useHWTransform = CanUseHardwareTransform(prim);
 
-	VertexShaderID VSID;
-	ComputeVertexShaderID(&VSID, vertType, prim, useHWTransform);
+	ShaderID VSID;
+	ComputeVertexShaderID(&VSID, vertType, useHWTransform);
 
 	// Just update uniforms if this is the same shader as last time.
 	if (lastShader_ != 0 && VSID == lastVSID_) {
 		lastVShaderSame_ = true;
-		return lastShader_->vs_;	// Already all set.
+		return lastShader_->vs_;  	// Already all set.
 	} else {
 		lastVShaderSame_ = false;
 	}
@@ -716,11 +800,12 @@ Shader *ShaderManager::ApplyVertexShader(int prim, u32 vertType) {
 	if (vsIter == vsCache_.end())	{
 		// Vertex shader not in cache. Let's compile it.
 		GenerateVertexShader(prim, vertType, codeBuffer_, useHWTransform);
-		vs = new Shader(codeBuffer_, GL_VERTEX_SHADER, useHWTransform);
+		vs = new Shader(codeBuffer_, GL_VERTEX_SHADER, useHWTransform, VSID);
 
 		if (vs->Failed()) {
+			I18NCategory *gr = GetI18NCategory("Graphics");
 			ERROR_LOG(G3D, "Shader compilation failed, falling back to software transform");
-			osm.Show("hardware transform error - falling back to software", 2.5f, 0xFF3030FF, -1, true);
+			osm.Show(gr->T("hardware transform error - falling back to software"), 2.5f, 0xFF3030FF, -1, true);
 			delete vs;
 
 			// TODO: Look for existing shader with the appropriate ID, use that instead of generating a new one - however, need to make sure
@@ -729,7 +814,7 @@ Shader *ShaderManager::ApplyVertexShader(int prim, u32 vertType) {
 
 			// Can still work with software transform.
 			GenerateVertexShader(prim, vertType, codeBuffer_, false);
-			vs = new Shader(codeBuffer_, GL_VERTEX_SHADER, false);
+			vs = new Shader(codeBuffer_, GL_VERTEX_SHADER, false, VSID);
 		}
 
 		vsCache_[VSID] = vs;
@@ -740,7 +825,7 @@ Shader *ShaderManager::ApplyVertexShader(int prim, u32 vertType) {
 }
 
 LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, int prim, u32 vertType) {
-	FragmentShaderID FSID;
+	ShaderID FSID;
 	ComputeFragmentShaderID(&FSID);
 	if (lastVShaderSame_ && FSID == lastFSID_) {
 		lastShader_->UpdateUniforms(vertType);
@@ -754,7 +839,7 @@ LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, int prim, u32 vertT
 	if (fsIter == fsCache_.end())	{
 		// Fragment shader not in cache. Let's compile it.
 		GenerateFragmentShader(codeBuffer_);
-		fs = new Shader(codeBuffer_, GL_FRAGMENT_SHADER, vs->UseHWTransform());
+		fs = new Shader(codeBuffer_, GL_FRAGMENT_SHADER, vs->UseHWTransform(), FSID);
 		fsCache_[FSID] = fs;
 	} else {
 		fs = fsIter->second;
@@ -763,9 +848,10 @@ LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, int prim, u32 vertT
 	// Okay, we have both shaders. Let's see if there's a linked one.
 	LinkedShader *ls = NULL;
 
+	u32 switchDirty = shaderSwitchDirty_;
 	for (auto iter = linkedShaderCache_.begin(); iter != linkedShaderCache_.end(); ++iter) {
 		// Deferred dirtying! Let's see if we can make this even more clever later.
-		iter->ls->dirtyUniforms |= shaderSwitchDirty_;
+		iter->ls->dirtyUniforms |= switchDirty;
 
 		if (iter->vs == vs && iter->fs == fs) {
 			ls = iter->ls;
@@ -774,6 +860,12 @@ LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, int prim, u32 vertT
 	shaderSwitchDirty_ = 0;
 
 	if (ls == NULL) {
+		// Check if we can link these.
+#ifdef _DEBUG
+		if (!DebugAreShadersCompatibleForLinking(vs, fs)) {
+			return NULL;
+		}
+#endif
 		ls = new LinkedShader(vs, fs, vertType, vs->UseHWTransform(), lastShader_);  // This does "use" automatically
 		const LinkedShaderCacheEntry entry(vs, fs, ls);
 		linkedShaderCache_.push_back(entry);

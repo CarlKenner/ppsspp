@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "file/zip_read.h"
+#include "profiler/profiler.h"
 #include "Common/FileUtil.h"
 #include "Core/Config.h"
 #include "Core/Core.h"
@@ -69,9 +70,11 @@ struct InputState;
 // Temporary hacks around annoying linking errors.
 void D3D9_SwapBuffers() { }
 void GL_SwapBuffers() { }
+void GL_SwapInterval(int) { }
 void NativeUpdate(InputState &input_state) { }
 void NativeRender() { }
 void NativeResized() { }
+void NativeMessageReceived(const char *message, const char *value) {}
 
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 int System_GetPropertyInt(SystemProperty prop) { return -1; }
@@ -200,6 +203,8 @@ bool RunAutoTest(HeadlessHost *headlessHost, CoreParameter &coreParameter, bool 
 
 int main(int argc, const char* argv[])
 {
+	PROFILE_INIT();
+
 #ifdef ANDROID_NDK_PROFILER
 	setenv("CPUPROFILE_FREQUENCY", "500", 1);
 	setenv("CPUPROFILE", "/sdcard/gmon.out", 1);
@@ -361,7 +366,7 @@ int main(int argc, const char* argv[])
 #if defined(ANDROID)
 #elif defined(BLACKBERRY) || defined(__SYMBIAN32__)
 #elif !defined(_WIN32)
-	g_Config.memCardDirectory = std::string(getenv("HOME")) + "/.ppsspp/";
+	g_Config.memStickDirectory = std::string(getenv("HOME")) + "/.ppsspp/";
 #endif
 
 	// Try to find the flash0 directory.  Often this is from a subdirectory.

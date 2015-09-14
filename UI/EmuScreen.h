@@ -28,6 +28,8 @@
 
 struct AxisInput;
 
+class AsyncImageFileView;
+
 class EmuScreen : public UIScreen {
 public:
 	EmuScreen(const std::string &filename);
@@ -58,6 +60,8 @@ private:
 	void setVKeyAnalogX(int stick, int virtualKeyMin, int virtualKeyMax);
 	void setVKeyAnalogY(int stick, int virtualKeyMin, int virtualKeyMax);
 
+	void releaseButtons();
+
 	void autoLoad();
 	void checkPowerDown();
 
@@ -82,4 +86,7 @@ private:
 
 	// De-noise mapped axis updates
 	int axisState_[JOYSTICK_AXIS_MAX];
+
+	double saveStatePreviewShownTime_;
+	AsyncImageFileView *saveStatePreview_;
 };

@@ -19,29 +19,9 @@
 
 #include "Globals.h"
 
-struct FragmentShaderID {
-	FragmentShaderID() {clear();}
-	void clear() {d[0] = 0xFFFFFFFF; d[1] = 0xFFFFFFFF;}
-	u32 d[2];
-	bool operator < (const FragmentShaderID &other) const {
-		for (size_t i = 0; i < sizeof(d) / sizeof(u32); i++) {
-			if (d[i] < other.d[i])
-				return true;
-			if (d[i] > other.d[i])
-				return false;
-		}
-		return false;
-	}
-	bool operator == (const FragmentShaderID &other) const {
-		for (size_t i = 0; i < sizeof(d) / sizeof(u32); i++) {
-			if (d[i] != other.d[i])
-				return false;
-		}
-		return true;
-	}
-};
+struct ShaderID;
 
-void ComputeFragmentShaderID(FragmentShaderID *id);
+void ComputeFragmentShaderID(ShaderID *id);
 void GenerateFragmentShader(char *buffer);
 
 enum StencilValueType {
@@ -72,9 +52,6 @@ enum ReplaceBlendType {
 	REPLACE_BLEND_COPY_FBO,
 };
 
-bool IsAlphaTestAgainstZero();
-bool IsAlphaTestTriviallyTrue();
-bool IsColorTestTriviallyTrue();
 StencilValueType ReplaceAlphaWithStencilType();
 ReplaceAlphaType ReplaceAlphaWithStencil(ReplaceBlendType replaceBlend);
-ReplaceBlendType ReplaceBlendWithShader();
+ReplaceBlendType ReplaceBlendWithShader(bool allowShaderBlend);

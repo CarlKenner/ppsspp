@@ -19,4 +19,8 @@
 
 u32 QuickTexHashNEON(const void *checkp, u32 size);
 void DoUnswizzleTex16NEON(const u8 *texptr, u32 *ydestp, int bxc, int byc, u32 pitch, u32 rowWidth);
-u32 ReliableHashNEON(const void *input, int len, u32 seed);
+u32 ReliableHash32NEON(const void *input, size_t len, u32 seed);
+
+CheckAlphaResult CheckAlphaRGBA8888NEON(const u32 *pixelData, int stride, int w, int h);
+CheckAlphaResult CheckAlphaABGR4444NEON(const u32 *pixelData, int stride, int w, int h);
+CheckAlphaResult CheckAlphaABGR1555NEON(const u32 *pixelData, int stride, int w, int h);

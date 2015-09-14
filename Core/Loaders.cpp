@@ -15,14 +15,17 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <algorithm>
+#include <cstdio>
+
 #include "file/file_util.h"
 
-#include "Common/FileUtil.h"
-#include "Core/MIPS/MIPS.h"
-#include "Core/MIPS/MIPSCodeUtils.h"
+#include "Core/FileLoaders/CachingFileLoader.h"
+#include "Core/FileLoaders/DiskCachingFileLoader.h"
+#include "Core/FileLoaders/HTTPFileLoader.h"
+#include "Core/FileLoaders/LocalFileLoader.h"
+#include "Core/FileLoaders/RetryingFileLoader.h"
 #include "Core/FileSystems/MetaFileSystem.h"
-#include "Core/HLE/HLE.h"
-#include "Core/HLE/sceKernelModule.h"
 #include "Core/PSPLoaders.h"
 #include "Core/MemMap.h"
 #include "Core/Loaders.h"
@@ -30,34 +33,36 @@
 #include "Core/ELF/PBPReader.h"
 #include "Core/ELF/ParamSFO.h"
 
+FileLoader *ConstructFileLoader(const std::string &filename) {
+	if (filename.find("http://") == 0 || filename.find("https://") == 0)
+		return new CachingFileLoader(new RetryingFileLoader(new HTTPFileLoader(filename)));
+	return new LocalFileLoader(filename);
+}
+
 // TODO : improve, look in the file more
-IdentifiedFileType Identify_File(std::string &filename)
+IdentifiedFileType Identify_File(FileLoader *fileLoader)
 {
-	if (filename.size() == 0) {
-		ERROR_LOG(LOADER, "invalid filename %s", filename.c_str());
+	if (fileLoader == nullptr) {
+		ERROR_LOG(LOADER, "Invalid fileLoader");
+		return FILETYPE_ERROR;
+	}
+	if (fileLoader->Path().size() == 0) {
+		ERROR_LOG(LOADER, "Invalid filename %s", fileLoader->Path().c_str());
 		return FILETYPE_ERROR;
 	}
 
-	FileInfo info;
-	if (!getFileInfo(filename.c_str(), &info)) {
+	if (!fileLoader->Exists()) {
 		return FILETYPE_ERROR;
 	}
 
-	std::string extension = filename.size() >= 5 ? filename.substr(filename.size() - 4) : "";
-	if (!strcasecmp(extension.c_str(),".iso"))
+	std::string extension = fileLoader->Extension();
+	if (!strcasecmp(extension.c_str(), ".iso"))
 	{
 		// may be a psx iso, they have 2352 byte sectors. You never know what some people try to open
-		if ((info.size % 2352) == 0)
+		if ((fileLoader->FileSize() % 2352) == 0)
 		{
-			FILE *f = File::OpenCFile(filename.c_str(), "rb");
-			if (!f)	{
-				// File does not exists
-				return FILETYPE_ERROR;
-			}
-
 			unsigned char sync[12];
-			fread(sync,1,12,f);
-			fclose(f);
+			fileLoader->ReadAt(0, 12, sync);
 
 			// each sector in a mode2 image starts with these 12 bytes
 			if (memcmp(sync,"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00",12) == 0)
@@ -73,23 +78,34 @@ IdentifiedFileType Identify_File(std::string &filename)
 	{
 		return FILETYPE_PSP_ISO;
 	}
-
+	else if (!strcasecmp(extension.c_str(),".ppst"))
+	{
+		return FILETYPE_PPSSPP_SAVESTATE;
+	}
 
 	// First, check if it's a directory with an EBOOT.PBP in it.
-	if (info.isDirectory) {
+	if (fileLoader->IsDirectory()) {
+		std::string filename = fileLoader->Path();
 		if (filename.size() > 4) {
-			FileInfo ebootInfo;
+			FileInfo fileInfo;
 			// Check for existence of EBOOT.PBP, as required for "Directory games".
-			if (getFileInfo((filename + "/EBOOT.PBP").c_str(), &ebootInfo)) {
-				if (ebootInfo.exists) {
+			if (getFileInfo((filename + "/EBOOT.PBP").c_str(), &fileInfo)) {
+				if (fileInfo.exists) {
 					return FILETYPE_PSP_PBP_DIRECTORY;
 				}
 			}
 
 			// check if it's a disc directory
-			if (getFileInfo((filename + "/PSP_GAME").c_str(), &ebootInfo)) {
-				if (ebootInfo.exists) {
+			if (getFileInfo((filename + "/PSP_GAME").c_str(), &fileInfo)) {
+				if (fileInfo.exists) {
 					return FILETYPE_PSP_DISC_DIRECTORY;
+				}
+			}
+
+			// Not that, okay, let's guess it's a savedata directory if it has a param.sfo...
+			if (getFileInfo((filename + "/PARAM.SFO").c_str(), &fileInfo)) {
+				if (fileInfo.exists) {
+					return FILETYPE_PSP_SAVEDATA_DIRECTORY;
 				}
 			}
 		}
@@ -97,17 +113,10 @@ IdentifiedFileType Identify_File(std::string &filename)
 		return FILETYPE_NORMAL_DIRECTORY;
 	}
 
-	FILE *f = File::OpenCFile(filename.c_str(), "rb");
-	if (!f)	{
-		// File does not exists
-		return FILETYPE_ERROR;
-	}
-
 	u32_le id;
 
-	size_t readSize = fread(&id, 4, 1, f);
+	size_t readSize = fileLoader->ReadAt(0, 4, 1, &id);
 	if (readSize != 1) {
-		fclose(f);
 		return FILETYPE_ERROR;
 	}
 
@@ -115,10 +124,8 @@ IdentifiedFileType Identify_File(std::string &filename)
 	u32 _id = id;
 	switch (_id) {
 	case 'PBP\x00':
-		fseek(f, 0x24, SEEK_SET);
-		fread(&psar_offset, 4, 1, f);
-		fseek(f, psar_offset, SEEK_SET);
-		fread(&psar_id, 4, 1, f);
+		fileLoader->ReadAt(0x24, 4, 1, &psar_offset);
+		fileLoader->ReadAt(psar_offset, 4, 1, &psar_id);
 		break;
 	case '!raR':
 		return FILETYPE_ARCHIVE_RAR;
@@ -128,9 +135,8 @@ IdentifiedFileType Identify_File(std::string &filename)
 		return FILETYPE_ARCHIVE_ZIP;
 	}
 
-	fclose(f);
-
 	if (id == 'FLE\x7F') {
+		std::string filename = fileLoader->Path();
 		// There are a few elfs misnamed as pbp (like Trig Wars), accept that.
 		if (!strcasecmp(extension.c_str(), ".plf") || strstr(filename.c_str(),"BOOT.BIN") ||
 				!strcasecmp(extension.c_str(), ".elf") || !strcasecmp(extension.c_str(), ".prx") ||
@@ -142,6 +148,8 @@ IdentifiedFileType Identify_File(std::string &filename)
 	else if (id == 'PBP\x00') {
 		// Do this PS1 eboot check FIRST before checking other eboot types.
 		// It seems like some are malformed and slip through the PSAR check below.
+		// TODO: Change PBPReader to read FileLoader objects?
+		std::string filename = fileLoader->Path();
 		PBPReader pbp(filename.c_str());
 		if (pbp.IsValid()) {
 			if (!pbp.IsELF()) {
@@ -193,27 +201,32 @@ IdentifiedFileType Identify_File(std::string &filename)
 		return FILETYPE_ARCHIVE_RAR;
 	} else if (!strcasecmp(extension.c_str(),".r01")) {
 		return FILETYPE_ARCHIVE_RAR;
+	} else if (!strcasecmp(extension.substr(1).c_str(), ".7z")) {
+		return FILETYPE_ARCHIVE_7Z;
 	}
 	return FILETYPE_UNKNOWN;
 }
 
-bool LoadFile(std::string &filename, std::string *error_string) {
+bool LoadFile(FileLoader **fileLoaderPtr, std::string *error_string) {
+	FileLoader *&fileLoader = *fileLoaderPtr;
 	// Note that this can modify filename!
-	switch (Identify_File(filename)) {
+	switch (Identify_File(fileLoader)) {
 	case FILETYPE_PSP_PBP_DIRECTORY:
 		{
+			std::string filename = fileLoader->Path();
 			std::string ebootFilename = filename + "/EBOOT.PBP";
-			FileInfo fileInfo;
-			getFileInfo((filename + "/EBOOT.PBP").c_str(), &fileInfo);
 
-			if (fileInfo.exists) {
+			// Switch fileLoader to the EBOOT.
+			delete fileLoader;
+			fileLoader = ConstructFileLoader(ebootFilename);
+
+			if (fileLoader->Exists()) {
 				INFO_LOG(LOADER, "File is a PBP in a directory!");
-				std::string ebootPath = filename + "/EBOOT.PBP";
-				IdentifiedFileType ebootType = Identify_File(ebootPath);
+				IdentifiedFileType ebootType = Identify_File(fileLoader);
 				if (ebootType == FILETYPE_PSP_ISO_NP) {
-					InitMemoryForGameISO(ebootPath);
+					InitMemoryForGameISO(fileLoader);
 					pspFileSystem.SetStartingDirectory("disc0:/PSP_GAME/USRDIR");
-					return Load_PSP_ISO(filename.c_str(), error_string);
+					return Load_PSP_ISO(fileLoader, error_string);
 				}
 				else if (ebootType == FILETYPE_PSP_PS1_PBP) {
 					*error_string = "PS1 EBOOTs are not supported by PPSSPP.";
@@ -223,7 +236,7 @@ bool LoadFile(std::string &filename, std::string *error_string) {
 				size_t pos = path.find("/PSP/GAME/");
 				if (pos != std::string::npos)
 					pspFileSystem.SetStartingDirectory("ms0:" + path.substr(pos));
-				return Load_PSP_ELF_PBP(ebootFilename.c_str(), error_string);
+				return Load_PSP_ELF_PBP(fileLoader, error_string);
 			} else {
 				*error_string = "No EBOOT.PBP, misidentified game";
 				return false;
@@ -234,14 +247,14 @@ bool LoadFile(std::string &filename, std::string *error_string) {
 	case FILETYPE_PSP_ELF:
 		{
 			INFO_LOG(LOADER,"File is an ELF or loose PBP!");
-			return Load_PSP_ELF_PBP(filename.c_str(), error_string);
+			return Load_PSP_ELF_PBP(fileLoader, error_string);
 		}
 
 	case FILETYPE_PSP_ISO:
 	case FILETYPE_PSP_ISO_NP:
 	case FILETYPE_PSP_DISC_DIRECTORY:	// behaves the same as the mounting is already done by now
 		pspFileSystem.SetStartingDirectory("disc0:/PSP_GAME/USRDIR");
-		return Load_PSP_ISO(filename.c_str(), error_string);
+		return Load_PSP_ISO(fileLoader, error_string);
 
 	case FILETYPE_PSP_PS1_PBP:
 		*error_string = "PS1 EBOOTs are not supported by PPSSPP.";
@@ -268,6 +281,14 @@ bool LoadFile(std::string &filename, std::string *error_string) {
 #endif
 		break;
 
+	case FILETYPE_ARCHIVE_7Z:
+#ifdef WIN32
+		*error_string = "7z file detected (Require 7-Zip)";
+#else
+		*error_string = "7z file detected (Require 7-Zip)";
+#endif
+		break;
+
 	case FILETYPE_ISO_MODE2:
 		*error_string = "PSX game image detected.";
 		break;
@@ -275,6 +296,14 @@ bool LoadFile(std::string &filename, std::string *error_string) {
 	case FILETYPE_NORMAL_DIRECTORY:
 		ERROR_LOG(LOADER, "Just a directory.");
 		*error_string = "Just a directory.";
+		break;
+
+	case FILETYPE_PPSSPP_SAVESTATE:
+		*error_string = "This is a saved state, not a game.";  // Actually, we could make it load it...
+		break;
+
+	case FILETYPE_PSP_SAVEDATA_DIRECTORY:
+		*error_string = "This is save data, not a game."; // Actually, we could make it load it...
 		break;
 
 	case FILETYPE_UNKNOWN_BIN:

@@ -15,12 +15,14 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <algorithm>
 #include <stdio.h>
 
 #include "base/basictypes.h"
 #include "base/logging.h"
 
 #include "Common/CPUDetect.h"
+#include "Common/ColorConv.h"
 #include "Core/Config.h"
 #include "Core/MemMap.h"
 #include "Core/HDRemaster.h"
@@ -134,8 +136,7 @@ void PrintDecodedVertex(VertexReader &vtx) {
 	printf("P: %f %f %f\n", pos[0], pos[1], pos[2]);
 }
 
-VertexDecoder::VertexDecoder() : coloff(0), nrmoff(0), posoff(0), jitted_(0) {
-	memset(stats_, 0, sizeof(stats_));
+VertexDecoder::VertexDecoder() : jitted_(0), decoded_(nullptr), ptr_(nullptr) {
 }
 
 void VertexDecoder::Step_WeightsU8() const
@@ -202,7 +203,6 @@ void VertexDecoder::Step_WeightsFloat() const
 void VertexDecoder::Step_WeightsU8Skin() const
 {
 	memset(skinMatrix, 0, sizeof(skinMatrix));
-	u8 *wt = (u8 *)(decoded_ + decFmt.w0off);
 	const u8 *wdata = (const u8*)(ptr_);
 	for (int j = 0; j < nweights; j++) {
 		const float *bone = &gstate.boneMatrix[j * 12];
@@ -218,7 +218,6 @@ void VertexDecoder::Step_WeightsU8Skin() const
 void VertexDecoder::Step_WeightsU16Skin() const
 {
 	memset(skinMatrix, 0, sizeof(skinMatrix));
-	u16 *wt = (u16 *)(decoded_ + decFmt.w0off);
 	const u16 *wdata = (const u16*)(ptr_);
 	for (int j = 0; j < nweights; j++) {
 		const float *bone = &gstate.boneMatrix[j * 12];
@@ -237,7 +236,6 @@ void VertexDecoder::Step_WeightsU16Skin() const
 void VertexDecoder::Step_WeightsFloatSkin() const
 {
 	memset(skinMatrix, 0, sizeof(skinMatrix));
-	float *wt = (float *)(decoded_ + decFmt.w0off);
 	const float *wdata = (const float*)(ptr_);
 	for (int j = 0; j < nweights; j++) {
 		const float *bone = &gstate.boneMatrix[j * 12];
@@ -297,6 +295,11 @@ void VertexDecoder::Step_TcU16Through() const
 	const u16 *uvdata = (const u16_le*)(ptr_ + tcoff);
 	uv[0] = uvdata[0];
 	uv[1] = uvdata[1];
+
+	gstate_c.vertBounds.minU = std::min(gstate_c.vertBounds.minU, uvdata[0]);
+	gstate_c.vertBounds.maxU = std::max(gstate_c.vertBounds.maxU, uvdata[0]);
+	gstate_c.vertBounds.minV = std::min(gstate_c.vertBounds.minV, uvdata[1]);
+	gstate_c.vertBounds.maxV = std::max(gstate_c.vertBounds.maxV, uvdata[1]);
 }
 
 void VertexDecoder::Step_TcU16ThroughDouble() const
@@ -321,6 +324,11 @@ void VertexDecoder::Step_TcU16ThroughToFloat() const
 	const u16 *uvdata = (const u16_le*)(ptr_ + tcoff);
 	uv[0] = uvdata[0];
 	uv[1] = uvdata[1];
+
+	gstate_c.vertBounds.minU = std::min(gstate_c.vertBounds.minU, uvdata[0]);
+	gstate_c.vertBounds.maxU = std::max(gstate_c.vertBounds.maxU, uvdata[0]);
+	gstate_c.vertBounds.minV = std::min(gstate_c.vertBounds.minV, uvdata[1]);
+	gstate_c.vertBounds.maxV = std::max(gstate_c.vertBounds.maxV, uvdata[1]);
 }
 
 void VertexDecoder::Step_TcU16ThroughDoubleToFloat() const
@@ -345,6 +353,11 @@ void VertexDecoder::Step_TcFloatThrough() const
 	const float *uvdata = (const float*)(ptr_ + tcoff);
 	uv[0] = uvdata[0];
 	uv[1] = uvdata[1];
+
+	gstate_c.vertBounds.minU = std::min(gstate_c.vertBounds.minU, (u16)uvdata[0]);
+	gstate_c.vertBounds.maxU = std::max(gstate_c.vertBounds.maxU, (u16)uvdata[0]);
+	gstate_c.vertBounds.minV = std::min(gstate_c.vertBounds.minV, (u16)uvdata[1]);
+	gstate_c.vertBounds.maxV = std::max(gstate_c.vertBounds.maxV, (u16)uvdata[1]);
 }
 
 void VertexDecoder::Step_TcU8Prescale() const {
@@ -366,6 +379,11 @@ void VertexDecoder::Step_TcFloatPrescale() const {
 	const float *uvdata = (const float*)(ptr_ + tcoff);
 	uv[0] = uvdata[0] * gstate_c.uv.uScale + gstate_c.uv.uOff;
 	uv[1] = uvdata[1] * gstate_c.uv.vScale + gstate_c.uv.vOff;
+}
+
+void VertexDecoder::Step_ColorInvalid() const
+{
+	// Do nothing.  This is only here to prevent crashes.
 }
 
 void VertexDecoder::Step_Color565() const
@@ -765,7 +783,10 @@ static const StepFunction tcstep_through_RemasterToFloat[4] = {
 // TODO: Tc Morph
 
 static const StepFunction colstep[8] = {
-	0, 0, 0, 0,
+	0,
+	&VertexDecoder::Step_ColorInvalid,
+	&VertexDecoder::Step_ColorInvalid,
+	&VertexDecoder::Step_ColorInvalid,
 	&VertexDecoder::Step_Color565,
 	&VertexDecoder::Step_Color5551,
 	&VertexDecoder::Step_Color4444,
@@ -773,7 +794,10 @@ static const StepFunction colstep[8] = {
 };
 
 static const StepFunction colstep_morph[8] = {
-	0, 0, 0, 0,
+	0,
+	&VertexDecoder::Step_ColorInvalid,
+	&VertexDecoder::Step_ColorInvalid,
+	&VertexDecoder::Step_ColorInvalid,
 	&VertexDecoder::Step_Color565Morph,
 	&VertexDecoder::Step_Color5551Morph,
 	&VertexDecoder::Step_Color4444Morph,
@@ -1075,22 +1099,28 @@ void VertexDecoder::DecodeVerts(u8 *decodedptr, const void *verts, int indexLowe
 	}
 }
 
+static const char *posnames[4] = { "?", "s8", "s16", "f" };
+static const char *nrmnames[4] = { "", "s8", "s16", "f" };
+static const char *tcnames[4] = { "", "u8", "u16", "f" };
+static const char *idxnames[4] = { "-", "u8", "u16", "?" };
+static const char *weightnames[4] = { "-", "u8", "u16", "f" };
+static const char *colnames[8] = { "", "?", "?", "?", "565", "5551", "4444", "8888" };
+
 int VertexDecoder::ToString(char *output) const {
 	char * start = output;
-	output += sprintf(output, "P: %i ", pos);
+	output += sprintf(output, "P: %s ", posnames[pos]);
 	if (nrm)
-		output += sprintf(output, "N: %i ", nrm);
+		output += sprintf(output, "N: %s ", nrmnames[nrm]);
 	if (col)
-		output += sprintf(output, "C: %i ", col);
+		output += sprintf(output, "C: %s ", colnames[col]);
 	if (tc)
-		output += sprintf(output, "T: %i ", tc);
+		output += sprintf(output, "T: %s ", tcnames[tc]);
 	if (weighttype)
-		output += sprintf(output, "W: %i ", weighttype);
+		output += sprintf(output, "W: %s (%ix)", weightnames[weighttype], nweights);
 	if (idx)
-		output += sprintf(output, "I: %i ", idx);
+		output += sprintf(output, "I: %s ", idxnames[idx]);
 	if (morphcount > 1)
 		output += sprintf(output, "Morph: %i ", morphcount);
-	output += sprintf(output, "Verts: %i ", stats_[STAT_VERTSSUBMITTED]);
 	if (throughmode)
 		output += sprintf(output, " (through)");
 
@@ -1098,7 +1128,11 @@ int VertexDecoder::ToString(char *output) const {
 	return output - start;
 }
 
-VertexDecoderJitCache::VertexDecoderJitCache() {
+VertexDecoderJitCache::VertexDecoderJitCache()
+#ifdef ARM64
+ : fp(this)
+#endif
+{
 	// 256k should be enough.
 	AllocCodeSpace(1024 * 64 * 4);
 

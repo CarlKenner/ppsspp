@@ -24,7 +24,6 @@
 class HeadlessHost : public Host
 {
 public:
-	// void StartThread() override
 	void UpdateUI() override {}
 
 	void UpdateMemView() override {}
@@ -35,7 +34,7 @@ public:
 	bool InitGraphics(std::string *error_message) override {return false;}
 	void ShutdownGraphics() override {}
 
-	void InitSound(PMixer *mixer) override {}
+	void InitSound() override {}
 	void UpdateSound() override {}
 	void ShutdownSound() override {}
 

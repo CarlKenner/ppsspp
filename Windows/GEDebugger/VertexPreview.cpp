@@ -20,6 +20,7 @@
 #include "Windows/GEDebugger/GEDebugger.h"
 #include "Windows/GEDebugger/SimpleGLWindow.h"
 #include "Core/System.h"
+#include "Core/Config.h"
 #include "GPU/GPUInterface.h"
 #include "GPU/Common/GPUDebugInterface.h"
 #include "GPU/GPUState.h"
@@ -95,6 +96,9 @@ static void ExpandRectangles(std::vector<GPUDebugVertex> &vertices, std::vector<
 		numInds = count;
 	}
 
+	//rectangles always need 2 vertices, disregard the last one if there's an odd number
+	numInds = numInds & ~1;
+
 	// Will need 4 coords and 6 points per rectangle (currently 2 each.)
 	newVerts.resize(numInds * 2);
 	newInds.resize(numInds * 3);
@@ -102,8 +106,8 @@ static void ExpandRectangles(std::vector<GPUDebugVertex> &vertices, std::vector<
 	u16 v = 0;
 	GPUDebugVertex *vert = &newVerts[0];
 	u16 *ind = &newInds[0];
-	for (size_t i = 0, end = numInds; i < end; i += 2) {
-		const auto &orig_tl = useInds ? vertices[indices[i]] : vertices[i];
+	for (size_t i = 0; i < numInds; i += 2) {
+		const auto &orig_tl = useInds ? vertices[indices[i + 0]] : vertices[i + 0];
 		const auto &orig_br = useInds ? vertices[indices[i + 1]] : vertices[i + 1];
 
 		vert[0] = orig_br;
@@ -121,8 +125,8 @@ static void ExpandRectangles(std::vector<GPUDebugVertex> &vertices, std::vector<
 		vert[3].u = orig_tl.u;
 
 		// That's the four corners. Now process UV rotation.
-		if (throughMode)
-			RotateUVThrough(vert);
+		// This is the same for through and non-through, since it's already transformed.
+		RotateUVThrough(vert);
 
 		// Build the two 3 point triangles from our 4 coordinates.
 		*ind++ = v + 0;
@@ -189,7 +193,7 @@ void CGEDebugger::UpdatePrimPreview(u32 op) {
 	};
 
 	Matrix4x4 ortho;
-	ortho.setOrtho(-(float)gstate_c.cutRTOffsetX, (frameWindow->TexWidth() - (int)gstate_c.cutRTOffsetX) * scale[0], frameWindow->TexHeight() * scale[1], 0, -1, 1);
+	ortho.setOrtho(-(float)gstate_c.curRTOffsetX, (frameWindow->TexWidth() - (int)gstate_c.curRTOffsetX) * scale[0], frameWindow->TexHeight() * scale[1], 0, -1, 1);
 	glUniformMatrix4fv(previewProgram->u_viewproj, 1, GL_FALSE, ortho.getReadPtr());
 	glEnableVertexAttribArray(previewProgram->a_position);
 	glVertexAttribPointer(previewProgram->a_position, 3, GL_FLOAT, GL_FALSE, sizeof(GPUDebugVertex), (float *)vertices.data() + 2);
@@ -214,19 +218,33 @@ void CGEDebugger::UpdatePrimPreview(u32 op) {
 	BindPreviewProgram(texPreviewProgram);
 
 	// TODO: Probably there's a better way and place to do this.
-	if (indices.empty()) {
+	u16 minIndex = 0;
+	u16 maxIndex = count - 1;
+	if (!indices.empty()) {
+		minIndex = 0xFFFF;
+		maxIndex = 0;
 		for (int i = 0; i < count; ++i) {
-			vertices[i].u -= floor(vertices[i].u);
-			vertices[i].v -= floor(vertices[i].v);
-		}
-	} else {
-		for (int i = 0; i < count; ++i) {
-			vertices[indices[i]].u -= floor(vertices[indices[i]].u);
-			vertices[indices[i]].v -= floor(vertices[indices[i]].v);
+			if (minIndex > indices[i]) {
+				minIndex = indices[i];
+			}
+			if (maxIndex < indices[i]) {
+				maxIndex = indices[i];
+			}
 		}
 	}
 
-	ortho.setOrtho(0.0, 1.0, 1.0, 0.0, -1.0, 1.0);
+	const float invTexWidth = 1.0f / gstate_c.curTextureWidth;
+	const float invTexHeight = 1.0f / gstate_c.curTextureHeight;
+	for (u16 i = minIndex; i <= maxIndex; ++i) {
+		vertices[i].u *= invTexWidth;
+		vertices[i].v *= invTexHeight;
+		if (vertices[i].u > 1.0f || vertices[i].u < 0.0f)
+			vertices[i].u -= floor(vertices[i].u);
+		if (vertices[i].v > 1.0f || vertices[i].v < 0.0f)
+			vertices[i].v -= floor(vertices[i].v);
+	}
+
+	ortho.setOrtho(0.0f - (float)gstate_c.curTextureXOffset * invTexWidth, 1.0f - (float)gstate_c.curTextureXOffset * invTexWidth, 1.0f - (float)gstate_c.curTextureYOffset * invTexHeight, 0.0f - (float)gstate_c.curTextureYOffset * invTexHeight, -1.0f, 1.0f);
 	glUniformMatrix4fv(texPreviewProgram->u_viewproj, 1, GL_FALSE, ortho.getReadPtr());
 	glEnableVertexAttribArray(texPreviewProgram->a_position);
 	glVertexAttribPointer(texPreviewProgram->a_position, 2, GL_FLOAT, GL_FALSE, sizeof(GPUDebugVertex), (float *)vertices.data());
@@ -240,6 +258,10 @@ void CGEDebugger::UpdatePrimPreview(u32 op) {
 }
 
 void CGEDebugger::CleanupPrimPreview() {
-	glsl_destroy(previewProgram);
-	glsl_destroy(texPreviewProgram);
+	if (previewProgram) {
+		glsl_destroy(previewProgram);
+	}
+	if (texPreviewProgram) {
+		glsl_destroy(texPreviewProgram);
+	}
 }

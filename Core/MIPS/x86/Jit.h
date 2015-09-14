@@ -19,6 +19,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Thunk.h"
+#include "Common/x64Emitter.h"
 #include "Core/MIPS/x86/Asm.h"
 
 #if defined(ARM)
@@ -39,17 +40,6 @@ namespace MIPSComp
 
 // This is called when Jit hits a breakpoint.  Returns 1 when hit.
 u32 JitBreakpoint();
-
-struct JitOptions
-{
-	JitOptions();
-
-	bool enableBlocklink;
-	bool immBranches;
-	bool continueBranches;
-	bool continueJumps;
-	int continueMaxInstructions;
-};
 
 // TODO: Hmm, humongous.
 struct RegCacheState {
@@ -144,6 +134,8 @@ public:
 	void Comp_VCrossQuat(MIPSOpcode op);
 	void Comp_Vsgn(MIPSOpcode op);
 	void Comp_Vocp(MIPSOpcode op);
+	void Comp_ColorConv(MIPSOpcode op);
+	void Comp_Vbfy(MIPSOpcode op);
 
 	void Comp_DoNothing(MIPSOpcode op);
 
@@ -165,8 +157,9 @@ public:
 	void GetVectorRegsPrefixD(u8 *regs, VectorSize sz, int vectorReg);
 	void EatPrefix() { js.EatPrefix(); }
 
-	void ClearRoundingMode(XEmitter *emitter = NULL);
-	void SetRoundingMode(XEmitter *emitter = NULL);
+	void RestoreRoundingMode(bool force = false, XEmitter *emitter = NULL);
+	void ApplyRoundingMode(bool force = false, XEmitter *emitter = NULL);
+	void UpdateRoundingMode(XEmitter *emitter = NULL);
 
 	JitBlockCache *GetBlockCache() { return &blocks; }
 	AsmRoutineManager &Asm() { return asm_; }
@@ -181,21 +174,25 @@ public:
 
 private:
 	void GetStateAndFlushAll(RegCacheState &state);
-	void RestoreState(const RegCacheState state);
+	void RestoreState(const RegCacheState& state);
 	void FlushAll();
 	void FlushPrefixV();
 	void WriteDowncount(int offset = 0);
 	bool ReplaceJalTo(u32 dest);
+
+	u32 GetCompilerPC();
 	// See CompileDelaySlotFlags for flags.
 	void CompileDelaySlot(int flags, RegCacheState *state = NULL);
 	void CompileDelaySlot(int flags, RegCacheState &state) {
 		CompileDelaySlot(flags, &state);
 	}
 	void EatInstruction(MIPSOpcode op);
+	void AddContinuedBlock(u32 dest);
+	MIPSOpcode GetOffsetInstruction(int offset);
 
 	void WriteExit(u32 destination, int exit_num);
-	void WriteExitDestInReg(X64Reg reg);
-	void WriteExitDestInEAX() { WriteExitDestInReg(EAX); }
+	void WriteExitDestInReg(Gen::X64Reg reg);
+	void WriteExitDestInEAX() { WriteExitDestInReg(Gen::EAX); }
 
 //	void WriteRfiExitDestInEAX();
 	void WriteSyscallExit();
@@ -210,13 +207,13 @@ private:
 	void BranchLogExit(MIPSOpcode op, u32 dest, bool useEAX);
 
 	// Utilities to reduce duplicated code
-	void CompImmLogic(MIPSOpcode op, void (XEmitter::*arith)(int, const OpArg &, const OpArg &));
-	void CompTriArith(MIPSOpcode op, void (XEmitter::*arith)(int, const OpArg &, const OpArg &), u32 (*doImm)(const u32, const u32), bool invertResult = false);
-	void CompShiftImm(MIPSOpcode op, void (XEmitter::*shift)(int, OpArg, OpArg), u32 (*doImm)(const u32, const u32));
-	void CompShiftVar(MIPSOpcode op, void (XEmitter::*shift)(int, OpArg, OpArg), u32 (*doImm)(const u32, const u32));
-	void CompITypeMemRead(MIPSOpcode op, u32 bits, void (XEmitter::*mov)(int, int, X64Reg, OpArg), const void *safeFunc);
+	void CompImmLogic(MIPSOpcode op, void (XEmitter::*arith)(int, const Gen::OpArg &, const Gen::OpArg &));
+	void CompTriArith(MIPSOpcode op, void (XEmitter::*arith)(int, const Gen::OpArg &, const Gen::OpArg &), u32 (*doImm)(const u32, const u32), bool invertResult = false);
+	void CompShiftImm(MIPSOpcode op, void (XEmitter::*shift)(int, Gen::OpArg, Gen::OpArg), u32 (*doImm)(const u32, const u32));
+	void CompShiftVar(MIPSOpcode op, void (XEmitter::*shift)(int, Gen::OpArg, Gen::OpArg), u32 (*doImm)(const u32, const u32));
+	void CompITypeMemRead(MIPSOpcode op, u32 bits, void (XEmitter::*mov)(int, int, Gen::X64Reg, Gen::OpArg), const void *safeFunc);
 	template <typename T>
-	void CompITypeMemRead(MIPSOpcode op, u32 bits, void (XEmitter::*mov)(int, int, X64Reg, OpArg), T (*safeFunc)(u32 addr)) {
+	void CompITypeMemRead(MIPSOpcode op, u32 bits, void (XEmitter::*mov)(int, int, Gen::X64Reg, Gen::OpArg), T (*safeFunc)(u32 addr)) {
 		CompITypeMemRead(op, bits, mov, (const void *)safeFunc);
 	}
 	void CompITypeMemWrite(MIPSOpcode op, u32 bits, const void *safeFunc);
@@ -225,24 +222,29 @@ private:
 		CompITypeMemWrite(op, bits, (const void *)safeFunc);
 	}
 	void CompITypeMemUnpairedLR(MIPSOpcode op, bool isStore);
-	void CompITypeMemUnpairedLRInner(MIPSOpcode op, X64Reg shiftReg);
-	void CompBranchExits(CCFlags cc, u32 targetAddr, u32 notTakenAddr, bool delaySlotIsNice, bool likely, bool andLink);
+	void CompITypeMemUnpairedLRInner(MIPSOpcode op, Gen::X64Reg shiftReg);
+	void CompBranchExits(Gen::CCFlags cc, u32 targetAddr, u32 notTakenAddr, bool delaySlotIsNice, bool likely, bool andLink);
+	void CompBranchExit(bool taken, u32 targetAddr, u32 notTakenAddr, bool delaySlotIsNice, bool likely, bool andLink);
+	static Gen::CCFlags FlipCCFlag(Gen::CCFlags flag);
+	static Gen::CCFlags SwapCCFlag(Gen::CCFlags flag);
 
-	void CompFPTriArith(MIPSOpcode op, void (XEmitter::*arith)(X64Reg reg, OpArg), bool orderMatters);
+	void CopyFPReg(Gen::X64Reg dst, Gen::OpArg src);
+	void CompFPTriArith(MIPSOpcode op, void (XEmitter::*arith)(Gen::X64Reg reg, Gen::OpArg), bool orderMatters);
 	void CompFPComp(int lhs, int rhs, u8 compare, bool allowNaN = false);
+	void CompVrotShuffle(u8 *dregs, int imm, int n, bool negSin);
 
-	void CallProtectedFunction(const void *func, const OpArg &arg1);
-	void CallProtectedFunction(const void *func, const OpArg &arg1, const OpArg &arg2);
+	void CallProtectedFunction(const void *func, const Gen::OpArg &arg1);
+	void CallProtectedFunction(const void *func, const Gen::OpArg &arg1, const Gen::OpArg &arg2);
 	void CallProtectedFunction(const void *func, const u32 arg1, const u32 arg2, const u32 arg3);
-	void CallProtectedFunction(const void *func, const OpArg &arg1, const u32 arg2, const u32 arg3);
+	void CallProtectedFunction(const void *func, const Gen::OpArg &arg1, const u32 arg2, const u32 arg3);
 
 	template <typename Tr, typename T1>
-	void CallProtectedFunction(Tr (*func)(T1), const OpArg &arg1) {
+	void CallProtectedFunction(Tr (*func)(T1), const Gen::OpArg &arg1) {
 		CallProtectedFunction((const void *)func, arg1);
 	}
 
 	template <typename Tr, typename T1, typename T2>
-	void CallProtectedFunction(Tr (*func)(T1, T2), const OpArg &arg1, const OpArg &arg2) {
+	void CallProtectedFunction(Tr (*func)(T1, T2), const Gen::OpArg &arg1, const Gen::OpArg &arg2) {
 		CallProtectedFunction((const void *)func, arg1, arg2);
 	}
 
@@ -252,17 +254,36 @@ private:
 	}
 
 	template <typename Tr, typename T1, typename T2, typename T3>
-	void CallProtectedFunction(Tr (*func)(T1, T2, T3), const OpArg &arg1, const u32 arg2, const u32 arg3) {
+	void CallProtectedFunction(Tr (*func)(T1, T2, T3), const Gen::OpArg &arg1, const u32 arg2, const u32 arg3) {
 		CallProtectedFunction((const void *)func, arg1, arg2, arg3);
 	}
 
 	bool PredictTakeBranch(u32 targetAddr, bool likely);
-	bool CanContinueBranch() {
+	bool CanContinueBranch(u32 targetAddr) {
 		if (!jo.continueBranches || js.numInstructions >= jo.continueMaxInstructions) {
 			return false;
 		}
 		// Need at least 2 exits left over.
 		if (js.nextExit >= MAX_JIT_BLOCK_EXITS - 2) {
+			return false;
+		}
+		// Sometimes we predict wrong and get into impossible conditions where games have jumps to 0.
+		if (!targetAddr) {
+			return false;
+		}
+		return true;
+	}
+	bool CanContinueJump(u32 targetAddr) {
+		if (!jo.continueJumps || js.numInstructions >= jo.continueMaxInstructions) {
+			return false;
+		}
+		if (!targetAddr) {
+			return false;
+		}
+		return true;
+	}
+	bool CanContinueImmBranch(u32 targetAddr) {
+		if (!jo.immBranches || js.numInstructions >= jo.continueMaxInstructions) {
 			return false;
 		}
 		return true;
@@ -284,9 +305,6 @@ private:
 	friend class JitSafeMem;
 	friend class JitSafeMemFuncs;
 };
-
-typedef void (Jit::*MIPSCompileFunc)(MIPSOpcode opcode);
-typedef int (Jit::*MIPSReplaceFunc)();
 
 }	// namespace MIPSComp
 

@@ -1,15 +1,18 @@
 #include "Common/CommonWindows.h"
 #include <d3d9.h>
+#include <DxErr.h>
 
 #include "GPU/Directx9/helper/global.h"
-#include "GPU/Directx9/helper/fbo.h"
+#include "GPU/Directx9/helper/dx_fbo.h"
 
 #include "base/logging.h"
 #include "util/text/utf8.h"
 #include "i18n/i18n.h"
 
 #include "Core/Config.h"
+#include "Core/Reporting.h"
 #include "Windows/D3D9Base.h"
+#include "Windows/W32Util/Misc.h"
 #include "thin3d/thin3d.h"
 #include "thin3d/d3dx9_loader.h"
 
@@ -22,8 +25,8 @@ static LPDIRECT3DDEVICE9EX deviceEx;
 static HDC hDC;     // Private GDI Device Context
 static HGLRC hRC;   // Permanent Rendering Context
 static HWND hWnd;   // Holds Our Window Handle
-
-static int xres, yres;
+static D3DPRESENT_PARAMETERS pp;
+static HMODULE hD3D9;
 
 // TODO: Make config?
 static bool enableGLDebug = true;
@@ -44,7 +47,7 @@ Thin3DContext *D3D9_CreateThin3DContext() {
 	return T3DCreateDX9Context(d3d, d3dEx, adapterId, device, deviceEx);
 }
 
-typedef HRESULT (*DIRECT3DCREATE9EX)(UINT, IDirect3D9Ex**);
+typedef HRESULT (__stdcall *DIRECT3DCREATE9EX)(UINT, IDirect3D9Ex**);
 
 bool IsWin7OrLater() {
 	DWORD version = GetVersion();
@@ -54,35 +57,50 @@ bool IsWin7OrLater() {
 	return (major > 6) || ((major == 6) && (minor >= 1));
 }
 
-bool D3D9_Init(HWND hWnd, bool windowed, std::string *error_message) {
+static void GetRes(int &xres, int &yres) {
+	RECT rc;
+	GetClientRect(hWnd, &rc);
+	xres = rc.right - rc.left;
+	yres = rc.bottom - rc.top;
+}
+
+bool D3D9_Init(HWND wnd, bool windowed, std::string *error_message) {
+	hWnd = wnd;
+
 	DIRECT3DCREATE9EX g_pfnCreate9ex;
 
-	HMODULE hD3D9 = LoadLibrary(TEXT("d3d9.dll"));
-
+	hD3D9 = LoadLibrary(TEXT("d3d9.dll"));
 	if (!hD3D9) {
 		ELOG("Missing d3d9.dll");
-		*error_message = "D3D9.dll missing";
+		*error_message = "D3D9.dll missing - try reinstalling DirectX.";
+		return false;
+	}
+
+	int d3dx_version = LoadD3DX9Dynamic();
+	if (!d3dx_version) {
+		*error_message = "D3DX DLL not found! Try reinstalling DirectX.";
 		return false;
 	}
 
 	g_pfnCreate9ex = (DIRECT3DCREATE9EX)GetProcAddress(hD3D9, "Direct3DCreate9Ex");
-	has9Ex = (g_pfnCreate9ex != NULL);
+	has9Ex = (g_pfnCreate9ex != NULL) && IsVistaOrHigher();
 
 	if (has9Ex) {
 		HRESULT result = g_pfnCreate9ex(D3D_SDK_VERSION, &d3dEx);
 		d3d = d3dEx;
 		if (FAILED(result)) {
-			*error_message = "D3D9Ex available but context creation failed";
+			FreeLibrary(hD3D9);
+			*error_message = "D3D9Ex available but context creation failed. Try reinstalling DirectX.";
 			return false;
 		}
 	} else {
 		d3d = Direct3DCreate9(D3D_SDK_VERSION);
 		if (!d3d) {
-			*error_message = "Failed to create D3D9 context";
+			FreeLibrary(hD3D9);
+			*error_message = "Failed to create D3D9 context. Try reinstalling DirectX.";
 			return false;
 		}
 	}
-	FreeLibrary(hD3D9);
 
 	D3DCAPS9 d3dCaps;
 
@@ -120,12 +138,9 @@ bool D3D9_Init(HWND hWnd, bool windowed, std::string *error_message) {
 	else
 		dwBehaviorFlags |= D3DCREATE_SOFTWARE_VERTEXPROCESSING;
 
-	RECT rc;
-	GetClientRect(hWnd, &rc);
-	int xres = rc.right - rc.left;
-	int yres = rc.bottom - rc.top;
+	int xres, yres;
+	GetRes(xres, yres);
 
-	D3DPRESENT_PARAMETERS pp;
 	memset(&pp, 0, sizeof(pp));
 	pp.BackBufferWidth = xres;
 	pp.BackBufferHeight = yres;
@@ -133,7 +148,7 @@ bool D3D9_Init(HWND hWnd, bool windowed, std::string *error_message) {
 	pp.MultiSampleType = D3DMULTISAMPLE_NONE;
 	pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
 	pp.Windowed = windowed;
-	pp.hDeviceWindow = hWnd;
+	pp.hDeviceWindow = wnd;
 	pp.EnableAutoDepthStencil = true;
 	pp.AutoDepthStencilFormat = D3DFMT_D24S8;
 	pp.PresentationInterval = (g_Config.bVSync) ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
@@ -145,19 +160,15 @@ bool D3D9_Init(HWND hWnd, bool windowed, std::string *error_message) {
 			//pp.BackBufferCount = 2;
 			//pp.SwapEffect = D3DSWAPEFFECT_FLIPEX;
 		}
-		hr = d3dEx->CreateDeviceEx(adapterId, D3DDEVTYPE_HAL, hWnd, dwBehaviorFlags, &pp, NULL, &deviceEx);
+		hr = d3dEx->CreateDeviceEx(adapterId, D3DDEVTYPE_HAL, wnd, dwBehaviorFlags, &pp, NULL, &deviceEx);
 		device = deviceEx;
 	} else {
-		hr = d3d->CreateDevice(adapterId, D3DDEVTYPE_HAL, hWnd, dwBehaviorFlags, &pp, &device);
+		hr = d3d->CreateDevice(adapterId, D3DDEVTYPE_HAL, wnd, dwBehaviorFlags, &pp, &device);
 	}
 
 	if (FAILED(hr)) {
 		*error_message = "Failed to create D3D device";
-		if (has9Ex) {
-			d3dEx->Release();
-		} else {
-			d3d->Release();
-		}
+		d3d->Release();
 		return false;
 	}
 
@@ -165,9 +176,18 @@ bool D3D9_Init(HWND hWnd, bool windowed, std::string *error_message) {
 	DX9::pD3Ddevice = device;
 	DX9::pD3DdeviceEx = deviceEx;
 
-	LoadD3DX9Dynamic();
+	if (!DX9::CompileShaders(*error_message)) {
+		*error_message = "Unable to compile shaders: " + *error_message;
+		device->EndScene();
+		device->Release();
+		d3d->Release();
+		DX9::pD3Ddevice = nullptr;
+		DX9::pD3DdeviceEx = nullptr;
+		device = nullptr;
+		UnloadD3DXDynamic();
+		return false;
+	}
 
-	DX9::CompileShaders();
 	DX9::fbo_init(d3d);
 
 	if (deviceEx && IsWin7OrLater()) {
@@ -179,17 +199,39 @@ bool D3D9_Init(HWND hWnd, bool windowed, std::string *error_message) {
 }
 
 void D3D9_Resize(HWND window) {
-	// TODO!
+	// This should only be called from the emu thread.
+
+	int xres, yres;
+	GetRes(xres, yres);
+	bool w_changed = pp.BackBufferWidth != xres;
+	bool h_changed = pp.BackBufferHeight != yres;
+
+	if (device && (w_changed || h_changed)) {
+		DX9::fbo_shutdown();
+
+		pp.BackBufferWidth = xres;
+		pp.BackBufferHeight = yres;
+		HRESULT hr = device->Reset(&pp);
+		if (FAILED(hr)) {
+      // Had to remove DXGetErrorStringA calls here because dxerr.lib is deprecated and will not link with VS 2015.
+			ERROR_LOG_REPORT(G3D, "Unable to reset D3D device");
+			PanicAlert("Unable to reset D3D9 device");
+		}
+		DX9::fbo_init(d3d);
+	}
 }
 
-void D3D9_Shutdown() { 
+void D3D9_Shutdown() {
 	DX9::DestroyShaders();
 	DX9::fbo_shutdown();
 	device->EndScene();
 	device->Release();
 	d3d->Release();
+	UnloadD3DXDynamic();
 	DX9::pD3Ddevice = nullptr;
 	DX9::pD3DdeviceEx = nullptr;
 	device = nullptr;
 	hWnd = nullptr;
+	FreeLibrary(hD3D9);
+	hD3D9 = nullptr;
 }

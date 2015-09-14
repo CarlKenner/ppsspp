@@ -2,20 +2,21 @@
 #include "base/logging.h"
 #include "base/timeutil.h"
 #include "base/mutex.h"
-#include "native/file/chunk_file.h"
+#include "file/chunk_file.h"
 
 #include "Common/CommonTypes.h"
 #include "Core/HW/SimpleAudioDec.h"
+#include "Core/HLE/__sceAudio.h"
 #include "Common/FixedSizeQueue.h"
 #include "GameInfoCache.h"
+#include "Core/Config.h"
 
 // Really simple looping in-memory AT3 player that also takes care of reading the file format.
 // Turns out that AT3 files used for this are modified WAVE files so fairly easy to parse.
 class AT3PlusReader {
 public:
 	AT3PlusReader(const std::string &data)
-	: data_(data),
-		file_((const uint8_t *)&data[0],
+	: file_((const uint8_t *)&data[0],
 		(int32_t)data.size()),
 		raw_data_(0),
 		raw_data_size_(0),
@@ -57,7 +58,7 @@ public:
 				Nothing = temp >> 16;
 
 				if (codec == PSP_CODEC_AT3) {
-					// The first two bytes are actually not useful part of the extradata.
+					// The first two bytes are actually not a useful part of the extradata.
 					// We already read 16 bytes, so make sure there's enough left.
 					if (file_.getCurrentChunkSize() >= 32) {
 						file_.readData(at3_extradata, 16);
@@ -120,9 +121,10 @@ public:
 
 	bool IsOK() { return raw_data_ != 0; }
 
-	bool Read(short *buffer, int len) {
+	bool Read(int *buffer, int len) {
 		if (!raw_data_)
 			return false;
+
 		while (bgQueue.size() < (size_t)(len * 2)) {
 			int outBytes;
 			decoder_->Decode(raw_data_ + raw_offset_, raw_bytes_per_frame_, (uint8_t *)buffer_, &outBytes);
@@ -147,7 +149,6 @@ public:
 	}
 
 private:
-	const std::string &data_;
 	ChunkFile file_;
 	uint8_t *raw_data_;
 	int raw_data_size_;
@@ -163,6 +164,17 @@ static std::string bgGamePath;
 static int playbackOffset;
 static AT3PlusReader *at3Reader;
 static double gameLastChanged;
+static double lastPlaybackTime;
+static int buffer[44100];
+
+static void ClearBackgroundAudio() {
+	if (at3Reader) {
+		at3Reader->Shutdown();
+		delete at3Reader;
+		at3Reader = 0;
+	}
+	playbackOffset = 0;
+}
 
 void SetBackgroundAudioGame(const std::string &path) {
 	time_update();
@@ -173,20 +185,23 @@ void SetBackgroundAudioGame(const std::string &path) {
 		return;
 	}
 
+	ClearBackgroundAudio();
 	gameLastChanged = time_now_d();
-	if (at3Reader) {
-		at3Reader->Shutdown();
-		delete at3Reader;
-		at3Reader = 0;
-	}
-	playbackOffset = 0;
 	bgGamePath = path;
 }
 
-int MixBackgroundAudio(short *buffer, int size) {
+int PlayBackgroundAudio() {
 	time_update();
 
 	lock_guard lock(bgMutex);
+
+	// Immediately stop the sound if it is turned off while playing.
+	if (!g_Config.bEnableSound) {
+		ClearBackgroundAudio();
+		__PushExternalAudio(0, 0);
+		return 0;
+	}
+
 	// If there's a game, and some time has passed since the selected game
 	// last changed... (to prevent crazy amount of reads when skipping through a list)
 	if (!at3Reader && bgGamePath.size() && (time_now_d() - gameLastChanged > 0.5)) {
@@ -198,12 +213,23 @@ int MixBackgroundAudio(short *buffer, int size) {
 		if (gameInfo->sndFileData.size()) {
 			const std::string &data = gameInfo->sndFileData;
 			at3Reader = new AT3PlusReader(data);
+			lastPlaybackTime = 0.0;
 		}
 	}
 
-	if (!at3Reader || !at3Reader->Read(buffer, size)) {
-		memset(buffer, 0, size * 2 * sizeof(s16));
+	double now = time_now();
+	if (at3Reader) {
+		int sz = lastPlaybackTime <= 0.0 ? 44100 / 60 : (int)((now - lastPlaybackTime) * 44100);
+		sz = std::min((int)ARRAY_SIZE(buffer) / 2, sz);
+		if (sz >= 16) {
+			if (at3Reader->Read(buffer, sz))
+				__PushExternalAudio(buffer, sz);
+			lastPlaybackTime = now;
+		}
+	} else {
+		__PushExternalAudio(0, 0);
+		lastPlaybackTime = now;
 	}
+
 	return 0;
 }
-

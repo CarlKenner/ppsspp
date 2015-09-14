@@ -35,6 +35,11 @@
 #include <stdlib.h>
 #endif
 
+#if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+#include <sys/sysctl.h>		// KERN_PROC_PATHNAME
+#include <unistd.h>		// getpid
+#endif
+
 #if defined(__APPLE__)
 #include <CoreFoundation/CFString.h>
 #include <CoreFoundation/CFURL.h>
@@ -306,7 +311,7 @@ bool CreateFullPath(const std::string &fullPath)
 		if (position == fullPath.npos)
 		{
 			if (!File::Exists(fullPath))
-				File::CreateDir(fullPath);
+				return File::CreateDir(fullPath);
 			return true;
 		}
 		std::string subPath = fullPath.substr(0, position);
@@ -354,8 +359,15 @@ bool Rename(const std::string &srcFilename, const std::string &destFilename)
 {
 	INFO_LOG(COMMON, "Rename: %s --> %s", 
 			srcFilename.c_str(), destFilename.c_str());
+#if defined(_WIN32) && defined(UNICODE)
+	std::wstring srcw = ConvertUTF8ToWString(srcFilename);
+	std::wstring destw = ConvertUTF8ToWString(destFilename);
+	if (_wrename(srcw.c_str(), destw.c_str()) == 0)
+		return true;
+#else
 	if (rename(srcFilename.c_str(), destFilename.c_str()) == 0)
 		return true;
+#endif
 	ERROR_LOG(COMMON, "Rename: failed %s --> %s: %s", 
 			  srcFilename.c_str(), destFilename.c_str(), GetLastErrorMsg());
 	return false;
@@ -436,32 +448,31 @@ bool Copy(const std::string &srcFilename, const std::string &destFilename)
 #endif
 }
 
-tm GetModifTime(const std::string &filename)
+bool GetModifTime(const std::string &filename, tm &return_time)
 {
-	tm return_time = {0};
+	memset(&return_time, 0, sizeof(return_time));
 	if (!Exists(filename))
 	{
 		WARN_LOG(COMMON, "GetCreateTime: failed %s: No such file", filename.c_str());
-		return return_time;
+		return false;
 	}
 
 	if (IsDirectory(filename))
 	{
 		WARN_LOG(COMMON, "GetCreateTime: failed %s: is a directory", filename.c_str());
-		return return_time;
+		return false;
 	}
+
 	struct stat64 buf;
 	if (stat64(filename.c_str(), &buf) == 0)
 	{
-		DEBUG_LOG(COMMON, "GetCreateTime: %s: %lld",
-				filename.c_str(), (long long)buf.st_mtime);
-		localtime_r((time_t*)&buf.st_mtime,&return_time);
-		return return_time;
+		INFO_LOG(COMMON, "GetCreateTime: %s: %lld", filename.c_str(), (long long)buf.st_mtime);
+		localtime_r((time_t*)&buf.st_mtime, &return_time);
+		return true;
 	}
 
-	ERROR_LOG(COMMON, "GetCreateTime: Stat failed %s: %s",
-			filename.c_str(), GetLastErrorMsg());
-	return return_time;
+	ERROR_LOG(COMMON, "GetCreateTime: Stat failed %s: %s", filename.c_str(), GetLastErrorMsg());
+	return false;
 }
 
 // Returns the size of filename (64bit)
@@ -697,7 +708,7 @@ const std::string &GetExeDirectory()
 		ExePath = program_path;
 #endif
 
-#elif (defined(__APPLE__) && !defined(IOS)) || defined(__linux__)
+#elif (defined(__APPLE__) && !defined(IOS)) || defined(__linux__) || defined(KERN_PROC_PATHNAME)
 		char program_path[4096];
 		uint32_t program_path_size = sizeof(program_path) - 1;
 
@@ -705,6 +716,16 @@ const std::string &GetExeDirectory()
 		if (readlink("/proc/self/exe", program_path, 4095) > 0)
 #elif defined(__APPLE__) && !defined(IOS)
 		if (_NSGetExecutablePath(program_path, &program_path_size) == 0)
+#elif defined(KERN_PROC_PATHNAME)
+		int mib[4] = {
+			CTL_KERN,
+			KERN_PROC,
+			KERN_PROC_PATHNAME,
+			getpid()
+		};
+		size_t sz = program_path_size;
+
+		if (sysctl(mib, 4, program_path, &sz, NULL, 0) == 0)
 #else
 #error Unmatched ifdef.
 #endif

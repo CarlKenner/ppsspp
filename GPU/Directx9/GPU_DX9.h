@@ -24,7 +24,8 @@
 #include "GPU/Directx9/FramebufferDX9.h"
 #include "GPU/Directx9/TransformPipelineDX9.h"
 #include "GPU/Directx9/TextureCacheDX9.h"
-#include "GPU/Directx9/helper/fbo.h"
+#include "GPU/Directx9/DepalettizeShaderDX9.h"
+#include "GPU/Directx9/helper/dx_fbo.h"
 #include "GPU/Common/VertexDecoderCommon.h"
 
 namespace DX9 {
@@ -32,41 +33,41 @@ namespace DX9 {
 class ShaderManagerDX9;
 class LinkedShaderDX9;
 
-class DIRECTX9_GPU : public GPUCommon
-{
+class DIRECTX9_GPU : public GPUCommon {
 public:
 	DIRECTX9_GPU();
 	~DIRECTX9_GPU();
-	virtual void InitClear();
-	virtual void PreExecuteOp(u32 op, u32 diff);	
-	virtual void ExecuteOp(u32 op, u32 diff);
+	void InitClear() override;
+	void PreExecuteOp(u32 op, u32 diff) override;
+	void ExecuteOp(u32 op, u32 diff) override;
 
-	virtual void SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format);
-	virtual void CopyDisplayToOutput();
-	virtual void BeginFrame();
-	virtual void UpdateStats();
-	virtual void InvalidateCache(u32 addr, int size, GPUInvalidationType type);
-	virtual bool PerformMemoryCopy(u32 dest, u32 src, int size);
-	virtual bool PerformMemorySet(u32 dest, u8 v, int size);
-	virtual bool PerformMemoryDownload(u32 dest, int size);
-	virtual bool PerformMemoryUpload(u32 dest, int size);
-	virtual bool PerformStencilUpload(u32 dest, int size);
-	virtual void ClearCacheNextFrame();
-	virtual void DeviceLost();  // Only happens on Android. Drop all textures and shaders.
+	void ReapplyGfxStateInternal() override;
+	void SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) override;
+	void CopyDisplayToOutput() override;
+	void BeginFrame() override;
+	void UpdateStats() override;
+	void InvalidateCache(u32 addr, int size, GPUInvalidationType type) override;
+	bool PerformMemoryCopy(u32 dest, u32 src, int size) override;
+	bool PerformMemorySet(u32 dest, u8 v, int size) override;
+	bool PerformMemoryDownload(u32 dest, int size) override;
+	bool PerformMemoryUpload(u32 dest, int size) override;
+	bool PerformStencilUpload(u32 dest, int size) override;
+	void ClearCacheNextFrame() override;
+	void DeviceLost() override;  // Only happens on Android. Drop all textures and shaders.
 
-	virtual void DumpNextFrame();
-	virtual void DoState(PointerWrap &p);
-	
+	void DumpNextFrame() override;
+	void DoState(PointerWrap &p) override;
+
 	// Called by the window system if the window size changed. This will be reflected in PSPCoreParam.pixel*.
-	virtual void Resized();
-	virtual void ClearShaderCache();
-	virtual bool DecodeTexture(u8* dest, GPUgstate state) {
+	void Resized() override;
+	void ClearShaderCache() override;
+	bool DecodeTexture(u8 *dest, const GPUgstate &state) override {
 		return textureCache_.DecodeTexture(dest, state);
 	}
-	virtual bool FramebufferDirty();
-	virtual bool FramebufferReallyDirty();
+	bool FramebufferDirty() override;
+	bool FramebufferReallyDirty() override;
 
-	virtual void GetReportingInfo(std::string &primaryInfo, std::string &fullInfo) {
+	void GetReportingInfo(std::string &primaryInfo, std::string &fullInfo) override {
 		primaryInfo = reportingPrimaryInfo_;
 		fullInfo = reportingFullInfo_;
 	}
@@ -76,6 +77,7 @@ public:
 	bool GetCurrentDepthbuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentStencilbuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentTexture(GPUDebugBuffer &buffer, int level);
+	static bool GetDisplayFramebuffer(GPUDebugBuffer &buffer);
 	bool GetCurrentSimpleVertices(int count, std::vector<GPUDebugVertex> &vertices, std::vector<u16> &indices);
 
 	typedef void (DIRECTX9_GPU::*CmdFunc)(u32 op, u32 diff);
@@ -142,9 +144,10 @@ public:
 	void Execute_BoneMtxData(u32 op, u32 diff);
 
 protected:
-	virtual void FastRunLoop(DisplayList &list);
-	virtual void ProcessEvent(GPUEvent ev);
-	virtual void FastLoadBoneMatrix(u32 target);
+	void FastRunLoop(DisplayList &list) override;
+	void ProcessEvent(GPUEvent ev) override;
+	void FastLoadBoneMatrix(u32 target) override;
+	void FinishDeferred() override;
 
 private:
 	void UpdateCmdInfo();
@@ -152,7 +155,7 @@ private:
 	void Flush() {
 		transformDraw_.Flush();
 	}
-	void DoBlockTransfer();
+	void DoBlockTransfer(u32 skipDrawReason);
 	void ApplyDrawState(int prim);
 	void CheckFlushOp(int cmd, u32 diff);
 	void BuildReportingInfo();
@@ -166,6 +169,7 @@ private:
 
 	FramebufferManagerDX9 framebufferManager_;
 	TextureCacheDX9 textureCache_;
+	DepalShaderCacheDX9 depalShaderCache_;
 	TransformDrawEngineDX9 transformDraw_;
 	ShaderManagerDX9 *shaderManager_;
 

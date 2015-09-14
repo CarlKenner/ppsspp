@@ -22,6 +22,7 @@
 #include "base/mutex.h"
 #include "base/timeutil.h"
 #include "input/input_state.h"
+#include "profiler/profiler.h"
 
 #include "Core/Core.h"
 #include "Core/Config.h"
@@ -42,6 +43,10 @@
 
 #include "Core/Debugger/Breakpoints.h"
 
+// Time until we stop considering the core active without user input.
+// Should this be configurable?  2 hours currently.
+static const double ACTIVITY_IDLE_TIMEOUT = 2.0 * 3600.0;
+
 static event m_hStepEvent;
 static recursive_mutex m_hStepMutex;
 static event m_hInactiveEvent;
@@ -49,6 +54,8 @@ static recursive_mutex m_hInactiveMutex;
 static bool singleStepPending = false;
 static std::set<Core_ShutdownFunc> shutdownFuncs;
 static bool windowHidden = false;
+static double lastActivity = 0.0;
+static double lastKeepAwake = 0.0;
 
 #ifdef _WIN32
 InputState input_state;
@@ -59,6 +66,10 @@ extern InputState input_state;
 void Core_NotifyWindowHidden(bool hidden) {
 	windowHidden = hidden;
 	// TODO: Wait until we can react?
+}
+
+void Core_NotifyActivity() {
+	lastActivity = time_now_d();
 }
 
 void Core_ListenShutdown(Core_ShutdownFunc func) {
@@ -111,27 +122,34 @@ void Core_WaitInactive(int milliseconds) {
 	}
 }
 
-void UpdateScreenScale(int width, int height) {
-	dp_xres = width;
-	dp_yres = height;
-	pixel_xres = width;
-	pixel_yres = height;
+bool UpdateScreenScale(int width, int height, bool smallWindow) {
 	g_dpi = 72;
 	g_dpi_scale = 1.0f;
-#ifdef __SYMBIAN32__
-	dp_xres *= 1.4f;
-	dp_yres *= 1.4f;
+#if defined(__SYMBIAN32__)
 	g_dpi_scale = 1.4f;
-#endif
-#ifdef _WIN32
-	if (pixel_xres < 480 + 80) {
-		dp_xres *= 2;
-		dp_yres *= 2;
+#elif defined(_WIN32)
+	if (smallWindow) {
 		g_dpi_scale = 2.0f;
 	}
 #endif
-	pixel_in_dps = (float)pixel_xres / dp_xres;
-	NativeResized();
+	pixel_in_dps = 1.0f / g_dpi_scale;
+
+	int new_dp_xres = width * g_dpi_scale;
+	int new_dp_yres = height * g_dpi_scale;
+
+	bool dp_changed = new_dp_xres != dp_xres || new_dp_yres != dp_yres;
+	bool px_changed = pixel_xres != width || pixel_yres != height;
+
+	if (dp_changed || px_changed) {
+		dp_xres = new_dp_xres;
+		dp_yres = new_dp_yres;
+		pixel_xres = width;
+		pixel_yres = height;
+
+		NativeResized();
+		return true;
+	}
+	return false;
 }
 
 void UpdateRunLoop() {
@@ -193,6 +211,17 @@ void Core_RunLoop() {
 #if defined(USING_WIN_UI)
 		if (!windowHidden && !Core_IsStepping()) {
 			GPU_SwapBuffers();
+
+			// Keep the system awake for longer than normal for cutscenes and the like.
+			const double now = time_now_d();
+			if (now < lastActivity + ACTIVITY_IDLE_TIMEOUT) {
+				// Only resetting it ever prime number seconds in case the call is expensive.
+				// Using a prime number to ensure there's no interaction with other periodic events.
+				if (now - lastKeepAwake > 89.0 || now < lastKeepAwake) {
+					SetThreadExecutionState(ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
+					lastKeepAwake = now;
+				}
+			}
 		}
 #endif
 	}

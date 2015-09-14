@@ -16,6 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <map>
+#include <unordered_map>
 #include <set>
 #include "base/mutex.h"
 #include "ext/cityhash/city.h"
@@ -30,19 +31,23 @@
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/Debugger/DebugInterface.h"
 #include "Core/HLE/ReplaceTables.h"
-#include "Core/MIPS/JitCommon/JitCommon.h"
 #include "ext/xxhash.h"
 
 using namespace MIPSCodeUtils;
 
 // Not in a namespace because MSVC's debugger doesn't like it
-static std::vector<MIPSAnalyst::AnalyzedFunction> functions;
+typedef std::vector<MIPSAnalyst::AnalyzedFunction> FunctionsVector;
+static FunctionsVector functions;
 recursive_mutex functions_lock;
 
-// TODO: Try multimap instead
 // One function can appear in multiple copies in memory, and they will all have 
 // the same hash and should all be replaced if possible.
-static std::map<u64, std::vector<MIPSAnalyst::AnalyzedFunction*>> hashToFunction;
+#ifdef __SYMBIAN32__
+// Symbian does not have a functional unordered_multimap.
+static std::multimap<u64, MIPSAnalyst::AnalyzedFunction *> hashToFunction;
+#else
+static std::unordered_multimap<u64, MIPSAnalyst::AnalyzedFunction *> hashToFunction;
+#endif
 
 struct HashMapFunc {
 	char name[64];
@@ -78,18 +83,20 @@ struct HardHashTableEntry {
 static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x006b570008068310, 184, "strtok_r", },
 	{ 0x019ba2099fb88f3c, 48, "vector_normalize_t", },
-	{ 0x0266f96d740c7e03, 912, "memcpy", }, // Final Fantasy 4
+	{ 0x0266f96d740c7e03, 912, "memcpy", }, // Final Fantasy 4 (US)
 	{ 0x02bd2859045d2383, 240, "bcmp", },
 	{ 0x030507c9a1f0fc85, 92, "matrix_rot_x", },
 	{ 0x0483fceefa4557ff, 1360, "__udivdi3", },
 	{ 0x0558ad5c5be00ca1, 76, "vtfm_t", },
 	{ 0x05aedd0c04b451a1, 356, "sqrt", },
 	{ 0x0654fc8adbe16ef7, 28, "vmul_q", },
+	{ 0x06628f6052cda3c1, 1776, "toheart2_download_frame", }, // To Heart 2 Portable
 	{ 0x06b243c926fa6ab5, 24, "vf2in_q", },
 	{ 0x06e2826e02056114, 56, "wcslen", },
-	{ 0x073cf0b61d3b875a, 416, "hexyzforce_monoclome_thread", }, // Hexyz Force
+	{ 0x073cf0b61d3b875a, 416, "hexyzforce_monoclome_thread", }, // Hexyz Force (US)
 	{ 0x075fa9b234b41e9b, 32, "fmodf", },
 	{ 0x0a051019bdd786c3, 184, "strcasecmp", },
+	{ 0x0a1bed70958935d2, 644, "youkosohitsujimura_download_frame", }, // Youkoso Hitsuji-Mura Portable
 	{ 0x0a46dc426054bb9d, 24, "vector_add_t", },
 	{ 0x0c0173ed70f84f66, 48, "vnormalize_t", },
 	{ 0x0c65188f5bfb3915, 24, "vsgn_q", },
@@ -99,7 +106,7 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	//{ 0x0eb5f2e95f59276a, 40, "dl_write_lightmode", },
 	{ 0x0f1e7533a546f6a1, 228, "dl_write_bone_matrix_4", },
 	{ 0x0f2a1106ad84fb74, 52, "strcmp", },
-	{ 0x0ffa5db8396d4274, 64, "memcpy", }, // CRUSH
+	{ 0x0ffa5db8396d4274, 64, "memcpy_jak", }, // CRUSH
 	{ 0x1252e902d0b49bfb, 44, "vector_sub_q_2", },
 	{ 0x12df3d33a58d0298, 52, "vmidt_t", },
 	{ 0x12feef7b017d3431, 700, "memmove", },
@@ -113,6 +120,7 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x16965ca11a4e7dac, 104, "vmmul_q_transp", },
 	{ 0x16afe830a5dd2de2, 40, "vdiv_q", },
 	{ 0x184e834a63a79016, 32, "isnanf", },
+	{ 0x1874ee898c7b9f16, 512, "kokoroconnect_download_frame", }, // Kokoro Connect Yochi Random
 	{ 0x189212bda9c94df1, 736, "atanf", },
 	{ 0x199821ce500ef9d2, 24, "vocp_t", },
 	{ 0x1a3c8e9d637ed421, 104, "__adddf3", },
@@ -124,8 +132,11 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x1c967be07917ddc9, 92, "strcat", },
 	{ 0x1d03fa48334ca966, 556, "_strtol_r", },
 	{ 0x1d1311966d2243e9, 428, "suikoden1_and_2_download_frame_1", }, // Gensou Suikoden 1&2
+	{ 0x1d7de04b4e87d00b, 680, "kankabanchoutbr_download_frame", }, // Kenka Banchou Bros: Tokyo Battle Royale
+	{ 0x1daf6eaf0442391d, 1024, "utawarerumono_download_frame", }, // Utawarerumono portable
 	{ 0x1e1525e3bc2f6703, 676, "rint", },
 	{ 0x1ec055f28bb9f4d1, 88, "gu_update_stall", },
+	{ 0x1ef9cfe6afd3c035, 180, "memset", }, // Kingdom Hearts (US)
 	{ 0x1f53eac122f96b37, 224, "cosf", },
 	{ 0x2097a8b75c8fe651, 436, "atan2", },
 	{ 0x21411b3c860822c0, 36, "matrix_scale_q_t", },
@@ -142,6 +153,7 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x2adc229bef7bbc75, 40, "isnan", },
 	{ 0x2bcf5268dd26345a, 340, "acos", },
 	{ 0x2c4cb2028a1735bf, 600, "floor", },
+	{ 0x2c61a9a06a345b43, 1084, "otomenoheihou_download_frame", }, // Sangoku Koi Senki Otome no Heihou
 	{ 0x2ca5958bb816c72e, 44, "vector_i2f_t", },
 	{ 0x2e7022d9767c9018, 2100, "atan", },
 	{ 0x2f10d3faec84b5bb, 276, "sinf", },
@@ -149,24 +161,26 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x2f718936b371fc44, 40, "vcos_s", },
 	{ 0x3024e961d1811dea, 396, "fmod", },
 	{ 0x30c9c4f420573eb6, 540, "expf", },
-	{ 0x317afeb882ff324a, 212, "memcpy", }, // Mimana
+	{ 0x317afeb882ff324a, 212, "memcpy", }, // Mimana (US)
 	{ 0x31ea2e192f5095a1, 52, "vector_add_t", },
 	{ 0x31f523ef18898e0e, 420, "logf", },
-	{ 0x32215b1d2196377f, 844, "godseaterburst_blit_texture", }, // Gods Eater Burst
+	{ 0x32215b1d2196377f, 844, "godseaterburst_blit_texture", }, // Gods Eater Burst (US)
 	{ 0x32806967fe81568b, 40, "vector_sub_t_2", },
 	{ 0x32ceb9a7f72b9385, 440, "_strtoul_r", },
 	{ 0x32e6bc7c151491ed, 68, "memchr", },
 	{ 0x335df69db1073a8d, 96, "wcscpy", },
+	{ 0x33dc6b144cb302c1, 304, "memmove", }, // Kingdom Hearts (US)
 	{ 0x35d3527ff8c22ff2, 56, "matrix_scale_q", },
+	{ 0x368f6cf979709a31, 744, "memmove", }, // Jui Dr. Touma Jotarou
 	{ 0x373ce518eee5a2d2, 20, "matrix300_store_q", },
-	{ 0x3840f5766fada4b1, 592, "dissidia_recordframe_avi", }, // Dissidia, Dissidia 012
+	{ 0x3840f5766fada4b1, 592, "dissidia_recordframe_avi", }, // Dissidia (US), Dissidia 012 (US)
 	{ 0x388043e96b0e11fd, 144, "dl_write_material_2", },
 	{ 0x38f19bc3be215acc, 388, "log10f", },
 	{ 0x393047f06eceaba1, 96, "strcspn", },
 	{ 0x39a651942a0b3861, 204, "tan", },
 	{ 0x3a3bc2b20a55bf02, 68, "memchr", },
 	{ 0x3ab08b5659de1746, 40, "vsin_s", },
-	{ 0x3c421a9265f37ebc, 700, "memmove", }, // Final Fantasy 4
+	{ 0x3c421a9265f37ebc, 700, "memmove", }, // Final Fantasy 4 (US)
 	{ 0x3cbc2d50a3db59e9, 100, "strncmp", },
 	{ 0x3ce1806699a91d9d, 148, "dl_write_light", },
 	{ 0x3d5e914011c181d4, 444, "scalbnf", },
@@ -185,9 +199,11 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x497248c9d12f44fd, 68, "strcpy", },
 	{ 0x4a70207212a4c497, 24, "strlen", },
 	{ 0x4b16a5c602c74c6c, 24, "vsub_t", },
+	{ 0x4bb677dace6ca526, 184, "memset", }, // Final FantasyTactics (JPN)
 	{ 0x4c4bdedcc13ac77c, 624, "dl_write_matrix_5", },
 	{ 0x4c91c556d1aa896b, 104, "dl_write_material_3", },
 	{ 0x4cf38c368078181e, 616, "dl_write_matrix", },
+	{ 0x4d3e7085e01d30e4, 324, "memcpy", }, // PoPoLoCrois (JPN)
 	{ 0x4d72b294501cddfb, 80, "copysign", },
 	{ 0x4ddd83b7f4ed8d4e, 844, "memcpy", },
 	{ 0x4e266783291b0220, 28, "vsub_t", },
@@ -218,6 +234,7 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x5b103d973fd1dd94, 92, "matrix_rot_y", },
 	{ 0x5b9d7e9d4c905694, 196, "_calloc_r", },
 	{ 0x5bf7a77b028e9f66, 324, "sqrtf", },
+	{ 0x5c0b3edc0e48852c, 148, "memmove", }, // Dissidia 1 (US)
 	{ 0x5e898df42c4af6b8, 76, "wcsncmp", },
 	{ 0x5f473780835e3458, 52, "vclamp_q", },
 	{ 0x5fc58ed2c4d48b79, 40, "vtfm_q_transp", },
@@ -245,11 +262,15 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x6f101c5c4311c144, 276, "floorf", },
 	{ 0x6f1731f84bbf76c3, 116, "strcmp", },
 	{ 0x6f4e1a1a84df1da0, 68, "dl_write_texmode", },
+	{ 0x6f7c9109b5b8fa47, 688, "danganronpa1_2_download_frame", }, // Danganronpa 1
 	{ 0x70649c7211f6a8da, 16, "fabsf", },
 	{ 0x7245b74db370ae72, 64, "vmmul_q_transp3", },
 	{ 0x7259d52b21814a5a, 40, "vtfm_t_transp", },
+	{ 0x7354fd206796d817, 864, "flowers_download_frame", }, // Flowers
 	{ 0x736b34ebc702d873, 104, "vmmul_q_transp", },
+	{ 0x73a614c08f777d52, 792, "danganronpa2_2_download_frame", }, // Danganronpa 2
 	{ 0x7499a2ce8b60d801, 12, "abs", },
+	{ 0x74c77fb521740cd2, 284, "toheart2_download_frame_2", }, // To Heart 2 Portable
 	{ 0x74ebbe7d341463f3, 72, "dl_write_colortest", },
 	{ 0x755a41f9183bb89a, 60, "vmmul_q", },
 	{ 0x757d7ab0afbc03f5, 948, "kirameki_school_life_download_frame", }, // Toradora! Portable
@@ -264,6 +285,7 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x7978a886cf70b1c9, 56, "wcschr", },
 	{ 0x79faa339fff5a80c, 28, "finitef", },
 	{ 0x7c50728008c288e3, 36, "vector_transform_q_4x4", },
+	{ 0x7e33d4eaf573f937, 208, "memset", }, // Toukiden (JPN)
 	{ 0x7f1fc0dce6be120a, 404, "fmod", },
 	{ 0x8126a59ffa504614, 540, "brandish_download_frame", }, // Brandish, Zero no Kiseki, and Ao no Kiseki
 	{ 0x828b98925af9ff8f, 40, "vector_distance_t", },
@@ -277,7 +299,9 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x8a00e7207e7dbc81, 232, "_exit", },
 	{ 0x8a1f9daadecbaf7f, 104, "vmmul_q_transp", },
 	{ 0x8a610f34078ce360, 32, "vector_copy_q_t", },
-	{ 0x8c3fd997a544d0b1, 268, "memcpy", }, // Valkyrie Profile
+	{ 0x8c3fd997a544d0b1, 268, "memcpy", }, // Valkyrie Profile (US)
+	{ 0x8da0164e69e9b531, 1040, "grisaianokajitsu_download_frame", }, // Grisaia no Kajitsu La Fruit de la Grisaia
+	{ 0x8dd0546db930ef25, 992, "memmove", }, // PoPoLoCrois (JPN)
 	{ 0x8df2928848857e97, 164, "strcat", },
 	{ 0x8e48cabd529ca6b5, 52, "vector_multiply_t", },
 	{ 0x8e97dcb03fbaba5c, 104, "vmmul_q_transp", },
@@ -294,11 +318,13 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0x95bd33ac373c019a, 24, "fabsf", },
 	{ 0x9705934b0950d68d, 280, "dl_write_framebuffer_ptr", },
 	{ 0x9734cf721bc0f3a1, 732, "atanf", },
+	{ 0x99c9288185c352ea, 592, "orenoimouto_download_frame_2", }, // Ore no Imouto ga Konnani Kawaii Wake ga Nai
 	{ 0x9a06b9d5c16c4c20, 76, "dl_write_clut_ptrload", },
 	{ 0x9b88b739267d189e, 88, "strrchr", },
 	{ 0x9ce53975bb88c0e7, 96, "strncpy", },
-	{ 0x9e2941c4a5c5e847, 792, "memcpy", }, // LittleBigPlanet
-	{ 0x9e6ce11f9d49f954, 292, "memcpy", }, // Jeanne d'Arc
+	{ 0x9d4f5f56b52f07f2, 808, "memmove", }, // Jeanne d'Arc (US)
+	{ 0x9e2941c4a5c5e847, 792, "memcpy", }, // LittleBigPlanet (US)
+	{ 0x9e6ce11f9d49f954, 292, "memcpy", }, // Jeanne d'Arc (US)
 	{ 0x9f269daa6f0da803, 128, "dl_write_scissor_region", },
 	{ 0x9f7919eeb43982b0, 208, "__fixdfsi", },
 	{ 0xa1ca0640f11182e7, 72, "strcspn", },
@@ -306,10 +332,12 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xa2bcef60a550a3ef, 92, "matrix_rot_z", },
 	{ 0xa373f55c65cd757a, 312, "memcpy_swizzled" }, // God Eater Burst Demo
 	{ 0xa41989db0f9bf97e, 1304, "pow", },
+	{ 0xa44f6227fdbc12b1, 132, "memcmp", }, // Popolocrois (US)
 	{ 0xa46cc6ea720d5775, 44, "dl_write_cull", },
 	{ 0xa54967288afe8f26, 600, "ceil", },
 	{ 0xa5ddbbc688e89a4d, 56, "isinf", },
 	{ 0xa662359e30b829e4, 148, "memcmp", },
+	{ 0xa6a03f0487a911b0, 392, "danganronpa1_1_download_frame", }, // Danganronpa 1
 	{ 0xa8390e65fa087c62, 140, "vtfm_t_q", },
 	{ 0xa85fe8abb88b1c6f, 52, "vector_sub_t", },
 	{ 0xa9194e55cc586557, 268, "memcpy", },
@@ -320,13 +348,15 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xad67add5122b8c64, 52, "matrix_q_translate_t", },
 	{ 0xada952a1adcea4f5, 60, "vmmul_q_transp5", },
 	{ 0xadfbf8fb8c933193, 56, "fabs", },
+	{ 0xae39bac51fd6e76b, 628, "gakuenheaven_download_frame", }, // Gakuen Heaven: Boy's Love Scramble!
 	{ 0xae50226363135bdd, 24, "vector_sub_t", },
 	{ 0xae6cd7dfac82c244, 48, "vpow_s", },
 	{ 0xaf85d47f95ad2921, 1936, "pow", },
 	{ 0xafb2c7e56c04c8e9, 48, "vtfm_q", },
 	{ 0xafc9968e7d246a5e, 1588, "atan", },
 	{ 0xafcb7dfbc4d72588, 44, "vector_transform_3x4", },
-	{ 0xb07f9d82d79deea9, 536, "brandish_download_frame", },  // Brandish
+	{ 0xb07f9d82d79deea9, 536, "brandish_download_frame", },  // Brandish, and Sora no kiseki 3rd
+	{ 0xb09c9bc1343a774c, 456, "danganronpa2_1_download_frame", }, // Danganronpa 2
 	{ 0xb0db731f27d3aa1b, 40, "vmax_s", },
 	{ 0xb0ef265e87899f0a, 32, "vector_divide_t_s", },
 	{ 0xb183a37baa12607b, 32, "vscl_t", },
@@ -338,12 +368,13 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xb6a04277fb1e1a1a, 104, "vmmul_q_transp", },
 	{ 0xb726917d688ac95b, 268, "kagaku_no_ensemble_download_frame", }, // Toaru Majutsu to Kagaku no Ensemble
 	{ 0xb7448c5ffdd3b0fc, 356, "atan2f", },
-	{ 0xb7d88567dc22aab1, 820, "memcpy", }, // Trails in the Sky
+	{ 0xb7d88567dc22aab1, 820, "memcpy", }, // Trails in the Sky (US)
 	{ 0xb877d3c37a7aaa5d, 60, "vmmul_q_2", },
 	{ 0xb89aa73b6f94ba95, 52, "vclamp_t", },
 	{ 0xb8bd1f0e02e9ad87, 156, "dl_write_light_dir", },
 	{ 0xb8cfaeebfeb2de20, 7548, "_vfprintf_r", },
 	{ 0xb97f352e85661af6, 32, "finitef", },
+	{ 0xba76a8e853426baa, 544, "soranokiseki_fc_download_frame", }, // Sora no kiseki FC
 	{ 0xbb3c6592ed319ba4, 132, "dl_write_fog_params", },
 	{ 0xbb7d7c93e4c08577, 124, "__truncdfsf2", },
 	{ 0xbdf54d66079afb96, 200, "dl_write_bone_matrix_3", },
@@ -351,8 +382,10 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xbf5d02ccb8514881, 108, "strcmp", },
 	{ 0xbf791954ebef4afb, 396, "expf", },
 	{ 0xbfa8c16038b7753d, 868, "sakurasou_download_frame", }, // Sakurasou No Pet Na Kanojo
+	{ 0xbfe07e305abc4cd1, 808, "memmove" }, // Final Fantasy Tactics (US)
 	{ 0xc062f2545ef5dc39, 1076, "kirameki_school_life_download_frame", },// Kirameki School Life SP,and Boku wa Tomodati ga Sukunai
 	{ 0xc0feb88cc04a1dc7, 48, "vector_negate_t", },
+	{ 0xc1220040b0599a75, 472, "soranokiseki_sc_download_frame", }, // Sora no kiseki SC
 	{ 0xc1f34599d0b9146b, 116, "__subdf3", },
 	{ 0xc3089f66ee6f0a24, 464, "growlanser_create_saveicon", }, // Growlanswer IV
 	{ 0xc319f0d107dd2f45, 888, "__muldf3", },
@@ -361,8 +394,10 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xc51519f5dab342d4, 224, "cosf", },
 	{ 0xc52c14b9af8c3008, 76, "memcmp", },
 	{ 0xc54eae62622f1e11, 164, "dl_write_bone_matrix_2", },
-	{ 0xc6b29de7d3245198, 656, "starocean_write_stencil" }, // Star Ocean 1
+	{ 0xc6b29de7d3245198, 656, "starocean_write_stencil" }, // Star Ocean 1 (US)
 	{ 0xc96e3a087ebf49a9, 100, "dl_write_light_color", },
+	{ 0xca7cb2c0b9410618, 680, "kudwafter_download_frame", }, // Kud Wafter
+	{ 0xcb22120018386319, 692, "photokano_download_frame", }, // Photo Kano
 	{ 0xcb7a2edd603ecfef, 48, "vtfm_p", },
 	{ 0xcdf64d21418b2667, 24, "vzero_q", },
 	{ 0xce1c95ee25b8e2ea, 448, "fmod", },
@@ -371,8 +406,10 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	//{ 0xceb5372d0003d951, 52, "dl_write_stenciltest", },
 	{ 0xcee11483b550ce8f, 24, "vocp_q", },
 	{ 0xcfecf208769ed5fd, 272, "cosf", },
+	{ 0xd019b067b58cf6c3, 700, "memmove", }, // Star Ocean 1 (US)
 	{ 0xd12a3a91e0040229, 524, "dl_write_enable_disable", },
 	{ 0xd141d1efbfe13ca3, 968, "kirameki_school_life_download_frame", }, // Kirameki School Life SP,and Boku wa Tomodati ga Sukunai
+	{ 0xd1db467a23ebe00d, 724, "rewrite_download_frame", }, // Rewrite Portable
 	{ 0xd1faacfc711d61e8, 68, "__negdf2", },
 	{ 0xd207b0650a41dd9c, 28, "vmin_q", },
 	{ 0xd6d6e0bb21654778, 24, "vneg_t", },
@@ -389,7 +426,8 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xddfa5a85937aa581, 32, "vdot_q", },
 	{ 0xe0214719d8a0aa4e, 104, "strstr", },
 	{ 0xe029f0699ca3a886, 76, "matrix300_transform_by", },
-	{ 0xe093c2b0194d52b3, 820, "ff1_battle_effect", }, // Final Fantasy 1
+	{ 0xe086d5c9ce89148f, 212, "bokunonatsuyasumi4_download_frame", }, // Boku no Natsuyasumi 2 and 4,
+	{ 0xe093c2b0194d52b3, 820, "ff1_battle_effect", }, // Final Fantasy 1 (US)
 	{ 0xe1107cf3892724a0, 460, "_memalign_r", },
 	{ 0xe1724e6e29209d97, 24, "vector_length_t_2", },
 	{ 0xe1a5d939cc308195, 68, "wcscmp", },
@@ -403,7 +441,7 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xe83a7a9d80a21c11, 4448, "_strtod_r", },
 	{ 0xe894bda909a8a8f9, 1064, "expensive_wipeout_pulse", },
 	{ 0xe8ad7719be44e7c8, 276, "strchr", },
-	{ 0xeabb9c1b4f83d2b4, 52, "memset", }, // Crisis Core
+	{ 0xeabb9c1b4f83d2b4, 52, "memset_jak", }, // Crisis Core (US), Jak and Daxter (this is a slow memset and needs to have slow timing)
 	{ 0xeb0f7bf63d52ece9, 88, "strncat", },
 	{ 0xeb8c0834d8bbc28c, 416, "fmodf", },
 	{ 0xed8918f378e9a563, 628, "sd_gundam_g_generation_download_frame", }, // SD Gundam G Generation Overworld
@@ -415,10 +453,13 @@ static const HardHashTableEntry hardcodedHashes[] = {
 	{ 0xf4d797cef4ac88cd, 684, "_free_r", },
 	{ 0xf4ea7d2ec943fa02, 224, "sinf", },
 	{ 0xf4f8cdf479dfc4a4, 224, "sinf", },
+	{ 0xf527d906d69005a0, 848, "photokano_download_frame_2", }, // Photo Kano
 	{ 0xf52f993e444b6c52, 44, "dl_write_shademode", },
 	{ 0xf56641884b36c638, 468, "scalbn", },
+	{ 0xf5e91870b5b76ddc, 288, "motorstorm_download_frame", }, // MotorStorm: Arctic Edge
 	{ 0xf5f7826b4a61767c, 40, "matrix_copy_q", },
 	{ 0xf73c094e492bc163, 396, "hypot", },
+	{ 0xf773297d89ff7a63, 532, "kumonohatateni_download_frame", }, // Amatsumi Sora ni Kumo no Hatate ni, and Hanakisou
 	{ 0xf7fc691db0147e25, 96, "strspn", },
 	{ 0xf842aea3baa61f29, 32, "vector_length_t", },
 	{ 0xf8e0902f4099a9d6, 2260, "qsort", },
@@ -646,37 +687,123 @@ namespace MIPSAnalyst {
 	void UpdateHashToFunctionMap() {
 		lock_guard guard(functions_lock);
 		hashToFunction.clear();
+		// Really need to detect C++11 features with better defines.
+#if !defined(__SYMBIAN32__) && !defined(IOS)
+		hashToFunction.reserve(functions.size());
+#endif
 		for (auto iter = functions.begin(); iter != functions.end(); iter++) {
 			AnalyzedFunction &f = *iter;
 			if (f.hasHash && f.size > 16) {
-				hashToFunction[f.hash].push_back(&f);
+				hashToFunction.insert(std::make_pair(f.hash, &f));
 			}
 		}
 	}
 
-	// Look forwards to find if a register is used again in this block.
-	// Don't think we use this yet.
-	bool IsRegisterUsed(MIPSGPReg reg, u32 addr) {
-		while (true) {
-			MIPSOpcode op = Memory::Read_Instruction(addr, true);
-			MIPSInfo info = MIPSGetInfo(op);
-			if ((info & IN_RS) && (MIPS_GET_RS(op) == reg))
-				return true;
-			if ((info & IN_RT) && (MIPS_GET_RT(op) == reg))
-				return true;
-			if ((info & IS_CONDBRANCH))
-				return true; // could also follow both paths
-			if ((info & IS_JUMP))
-				return true; // could also follow the path
-			if ((info & OUT_RT) && (MIPS_GET_RT(op) == reg))
-				return false; //the reg got clobbed! yay!
-			if ((info & OUT_RD) && (MIPS_GET_RD(op) == reg))
-				return false; //the reg got clobbed! yay!
-			if ((info & OUT_RA) && (reg == MIPS_REG_RA))
-				return false; //the reg got clobbed! yay!
+	enum RegisterUsage {
+		USAGE_CLOBBERED,
+		USAGE_INPUT,
+		USAGE_UNKNOWN,
+	};
+
+	static RegisterUsage DetermineInOutUsage(u64 inFlag, u64 outFlag, u32 addr, int instrs) {
+		const u32 start = addr;
+		u32 end = addr + instrs * sizeof(u32);
+		bool canClobber = true;
+		while (addr < end) {
+			const MIPSOpcode op = Memory::Read_Instruction(addr, true);
+			const MIPSInfo info = MIPSGetInfo(op);
+
+			// Yes, used.
+			if (info & inFlag)
+				return USAGE_INPUT;
+
+			// Clobbered, so not used.
+			if (info & outFlag)
+				return canClobber ? USAGE_CLOBBERED : USAGE_UNKNOWN;
+
+			// Bail early if we hit a branch (could follow each path for continuing?)
+			if ((info & IS_CONDBRANCH) || (info & IS_JUMP)) {
+				// Still need to check the delay slot (so end after it.)
+				// We'll assume likely are taken.
+				end = addr + 8;
+				// The reason for the start != addr check is that we compile delay slots before branches.
+				// That means if we're starting at the branch, it's not safe to allow the delay slot
+				// to clobber, since it might have already been compiled.
+				// As for LIKELY, we don't know if it'll run the branch or not.
+				canClobber = (info & LIKELY) == 0 && start != addr;
+			}
 			addr += 4;
 		}
-		return true;
+		return USAGE_UNKNOWN;
+	}
+
+	static RegisterUsage DetermineRegisterUsage(MIPSGPReg reg, u32 addr, int instrs) {
+		switch (reg) {
+		case MIPS_REG_HI:
+			return DetermineInOutUsage(IN_HI, OUT_HI, addr, instrs);
+		case MIPS_REG_LO:
+			return DetermineInOutUsage(IN_LO, OUT_LO, addr, instrs);
+		case MIPS_REG_FPCOND:
+			return DetermineInOutUsage(IN_FPUFLAG, OUT_FPUFLAG, addr, instrs);
+		case MIPS_REG_VFPUCC:
+			return DetermineInOutUsage(IN_VFPU_CC, OUT_VFPU_CC, addr, instrs);
+		default:
+			break;
+		}
+
+		if (reg > 32) {
+			return USAGE_UNKNOWN;
+		}
+
+		const u32 start = addr;
+		u32 end = addr + instrs * sizeof(u32);
+		bool canClobber = true;
+		while (addr < end) {
+			const MIPSOpcode op = Memory::Read_Instruction(addr, true);
+			const MIPSInfo info = MIPSGetInfo(op);
+
+			// Yes, used.
+			if ((info & IN_RS) && (MIPS_GET_RS(op) == reg))
+				return USAGE_INPUT;
+			if ((info & IN_RT) && (MIPS_GET_RT(op) == reg))
+				return USAGE_INPUT;
+
+			// Clobbered, so not used.
+			bool clobbered = false;
+			if ((info & OUT_RT) && (MIPS_GET_RT(op) == reg))
+				clobbered = true;
+			if ((info & OUT_RD) && (MIPS_GET_RD(op) == reg))
+				clobbered = true;
+			if ((info & OUT_RA) && (reg == MIPS_REG_RA))
+				clobbered = true;
+			if (clobbered) {
+				if (!canClobber || (info & IS_CONDMOVE))
+					return USAGE_UNKNOWN;
+				return USAGE_CLOBBERED;
+			}
+
+			// Bail early if we hit a branch (could follow each path for continuing?)
+			if ((info & IS_CONDBRANCH) || (info & IS_JUMP)) {
+				// Still need to check the delay slot (so end after it.)
+				// We'll assume likely are taken.
+				end = addr + 8;
+				// The reason for the start != addr check is that we compile delay slots before branches.
+				// That means if we're starting at the branch, it's not safe to allow the delay slot
+				// to clobber, since it might have already been compiled.
+				// As for LIKELY, we don't know if it'll run the branch or not.
+				canClobber = (info & LIKELY) == 0 && start != addr;
+			}
+			addr += 4;
+		}
+		return USAGE_UNKNOWN;
+	}
+
+	bool IsRegisterUsed(MIPSGPReg reg, u32 addr, int instrs) {
+		return DetermineRegisterUsage(reg, addr, instrs) == USAGE_INPUT;
+	}
+
+	bool IsRegisterClobbered(MIPSGPReg reg, u32 addr, int instrs) {
+		return DetermineRegisterUsage(reg, addr, instrs) == USAGE_CLOBBERED;
 	}
 
 	void HashFunctions() {
@@ -1008,19 +1135,34 @@ skip:
 		// the easy way of saving a hashmap by unloading and loading a game. I added
 		// an alternative way.
 
-		// TODO: speedup
-		auto iter = functions.begin();
-		while (iter != functions.end()) {
-			if (iter->start >= startAddr && iter->start <= endAddr) {
-				iter = functions.erase(iter);
-			} else {
-				iter++;
+		// Most of the time, functions from the same module will be contiguous in functions.
+		FunctionsVector::iterator prevMatch = functions.end();
+		size_t originalSize = functions.size();
+		for (auto iter = functions.begin(); iter != functions.end(); ++iter) {
+			const bool hadPrevMatch = prevMatch != functions.end();
+			const bool match = iter->start >= startAddr && iter->start <= endAddr;
+
+			if (!hadPrevMatch && match) {
+				// Entering a range.
+				prevMatch = iter;
+			} else if (hadPrevMatch && !match) {
+				// Left a range.
+				iter = functions.erase(prevMatch, iter);
+				prevMatch = functions.end();
 			}
+		}
+		if (prevMatch != functions.end()) {
+			// Cool, this is the fastest way.
+			functions.erase(prevMatch, functions.end());
 		}
 
 		RestoreReplacedInstructions(startAddr, endAddr);
 
-		// TODO: Also wipe them from hash->function map
+		if (functions.empty()) {
+			hashToFunction.clear();
+		} else if (originalSize != functions.size()) {
+			UpdateHashToFunctionMap();
+		}
 	}
 
 	void ReplaceFunctions() {
@@ -1061,7 +1203,7 @@ skip:
 		return 0;
 	}
 
-	void SetHashMapFilename(std::string filename) {
+	void SetHashMapFilename(const std::string& filename) {
 		if (filename.empty())
 			hashmapFileName = GetSysDirectory(DIRECTORY_SYSTEM) + "knownfuncs.ini";
 		else
@@ -1099,15 +1241,14 @@ skip:
 		UpdateHashToFunctionMap();
 
 		for (auto mf = hashMap.begin(), end = hashMap.end(); mf != end; ++mf) {
-			auto iter = hashToFunction.find(mf->hash);
-			if (iter == hashToFunction.end()) {
+			auto range = hashToFunction.equal_range(mf->hash);
+			if (range.first == range.second) {
 				continue;
 			}
 
 			// Yay, found a function.
-
-			for (unsigned int i = 0; i < iter->second.size(); i++) {
-				AnalyzedFunction &f = *(iter->second[i]);
+			for (auto iter = range.first; iter != range.second; ++iter) {
+				AnalyzedFunction &f = *iter->second;
 				if (f.hash == mf->hash && f.size == mf->size) {
 					strncpy(f.name, mf->name, sizeof(mf->name) - 1);
 
@@ -1134,7 +1275,7 @@ skip:
 		}
 	}
 
-	void LoadHashMap(std::string filename) {
+	void LoadHashMap(const std::string& filename) {
 		FILE *file = File::OpenCFile(filename, "rt");
 		if (!file) {
 			WARN_LOG(LOADER, "Could not load hash map: %s", filename.c_str());
@@ -1147,7 +1288,9 @@ skip:
 			mf.hardcoded = false;
 			if (fscanf(file, "%llx:%d = %63s\n", &mf.hash, &mf.size, mf.name) < 3) {
 				char temp[1024];
-				fgets(temp, 1024, file);
+				if (!fgets(temp, 1024, file)) {
+					WARN_LOG(LOADER, "Could not read from hash map: %s", filename.c_str());
+				}
 				continue;
 			}
 
@@ -1197,19 +1340,19 @@ skip:
 			case 0x20:	// add
 			case 0x21:	// addu
 				info.hasRelevantAddress = true;
-				info.releventAddress = cpu->GetRegValue(0,MIPS_GET_RS(op))+cpu->GetRegValue(0,MIPS_GET_RT(op));
+				info.relevantAddress = cpu->GetRegValue(0,MIPS_GET_RS(op))+cpu->GetRegValue(0,MIPS_GET_RT(op));
 				break;
 			case 0x22:	// sub
 			case 0x23:	// subu
 				info.hasRelevantAddress = true;
-				info.releventAddress = cpu->GetRegValue(0,MIPS_GET_RS(op))-cpu->GetRegValue(0,MIPS_GET_RT(op));
+				info.relevantAddress = cpu->GetRegValue(0,MIPS_GET_RS(op))-cpu->GetRegValue(0,MIPS_GET_RT(op));
 				break;
 			}
 			break;
 		case 0x08:	// addi
 		case 0x09:	// adiu
 			info.hasRelevantAddress = true;
-			info.releventAddress = cpu->GetRegValue(0,MIPS_GET_RS(op))+((s16)(op & 0xFFFF));
+			info.relevantAddress = cpu->GetRegValue(0,MIPS_GET_RS(op))+((s16)(op & 0xFFFF));
 			break;
 		}
 
@@ -1316,7 +1459,7 @@ skip:
 			info.dataAddress = rs + imm16;
 
 			info.hasRelevantAddress = true;
-			info.releventAddress = info.dataAddress;
+			info.relevantAddress = info.dataAddress;
 		}
 
 		return info;

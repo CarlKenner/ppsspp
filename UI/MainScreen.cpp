@@ -33,7 +33,6 @@
 #include "Core/System.h"
 #include "Core/Host.h"
 #include "Core/Reporting.h"
-#include "Core/SaveState.h"
 
 #include "UI/BackgroundAudio.h"
 #include "UI/EmuScreen.h"
@@ -41,9 +40,9 @@
 #include "UI/GameScreen.h"
 #include "UI/GameInfoCache.h"
 #include "UI/GameSettingsScreen.h"
-#include "UI/CwCheatScreen.h"
 #include "UI/MiscScreens.h"
 #include "UI/ControlMappingScreen.h"
+#include "UI/SavedataScreen.h"
 #include "UI/Store.h"
 #include "UI/ui_atlas.h"
 #include "Core/Config.h"
@@ -76,10 +75,10 @@ bool MainScreen::showHomebrewTab = false;
 class GameButton : public UI::Clickable {
 public:
 	GameButton(const std::string &gamePath, bool gridStyle, UI::LayoutParams *layoutParams = 0) 
-		: UI::Clickable(layoutParams), gridStyle_(gridStyle), gamePath_(gamePath), holdFrameCount_(0), holdEnabled_(true) {}
+		: UI::Clickable(layoutParams), gridStyle_(gridStyle), gamePath_(gamePath), holdStart_(0), holdEnabled_(true) {}
 
-	virtual void Draw(UIContext &dc);
-	virtual void GetContentDimensions(const UIContext &dc, float &w, float &h) const {
+	void Draw(UIContext &dc) override;
+	void GetContentDimensions(const UIContext &dc, float &w, float &h) const override {
 		if (gridStyle_) {
 			w = 144;
 			h = 80;
@@ -94,15 +93,18 @@ public:
 	void SetHoldEnabled(bool hold) {
 		holdEnabled_ = hold;
 	}
-	virtual void Touch(const TouchInput &input) {
+	void Touch(const TouchInput &input) override {
 		UI::Clickable::Touch(input);
 		hovering_ = bounds_.Contains(input.x, input.y);
+		if (hovering_ && (input.flags & TOUCH_DOWN)) {
+			holdStart_ = time_now_d();
+		}
 		if (input.flags & TOUCH_UP) {
-			holdFrameCount_ = 0;
+			holdStart_ = 0;
 		}
 	}
 
-	virtual void Key(const KeyInput &key) {
+	bool Key(const KeyInput &key) override {
 		std::vector<int> pspKeys;
 		bool showInfo = false;
 
@@ -122,24 +124,20 @@ public:
 
 		if (showInfo) {
 			TriggerOnHoldClick();
-			return;
+			return true;
 		}
 
-		Clickable::Key(key);
+		return Clickable::Key(key);
 	}
 
-	virtual void Update(const InputState &input_state) {
-		if (down_ && holdEnabled_)
-			holdFrameCount_++;
-		else
-			holdFrameCount_ = 0;
+	void Update(const InputState &input_state) override {
 		// Hold button for 1.5 seconds to launch the game options
-		if (holdFrameCount_ > 90) {
+		if (holdEnabled_ && holdStart_ != 0.0 && holdStart_ < time_now_d() - 1.5) {
 			TriggerOnHoldClick();
 		}
 	}
 
-	virtual void FocusChanged(int focusFlags) {
+	void FocusChanged(int focusFlags) override {
 		UI::Clickable::FocusChanged(focusFlags);
 		TriggerOnHighlight(focusFlags);
 	}
@@ -149,7 +147,7 @@ public:
 
 private:
 	void TriggerOnHoldClick() {
-		holdFrameCount_ = 0;
+		holdStart_ = 0.0;
 		UI::EventParams e;
 		e.v = this;
 		e.s = gamePath_;
@@ -168,7 +166,7 @@ private:
 	std::string gamePath_;
 	std::string title_;
 
-	int holdFrameCount_;
+	double holdStart_;
 	bool holdEnabled_;
 	bool hovering_;
 };
@@ -177,6 +175,7 @@ void GameButton::Draw(UIContext &dc) {
 	GameInfo *ginfo = g_gameInfoCache.GetInfo(dc.GetThin3DContext(), gamePath_, 0);
 	Thin3DTexture *texture = 0;
 	u32 color = 0, shadowColor = 0;
+	using namespace UI;
 
 	if (ginfo->iconTexture) {
 		texture = ginfo->iconTexture;
@@ -222,8 +221,10 @@ void GameButton::Draw(UIContext &dc) {
 
 	Bounds overlayBounds = bounds_;
 	u32 overlayColor = 0;
-	if (holdEnabled_)
-		overlayColor = whiteAlpha((holdFrameCount_ - 15) * 0.01f);
+	if (holdEnabled_ && holdStart_ != 0.0) {
+		double time_held = time_now_d() - holdStart_;
+		overlayColor = whiteAlpha(time_held / 2.5f);
+	}
 
 	// Render button
 	int dropsize = 10;
@@ -250,10 +251,14 @@ void GameButton::Draw(UIContext &dc) {
 	if (texture) {
 		dc.Draw()->Flush();
 		dc.GetThin3DContext()->SetTexture(0, texture);
-		if (holdFrameCount_ > 60) {
-			// Blink before launching by holding
-			if (((holdFrameCount_ >> 3) & 1) == 0)
-				color = darkenColor(color);
+		if (holdStart_ != 0.0) {
+			double time_held = time_now_d() - holdStart_;
+			int holdFrameCount = (int)(time_held * 60.0f);
+			if (holdFrameCount > 60) {
+				// Blink before launching by holding
+				if (((holdFrameCount >> 3) & 1) == 0)
+					color = darkenColor(color);
+			}
 		}
 		dc.Draw()->DrawTexRect(x, y, x+w, y+h, 0, 0, 1, 1, color);
 		dc.Draw()->Flush();
@@ -305,6 +310,10 @@ void GameButton::Draw(UIContext &dc) {
 	} else {
 		dc.Draw()->Flush();
 	}
+	if (!ginfo->id.empty() && ginfo->hasConfig)
+	{
+		dc.Draw()->DrawImage(I_GEAR, x, y + h - ui_images[I_GEAR].h, 1.0f);
+	}
 	if (overlayColor) {
 		dc.FillRect(Drawable(overlayColor), overlayBounds);
 	}
@@ -320,7 +329,7 @@ class DirButton : public UI::Button {
 public:
 	DirButton(const std::string &path, UI::LayoutParams *layoutParams)
 		: UI::Button(path, layoutParams), path_(path), absolute_(false) {}
-	DirButton(const std::string &path, const std::string &text, LayoutParams *layoutParams = 0)
+	DirButton(const std::string &path, const std::string &text, UI::LayoutParams *layoutParams = 0)
 		: UI::Button(text, layoutParams), path_(path), absolute_(true) {}
 
 	virtual void Draw(UIContext &dc);
@@ -340,6 +349,7 @@ private:
 };
 
 void DirButton::Draw(UIContext &dc) {
+	using namespace UI;
 	Style style = dc.theme->buttonStyle;
 
 	if (HasFocus()) style = dc.theme->buttonFocusedStyle;
@@ -385,40 +395,6 @@ void DirButton::Draw(UIContext &dc) {
 	}
 }
 
-class GameBrowser : public UI::LinearLayout {
-public:
-	GameBrowser(std::string path, bool allowBrowsing, bool *gridStyle_, std::string lastText, std::string lastLink, int flags = 0, UI::LayoutParams *layoutParams = 0);
-
-	UI::Event OnChoice;
-	UI::Event OnHoldChoice;
-	UI::Event OnHighlight;
-
-	UI::Choice *HomebrewStoreButton() { return homebrewStoreButton_; }
-private:
-	void Refresh();
-	bool IsCurrentPathPinned();
-	const std::vector<std::string> GetPinnedPaths();
-	const std::string GetBaseName(const std::string &path);
-
-	UI::EventReturn GameButtonClick(UI::EventParams &e);
-	UI::EventReturn GameButtonHoldClick(UI::EventParams &e);
-	UI::EventReturn GameButtonHighlight(UI::EventParams &e);
-	UI::EventReturn NavigateClick(UI::EventParams &e);
-	UI::EventReturn LayoutChange(UI::EventParams &e);
-	UI::EventReturn LastClick(UI::EventParams &e);
-	UI::EventReturn HomeClick(UI::EventParams &e);
-	UI::EventReturn PinToggleClick(UI::EventParams &e);
-
-	UI::ViewGroup *gameList_;
-	PathBrowser path_;
-	bool *gridStyle_;
-	bool allowBrowsing_;
-	std::string lastText_;
-	std::string lastLink_;
-	int flags_;
-	UI::Choice *homebrewStoreButton_;
-};
-
 GameBrowser::GameBrowser(std::string path, bool allowBrowsing, bool *gridStyle, std::string lastText, std::string lastLink, int flags, UI::LayoutParams *layoutParams)
 	: LinearLayout(UI::ORIENT_VERTICAL, layoutParams), gameList_(0), path_(path), gridStyle_(gridStyle), allowBrowsing_(allowBrowsing), lastText_(lastText), lastLink_(lastLink), flags_(flags) {
 	using namespace UI;
@@ -438,17 +414,17 @@ UI::EventReturn GameBrowser::LastClick(UI::EventParams &e) {
 
 UI::EventReturn GameBrowser::HomeClick(UI::EventParams &e) {
 #ifdef ANDROID
-	path_.SetPath(g_Config.memCardDirectory);
+	path_.SetPath(g_Config.memStickDirectory);
 #elif defined(USING_QT_UI)
-	I18NCategory *m = GetI18NCategory("MainMenu");
+	I18NCategory *mm = GetI18NCategory("MainMenu");
 	QString fileName = QFileDialog::getExistingDirectory(NULL, "Browse for Folder", g_Config.currentDirectory.c_str());
 	if (QDir(fileName).exists())
 		path_.SetPath(fileName.toStdString());
 	else
 		return UI::EVENT_DONE;
 #elif defined(_WIN32)
-	I18NCategory *m = GetI18NCategory("MainMenu");
-	std::string folder = W32Util::BrowseForFolder(MainWindow::GetHWND(), m->T("Choose folder"));
+	I18NCategory *mm = GetI18NCategory("MainMenu");
+	std::string folder = W32Util::BrowseForFolder(MainWindow::GetHWND(), mm->T("Choose folder"));
 	if (!folder.size())
 		return UI::EVENT_DONE;
 	path_.SetPath(folder);
@@ -482,7 +458,7 @@ void GameBrowser::Refresh() {
 	Clear();
 
 	Add(new Spacer(1.0f));
-	I18NCategory *m = GetI18NCategory("MainMenu");
+	I18NCategory *mm = GetI18NCategory("MainMenu");
 
 	// No topbar on recent screen
 	if (path_.GetPath() != "!RECENT") {
@@ -492,9 +468,9 @@ void GameBrowser::Refresh() {
 			Margins pathMargins(5, 0);
 			topBar->Add(new TextView(path_.GetFriendlyPath().c_str(), ALIGN_VCENTER, true, new LinearLayoutParams(1.0f)));
 #if defined(_WIN32) || defined(USING_QT_UI)
-			topBar->Add(new Choice(m->T("Browse", "Browse...")))->OnClick.Handle(this, &GameBrowser::HomeClick);
+			topBar->Add(new Choice(mm->T("Browse", "Browse...")))->OnClick.Handle(this, &GameBrowser::HomeClick);
 #else
-			topBar->Add(new Choice(m->T("Home")))->OnClick.Handle(this, &GameBrowser::HomeClick);
+			topBar->Add(new Choice(mm->T("Home")))->OnClick.Handle(this, &GameBrowser::HomeClick);
 #endif
 		} else {
 			topBar->Add(new Spacer(new LinearLayoutParams(1.0f)));
@@ -530,13 +506,16 @@ void GameBrowser::Refresh() {
 		path_.GetListing(fileInfo, "iso:cso:pbp:elf:prx:");
 		for (size_t i = 0; i < fileInfo.size(); i++) {
 			bool isGame = !fileInfo[i].isDirectory;
+			bool isSaveData = false;
 			// Check if eboot directory
 			if (!isGame && path_.GetPath().size() >= 4 && File::Exists(path_.GetPath() + fileInfo[i].name + "/EBOOT.PBP"))
 				isGame = true;
 			else if (!isGame && File::Exists(path_.GetPath() + fileInfo[i].name + "/PSP_GAME/SYSDIR"))
 				isGame = true;
+			else if (!isGame && File::Exists(path_.GetPath() + fileInfo[i].name + "/PARAM.SFO"))
+				isSaveData = true;
 
-			if (!isGame) {
+			if (!isGame && !isSaveData) {
 				if (allowBrowsing_) {
 					dirButtons.push_back(new DirButton(fileInfo[i].name, new UI::LinearLayoutParams(UI::FILL_PARENT, UI::FILL_PARENT)));
 				}
@@ -549,7 +528,7 @@ void GameBrowser::Refresh() {
 		// to a flood of support email...
 		if (allowBrowsing_) {
 			fileInfo.clear();
-			path_.GetListing(fileInfo, "zip:rar:r01:");
+			path_.GetListing(fileInfo, "zip:rar:r01:7z:");
 			if (!fileInfo.empty()) {
 				UI::LinearLayout *zl = new UI::LinearLayout(UI::ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 				zl->SetSpacing(4.0f);
@@ -592,15 +571,15 @@ void GameBrowser::Refresh() {
 	if (allowBrowsing_) {
 		std::string caption = IsCurrentPathPinned() ? "-" : "+";
 		if (!*gridStyle_) {
-			caption = IsCurrentPathPinned() ? m->T("UnpinPath", "Unpin") : m->T("PinPath", "Pin");
+			caption = IsCurrentPathPinned() ? mm->T("UnpinPath", "Unpin") : mm->T("PinPath", "Pin");
 		}
 		gameList_->Add(new UI::Button(caption, new UI::LinearLayoutParams(UI::FILL_PARENT, UI::FILL_PARENT)))->
 			OnClick.Handle(this, &GameBrowser::PinToggleClick);
 	}
 
-	if (g_Config.bHomebrewStore && (flags_ & FLAG_HOMEBREWSTOREBUTTON)) {
+	if (flags_ & FLAG_HOMEBREWSTOREBUTTON) {
 		Add(new Spacer());
-		homebrewStoreButton_ = Add(new Choice(m->T("DownloadFromStore", "Download from the PPSSPP Homebrew Store"), new UI::LinearLayoutParams(UI::WRAP_CONTENT, UI::WRAP_CONTENT)));
+		homebrewStoreButton_ = Add(new Choice(mm->T("DownloadFromStore", "Download from the PPSSPP Homebrew Store"), new UI::LinearLayoutParams(UI::WRAP_CONTENT, UI::WRAP_CONTENT)));
 	} else {
 		homebrewStoreButton_ = 0;
 	}
@@ -723,7 +702,7 @@ void MainScreen::CreateViews() {
 
 	bool vertical = UseVerticalLayout();
 
-	I18NCategory *m = GetI18NCategory("MainMenu");
+	I18NCategory *mm = GetI18NCategory("MainMenu");
 
 	Margins actionMenuMargins(0, 10, 10, 0);
 
@@ -738,7 +717,7 @@ void MainScreen::CreateViews() {
 			"!RECENT", false, &g_Config.bGridView1, "", "", 0,
 			new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 		scrollRecentGames->Add(tabRecentGames);
-		leftColumn->AddTab(m->T("Recent"), scrollRecentGames);
+		leftColumn->AddTab(mm->T("Recent"), scrollRecentGames);
 		tabRecentGames->OnChoice.Handle(this, &MainScreen::OnGameSelectedInstant);
 		tabRecentGames->OnHoldChoice.Handle(this, &MainScreen::OnGameSelected);
 		tabRecentGames->OnHighlight.Handle(this, &MainScreen::OnGameHighlight);
@@ -748,10 +727,10 @@ void MainScreen::CreateViews() {
 	ScrollView *scrollHomebrew = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 
 	GameBrowser *tabAllGames = new GameBrowser(g_Config.currentDirectory, true, &g_Config.bGridView2,
-		m->T("How to get games"), "http://www.ppsspp.org/getgames.html", 0,
+		mm->T("How to get games"), "http://www.ppsspp.org/getgames.html", 0,
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	GameBrowser *tabHomebrew = new GameBrowser(GetSysDirectory(DIRECTORY_GAME), false, &g_Config.bGridView3,
-		m->T("How to get homebrew & demos", "How to get homebrew && demos"), "http://www.ppsspp.org/gethomebrew.html",
+		mm->T("How to get homebrew & demos", "How to get homebrew && demos"), "http://www.ppsspp.org/gethomebrew.html",
 		FLAG_HOMEBREWSTOREBUTTON,
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 
@@ -763,8 +742,8 @@ void MainScreen::CreateViews() {
 	scrollAllGames->Add(tabAllGames);
 	scrollHomebrew->Add(tabHomebrew);
 
-	leftColumn->AddTab(m->T("Games"), scrollAllGames);
-	leftColumn->AddTab(m->T("Homebrew & Demos"), scrollHomebrew);
+	leftColumn->AddTab(mm->T("Games"), scrollAllGames);
+	leftColumn->AddTab(mm->T("Homebrew & Demos"), scrollHomebrew);
 
 	tabAllGames->OnChoice.Handle(this, &MainScreen::OnGameSelectedInstant);
 	tabHomebrew->OnChoice.Handle(this, &MainScreen::OnGameSelectedInstant);
@@ -812,18 +791,18 @@ void MainScreen::CreateViews() {
 	rightColumnItems->Add(logos);
 	rightColumnItems->Add(new TextView(versionString, new LinearLayoutParams(Margins(70, -6, 0, 0))))->SetSmall(true);
 #if defined(_WIN32) || defined(USING_QT_UI)
-	rightColumnItems->Add(new Choice(m->T("Load","Load...")))->OnClick.Handle(this, &MainScreen::OnLoadFile);
+	rightColumnItems->Add(new Choice(mm->T("Load","Load...")))->OnClick.Handle(this, &MainScreen::OnLoadFile);
 #endif
-	rightColumnItems->Add(new Choice(m->T("Game Settings", "Settings")))->OnClick.Handle(this, &MainScreen::OnGameSettings);
-	rightColumnItems->Add(new Choice(m->T("Credits")))->OnClick.Handle(this, &MainScreen::OnCredits);
-	rightColumnItems->Add(new Choice(m->T("www.ppsspp.org")))->OnClick.Handle(this, &MainScreen::OnPPSSPPOrg);
+	rightColumnItems->Add(new Choice(mm->T("Game Settings", "Settings")))->OnClick.Handle(this, &MainScreen::OnGameSettings);
+	rightColumnItems->Add(new Choice(mm->T("Credits")))->OnClick.Handle(this, &MainScreen::OnCredits);
+	rightColumnItems->Add(new Choice(mm->T("www.ppsspp.org")))->OnClick.Handle(this, &MainScreen::OnPPSSPPOrg);
 #ifndef GOLD
-	Choice *gold = rightColumnItems->Add(new Choice(m->T("Support PPSSPP")));
+	Choice *gold = rightColumnItems->Add(new Choice(mm->T("Support PPSSPP")));
 	gold->OnClick.Handle(this, &MainScreen::OnSupport);
 	gold->SetIcon(I_ICONGOLD);
 #endif
 	rightColumnItems->Add(new Spacer(25.0));
-	rightColumnItems->Add(new Choice(m->T("Exit")))->OnClick.Handle(this, &MainScreen::OnExit);
+	rightColumnItems->Add(new Choice(mm->T("Exit")))->OnClick.Handle(this, &MainScreen::OnExit);
 
 	if (vertical) {
 		root_ = new LinearLayout(ORIENT_VERTICAL);
@@ -876,13 +855,13 @@ UI::EventReturn MainScreen::OnDownloadUpgrade(UI::EventParams &e) {
 	// Go directly to ppsspp.org and let the user sort it out
 	LaunchBrowser("http://www.ppsspp.org/downloads.html");
 #endif
-	return EVENT_DONE;
+	return UI::EVENT_DONE;
 }
 
 UI::EventReturn MainScreen::OnDismissUpgrade(UI::EventParams &e) {
 	g_Config.DismissUpgrade();
-	upgradeBar_->SetVisibility(V_GONE);
-	return EVENT_DONE;
+	upgradeBar_->SetVisibility(UI::V_GONE);
+	return UI::EVENT_DONE;
 }
 
 void MainScreen::sendMessage(const char *message, const char *value) {
@@ -991,6 +970,12 @@ UI::EventReturn MainScreen::OnGameSelected(UI::EventParams &e) {
 #else
 	std::string path = e.s;
 #endif
+	GameInfo *ginfo = 0;
+	ginfo = g_gameInfoCache.GetInfo(nullptr, path, GAMEINFO_WANTBG);
+	if (ginfo && ginfo->fileType == FILETYPE_PSP_SAVEDATA_DIRECTORY) {
+		return UI::EVENT_DONE;
+	}
+
 	SetBackgroundAudioGame(path);
 	lockBackgroundAudio_ = true;
 	screenManager()->push(new GameScreen(path));
@@ -998,6 +983,8 @@ UI::EventReturn MainScreen::OnGameSelected(UI::EventParams &e) {
 }
 
 UI::EventReturn MainScreen::OnGameHighlight(UI::EventParams &e) {
+	using namespace UI;
+
 #ifdef _WIN32
 	std::string path = ReplaceAll(e.s, "\\", "/");
 #else
@@ -1103,153 +1090,11 @@ void MainScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 	}
 }
 
-void GamePauseScreen::update(InputState &input) {
-	UpdateUIState(UISTATE_PAUSEMENU);
-	UIScreen::update(input);
-}
-
-GamePauseScreen::~GamePauseScreen() {
-	if (saveSlots_ != NULL) {
-		g_Config.iCurrentStateSlot = saveSlots_->GetSelection();
-		g_Config.Save();
-	}
-	__DisplaySetWasPaused();
-}
-
-void GamePauseScreen::CreateViews() {
-	static const int NUM_SAVESLOTS = 5;
-
+void UmdReplaceScreen::CreateViews() {
 	using namespace UI;
 	Margins actionMenuMargins(0, 100, 15, 0);
-	I18NCategory *gs = GetI18NCategory("Graphics");
-	I18NCategory *i = GetI18NCategory("Pause");
-
-	root_ = new LinearLayout(ORIENT_HORIZONTAL);
-
-	ViewGroup *leftColumn = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(300, FILL_PARENT, actionMenuMargins));
-	root_->Add(leftColumn);
-
-	root_->Add(new Spacer(new LinearLayoutParams(1.0)));
-
-	ViewGroup *leftColumnItems = new LinearLayout(ORIENT_VERTICAL);
-	leftColumn->Add(leftColumnItems);
-
-	saveSlots_ = leftColumnItems->Add(new ChoiceStrip(ORIENT_HORIZONTAL, new LinearLayoutParams(300, WRAP_CONTENT)));
-	for (int i = 0; i < NUM_SAVESLOTS; i++){
-		std::stringstream saveSlotText;
-		saveSlotText << " " << i + 1 << " ";
-		saveSlots_->AddChoice(saveSlotText.str());
-		if (SaveState::HasSaveInSlot(i)) {
-			saveSlots_->HighlightChoice(i);
-		}
-	}
-
-	saveSlots_->SetSelection(g_Config.iCurrentStateSlot);
-	saveSlots_->OnChoice.Handle(this, &GamePauseScreen::OnStateSelected);
-
-	saveStateButton_ = leftColumnItems->Add(new Choice(i->T("Save State")));
-	saveStateButton_->OnClick.Handle(this, &GamePauseScreen::OnSaveState);
-
-	loadStateButton_ = leftColumnItems->Add(new Choice(i->T("Load State")));
-	loadStateButton_->OnClick.Handle(this, &GamePauseScreen::OnLoadState);
-
-	if (g_Config.iRewindFlipFrequency > 0) {
-		UI::Choice *rewindButton = leftColumnItems->Add(new Choice(i->T("Rewind")));
-		rewindButton->SetEnabled(SaveState::CanRewind());
-		rewindButton->OnClick.Handle(this, &GamePauseScreen::OnRewind);
-	}
-
-	ViewGroup *rightColumn = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(300, FILL_PARENT, actionMenuMargins));
-	root_->Add(rightColumn);
-
-	LinearLayout *rightColumnItems = new LinearLayout(ORIENT_VERTICAL);
-	rightColumn->Add(rightColumnItems);
-
-	rightColumnItems->SetSpacing(0.0f);
-	if (getUMDReplacePermit()) {
-		rightColumnItems->Add(new Choice(i->T("Switch UMD")))->OnClick.Handle(this, &GamePauseScreen::OnSwitchUMD);
-	}
-	Choice *continueChoice = rightColumnItems->Add(new Choice(i->T("Continue")));
-	root_->SetDefaultFocusView(continueChoice);
-	continueChoice->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-	rightColumnItems->Add(new Choice(i->T("Game Settings")))->OnClick.Handle(this, &GamePauseScreen::OnGameSettings);
-	if (g_Config.bEnableCheats) {
-		rightColumnItems->Add(new Choice(i->T("Cheats")))->OnClick.Handle(this, &GamePauseScreen::OnCwCheat);
-	}
-	rightColumnItems->Add(new Spacer(25.0));
-	rightColumnItems->Add(new Choice(i->T("Exit to menu")))->OnClick.Handle(this, &GamePauseScreen::OnExitToMenu);
-
-	UI::EventParams e;
-	e.a = g_Config.iCurrentStateSlot;
-	saveSlots_->OnChoice.Trigger(e);
-}
-
-UI::EventReturn GamePauseScreen::OnGameSettings(UI::EventParams &e) {
-	screenManager()->push(new GameSettingsScreen(gamePath_));
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GamePauseScreen::OnStateSelected(UI::EventParams &e) {
-	int st = e.a;
-	loadStateButton_->SetEnabled(SaveState::HasSaveInSlot(st));
-	return UI::EVENT_DONE;
-}
-
-void GamePauseScreen::onFinish(DialogResult result) {
-	// Do we really always need to "gpu->Resized" here?
-	if (gpu)
-		gpu->Resized();
-	Reporting::UpdateConfig();
-}
-
-UI::EventReturn GamePauseScreen::OnExitToMenu(UI::EventParams &e) {
-	screenManager()->finishDialog(this, DR_OK);
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GamePauseScreen::OnLoadState(UI::EventParams &e) {
-	SaveState::LoadSlot(saveSlots_->GetSelection(), 0, 0);
-
-	screenManager()->finishDialog(this, DR_CANCEL);
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GamePauseScreen::OnSaveState(UI::EventParams &e) {
-	SaveState::SaveSlot(saveSlots_->GetSelection(), 0, 0);
-
-	screenManager()->finishDialog(this, DR_CANCEL);
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GamePauseScreen::OnRewind(UI::EventParams &e) {
-	SaveState::Rewind(0, 0);
-
-	screenManager()->finishDialog(this, DR_CANCEL);
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GamePauseScreen::OnCwCheat(UI::EventParams &e) {
-	screenManager()->push(new CwCheatScreen());
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn GamePauseScreen::OnSwitchUMD(UI::EventParams &e) {
-	screenManager()->push(new UmdReplaceScreen());
-	return UI::EVENT_DONE;
-}
-
-void GamePauseScreen::sendMessage(const char *message, const char *value) {
-	// Since the language message isn't allowed to be in native, we have to have add this
-	// to every screen which directly inherits from UIScreen(which are few right now, luckily).
-	if (!strcmp(message, "language")) {
-		screenManager()->RecreateAllViews();
-	}
-}
-
-void UmdReplaceScreen::CreateViews() {
-	Margins actionMenuMargins(0, 100, 15, 0);
-	I18NCategory *m = GetI18NCategory("MainMenu");
-	I18NCategory *d = GetI18NCategory("Dialog");
+	I18NCategory *mm = GetI18NCategory("MainMenu");
+	I18NCategory *di = GetI18NCategory("Dialog");
 
 	TabHolder *leftColumn = new TabHolder(ORIENT_HORIZONTAL, 64, new LinearLayoutParams(1.0));
 	leftColumn->SetClip(true);
@@ -1265,26 +1110,26 @@ void UmdReplaceScreen::CreateViews() {
 			"!RECENT", false, &g_Config.bGridView1, "", "", 0,
 			new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 		scrollRecentGames->Add(tabRecentGames);
-		leftColumn->AddTab(m->T("Recent"), scrollRecentGames);
+		leftColumn->AddTab(mm->T("Recent"), scrollRecentGames);
 		tabRecentGames->OnChoice.Handle(this, &UmdReplaceScreen::OnGameSelectedInstant);
 		tabRecentGames->OnHoldChoice.Handle(this, &UmdReplaceScreen::OnGameSelected);
 	}
 	ScrollView *scrollAllGames = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 
 	GameBrowser *tabAllGames = new GameBrowser(g_Config.currentDirectory, true, &g_Config.bGridView2,
-		m->T("How to get games"), "http://www.ppsspp.org/getgames.html", 0,
+		mm->T("How to get games"), "http://www.ppsspp.org/getgames.html", 0,
 		new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 
 	scrollAllGames->Add(tabAllGames);
 
-	leftColumn->AddTab(m->T("Games"), scrollAllGames);
+	leftColumn->AddTab(mm->T("Games"), scrollAllGames);
 
 	tabAllGames->OnChoice.Handle(this, &UmdReplaceScreen::OnGameSelectedInstant);
 
 	tabAllGames->OnHoldChoice.Handle(this, &UmdReplaceScreen::OnGameSelected);
 
-	rightColumnItems->Add(new Choice(d->T("Cancel")))->OnClick.Handle(this, &UmdReplaceScreen::OnCancel);
-	rightColumnItems->Add(new Choice(m->T("Game Settings")))->OnClick.Handle(this, &UmdReplaceScreen::OnGameSettings);
+	rightColumnItems->Add(new Choice(di->T("Cancel")))->OnClick.Handle(this, &UmdReplaceScreen::OnCancel);
+	rightColumnItems->Add(new Choice(mm->T("Game Settings")))->OnClick.Handle(this, &UmdReplaceScreen::OnGameSettings);
 
 	if (g_Config.recentIsos.size() > 0) {
 		leftColumn->SetCurrentTab(0);
@@ -1308,16 +1153,17 @@ UI::EventReturn UmdReplaceScreen::OnGameSelected(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn UmdReplaceScreen:: OnCancel(UI::EventParams &e) {
+UI::EventReturn UmdReplaceScreen::OnCancel(UI::EventParams &e) {
 	screenManager()->finishDialog(this, DR_CANCEL);
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn UmdReplaceScreen:: OnGameSettings(UI::EventParams &e) {
+UI::EventReturn UmdReplaceScreen::OnGameSettings(UI::EventParams &e) {
 	screenManager()->push(new GameSettingsScreen(""));
 	return UI::EVENT_DONE;
 }
-UI::EventReturn UmdReplaceScreen:: OnGameSelectedInstant(UI::EventParams &e) {
+
+UI::EventReturn UmdReplaceScreen::OnGameSelectedInstant(UI::EventParams &e) {
 	__UmdReplace(e.s);
 	screenManager()->finishDialog(this, DR_OK);
 	return UI::EVENT_DONE;

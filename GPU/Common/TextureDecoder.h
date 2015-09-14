@@ -17,14 +17,24 @@
 
 #pragma once
 
+enum CheckAlphaResult {
+	// These are intended to line up with TexCacheEntry::STATUS_ALPHA_UNKNOWN, etc.
+	CHECKALPHA_FULL = 0,
+	CHECKALPHA_ANY = 4,
+	CHECKALPHA_ZERO = 8,
+};
+
 #include "Common/Common.h"
 #include "Core/MemMap.h"
 #include "GPU/ge_constants.h"
-#include "GPU/GPUState.h"
+#include "GPU/Common/TextureDecoderNEON.h"
 
 void SetupTextureDecoder();
 
-#ifdef _M_SSE
+void DoSwizzleTex16(const u32 *ysrcp, u8 *texptr, int bxc, int byc, u32 pitch, u32 rowWidth);
+
+// For SSE, we statically link the SSE2 algorithms.
+#if defined(_M_SSE)
 u32 QuickTexHashSSE2(const void *checkp, u32 size);
 #define DoQuickTexHash QuickTexHashSSE2
 
@@ -32,7 +42,29 @@ void DoUnswizzleTex16Basic(const u8 *texptr, u32 *ydestp, int bxc, int byc, u32 
 #define DoUnswizzleTex16 DoUnswizzleTex16Basic
 
 #include "ext/xxhash.h"
+#define DoReliableHash32 XXH32
+#define DoReliableHash64 XXH64
+
+#ifdef _M_X64
+#define DoReliableHash XXH64
+typedef u64 ReliableHashType;
+#else
 #define DoReliableHash XXH32
+typedef u32 ReliableHashType;
+#endif
+
+// For ARM64, NEON is mandatory, so we also statically link.
+#elif defined(ARM64)
+#define DoQuickTexHash QuickTexHashNEON
+#define DoUnswizzleTex16 DoUnswizzleTex16NEON
+#define DoReliableHash32 ReliableHash32NEON
+
+#include "ext/xxhash.h"
+#define DoReliableHash64 XXH64
+
+#define DoReliableHash XXH64
+typedef u64 ReliableHashType;
+
 #else
 typedef u32 (*QuickTexHashFunc)(const void *checkp, u32 size);
 extern QuickTexHashFunc DoQuickTexHash;
@@ -40,9 +72,21 @@ extern QuickTexHashFunc DoQuickTexHash;
 typedef void (*UnswizzleTex16Func)(const u8 *texptr, u32 *ydestp, int bxc, int byc, u32 pitch, u32 rowWidth);
 extern UnswizzleTex16Func DoUnswizzleTex16;
 
-typedef u32 (*ReliableHashFunc)(const void *input, int len, u32 seed);
-extern ReliableHashFunc DoReliableHash;
+typedef u32 (*ReliableHash32Func)(const void *input, size_t len, u32 seed);
+extern ReliableHash32Func DoReliableHash32;
+
+typedef u64 (*ReliableHash64Func)(const void *input, size_t len, u64 seed);
+extern ReliableHash64Func DoReliableHash64;
+
+#define DoReliableHash DoReliableHash32
+typedef u32 ReliableHashType;
 #endif
+
+CheckAlphaResult CheckAlphaRGBA8888Basic(const u32 *pixelData, int stride, int w, int h);
+CheckAlphaResult CheckAlphaABGR4444Basic(const u32 *pixelData, int stride, int w, int h);
+CheckAlphaResult CheckAlphaRGBA4444Basic(const u32 *pixelData, int stride, int w, int h);
+CheckAlphaResult CheckAlphaABGR1555Basic(const u32 *pixelData, int stride, int w, int h);
+CheckAlphaResult CheckAlphaRGBA5551Basic(const u32 *pixelData, int stride, int w, int h);
 
 // All these DXT structs are in the reverse order, as compared to PC.
 // On PC, alpha comes before color, and interpolants are before the tile data.
@@ -88,38 +132,7 @@ static const u8 textureBitsPerPixel[16] = {
 	0,   // INVALID,
 };
 
-// Masks to downalign bufw to 16 bytes, and wrap at 2048.
-static const u32 textureAlignMask16[16] = {
-	0x7FF & ~(((8 * 16) / 16) - 1),  //GE_TFMT_5650,
-	0x7FF & ~(((8 * 16) / 16) - 1),  //GE_TFMT_5551,
-	0x7FF & ~(((8 * 16) / 16) - 1),  //GE_TFMT_4444,
-	0x7FF & ~(((8 * 16) / 32) - 1),  //GE_TFMT_8888,
-	0x7FF & ~(((8 * 16) / 4) - 1),   //GE_TFMT_CLUT4,
-	0x7FF & ~(((8 * 16) / 8) - 1),   //GE_TFMT_CLUT8,
-	0x7FF & ~(((8 * 16) / 16) - 1),  //GE_TFMT_CLUT16,
-	0x7FF & ~(((8 * 16) / 32) - 1),  //GE_TFMT_CLUT32,
-	0x7FF, //GE_TFMT_DXT1,
-	0x7FF, //GE_TFMT_DXT3,
-	0x7FF, //GE_TFMT_DXT5,
-	0,   // INVALID,
-	0,   // INVALID,
-	0,   // INVALID,
-	0,   // INVALID,
-	0,   // INVALID,
-};
-
-static inline u32 GetTextureBufw(int level, u32 texaddr, GETextureFormat format) {
-	// This is a hack to allow for us to draw the huge PPGe texture, which is always in kernel ram.
-	if (texaddr < PSP_GetKernelMemoryEnd())
-		return gstate.texbufwidth[level] & 0x1FFF;
-
-	u32 bufw = gstate.texbufwidth[level] & textureAlignMask16[format];
-	if (bufw == 0) {
-		// If it's less than 16 bytes, use 16 bytes.
-		bufw = (8 * 16) / textureBitsPerPixel[format];
-	}
-	return bufw;
-}
+u32 GetTextureBufw(int level, u32 texaddr, GETextureFormat format);
 
 template <typename IndexT, typename ClutT>
 inline void DeIndexTexture(ClutT *dest, const IndexT *indexed, int length, const ClutT *clut) {
@@ -201,7 +214,3 @@ inline void DeIndexTexture4Optimal(ClutT *dest, const u32 texaddr, int length, C
 	const u8 *indexed = (const u8 *) Memory::GetPointer(texaddr);
 	DeIndexTexture4Optimal(dest, indexed, length, color);
 }
-
-void ConvertBGRA8888ToRGBA8888(u32 *dst, const u32 *src, const u32 numPixels);
-void ConvertRGBA8888ToRGBA5551(u16 *dst, const u32 *src, const u32 numPixels);
-void ConvertBGRA8888ToRGBA5551(u16 *dst, const u32 *src, const u32 numPixels);

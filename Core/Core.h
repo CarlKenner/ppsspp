@@ -42,8 +42,8 @@ bool Core_IsInactive();
 void Core_WaitInactive();
 void Core_WaitInactive(int milliseconds);
 
-void UpdateScreenScale(int width, int height);
+bool UpdateScreenScale(int width, int height, bool smallWindow);
 
 // Don't run the core when minimized etc.
 void Core_NotifyWindowHidden(bool hidden);
-
+void Core_NotifyActivity();

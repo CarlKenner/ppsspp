@@ -27,8 +27,9 @@
 #endif
 
 using namespace ArmGen;
+using namespace ArmJitConstants;
 
-ArmRegCache::ArmRegCache(MIPSState *mips, MIPSComp::ArmJitOptions *options) : mips_(mips), options_(options) {
+ArmRegCache::ArmRegCache(MIPSState *mips, MIPSComp::JitState *js, MIPSComp::JitOptions *jo) : mips_(mips), js_(js), jo_(jo) {
 }
 
 void ArmRegCache::Init(ARMXEmitter *emitter) {
@@ -55,7 +56,7 @@ const ARMReg *ArmRegCache::GetMIPSAllocationOrder(int &count) {
 	// R8 is used to preserve flags in nasty branches.
 	// R9 and upwards are reserved for jit basics.
 	// R14 (LR) is used as a scratch reg (overwritten on calls/return.)
-	if (options_->downcountInRegister) {
+	if (jo_->downcountInRegister) {
 		static const ARMReg allocationOrder[] = {
 			R1, R2, R3, R4, R5, R6, R12,
 		};
@@ -104,6 +105,10 @@ bool ArmRegCache::IsMappedAsPointer(MIPSGPReg mipsReg) {
 	return mr[mipsReg].loc == ML_ARMREG_AS_PTR;
 }
 
+bool ArmRegCache::IsMapped(MIPSGPReg mipsReg) {
+	return mr[mipsReg].loc == ML_ARMREG;
+}
+
 void ArmRegCache::SetRegImm(ARMReg reg, u32 imm) {
 	// If we can do it with a simple Operand2, let's do that.
 	Operand2 op2;
@@ -144,7 +149,7 @@ void ArmRegCache::SetRegImm(ARMReg reg, u32 imm) {
 
 void ArmRegCache::MapRegTo(ARMReg reg, MIPSGPReg mipsReg, int mapFlags) {
 	ar[reg].isDirty = (mapFlags & MAP_DIRTY) ? true : false;
-	if (!(mapFlags & MAP_NOINIT)) {
+	if ((mapFlags & MAP_NOINIT) != MAP_NOINIT) {
 		if (mipsReg == MIPS_REG_ZERO) {
 			// If we get a request to load the zero register, at least we won't spend
 			// time on a memory access...
@@ -177,42 +182,33 @@ void ArmRegCache::MapRegTo(ARMReg reg, MIPSGPReg mipsReg, int mapFlags) {
 			}
 		}
 	} else {
-		if (mipsReg == MIPS_REG_ZERO) {
-			// This way, if we SetImm() it, we'll keep it.
-			mr[mipsReg].loc = ML_ARMREG_IMM;
-			mr[mipsReg].imm = 0;
-		} else {
-			mr[mipsReg].loc = ML_ARMREG;
-		}
+		mr[mipsReg].loc = ML_ARMREG;
 	}
 	ar[reg].mipsReg = mipsReg;
 	mr[mipsReg].reg = reg;
 }
 
-ARMReg ArmRegCache::FindBestToSpill(bool unusedOnly) {
+ARMReg ArmRegCache::FindBestToSpill(bool unusedOnly, bool *clobbered) {
 	int allocCount;
 	const ARMReg *allocOrder = GetMIPSAllocationOrder(allocCount);
 
-	static const int UNUSED_LOOKAHEAD_OPS = 3;
+	static const int UNUSED_LOOKAHEAD_OPS = 30;
 
+	*clobbered = false;
 	for (int i = 0; i < allocCount; i++) {
 		ARMReg reg = allocOrder[i];
 		if (ar[reg].mipsReg != MIPS_REG_INVALID && mr[ar[reg].mipsReg].spillLock)
 			continue;
 
-		if (unusedOnly) {
-			bool unused = true;
-			for (int ahead = 1; ahead <= UNUSED_LOOKAHEAD_OPS; ++ahead) {
-				MIPSOpcode laterOp = Memory::Read_Instruction(compilerPC_ + ahead * sizeof(u32));
-				// If read, it might need to be mapped again.  If output, it might not need to be stored.
-				if (MIPSAnalyst::ReadsFromGPReg(laterOp, ar[reg].mipsReg) || MIPSAnalyst::GetOutGPReg(laterOp) == ar[reg].mipsReg) {
-					unused = false;
-				}
-			}
+		// Awesome, a clobbered reg.  Let's use it.
+		if (MIPSAnalyst::IsRegisterClobbered(ar[reg].mipsReg, compilerPC_, UNUSED_LOOKAHEAD_OPS)) {
+			*clobbered = true;
+			return reg;
+		}
 
-			if (!unused) {
-				continue;
-			}
+		// Not awesome.  A used reg.  Let's try to avoid spilling.
+		if (unusedOnly && MIPSAnalyst::IsRegisterUsed(ar[reg].mipsReg, compilerPC_, UNUSED_LOOKAHEAD_OPS)) {
+			continue;
 		}
 
 		return reg;
@@ -243,7 +239,7 @@ ARMReg ArmRegCache::MapReg(MIPSGPReg mipsReg, int mapFlags) {
 		// add or subtract stuff to it. Later we could allow such things but for now
 		// let's just convert back to a register value by reloading from the backing storage.
 		ARMReg armReg = mr[mipsReg].reg;
-		if (!(mapFlags & MAP_NOINIT)) {
+		if ((mapFlags & MAP_NOINIT) != MAP_NOINIT) {
 			emit_->LDR(armReg, CTXREG, GetMipsRegOffset(mipsReg));
 		}
 		mr[mipsReg].loc = ML_ARMREG;
@@ -286,18 +282,24 @@ allocate:
 	// Still nothing. Let's spill a reg and goto 10.
 	// TODO: Use age or something to choose which register to spill?
 	// TODO: Spill dirty regs first? or opposite?
-	ARMReg bestToSpill = FindBestToSpill(true);
+	bool clobbered;
+	ARMReg bestToSpill = FindBestToSpill(true, &clobbered);
 	if (bestToSpill == INVALID_REG) {
-		bestToSpill = FindBestToSpill(false);
+		bestToSpill = FindBestToSpill(false, &clobbered);
 	}
 
 	if (bestToSpill != INVALID_REG) {
 		// ERROR_LOG(JIT, "Out of registers at PC %08x - spills register %i.", mips_->pc, bestToSpill);
-		FlushArmReg(bestToSpill);
+		// TODO: Broken somehow in Dante's Inferno, but most games work.  Bad flags in MIPSTables somewhere?
+		if (clobbered) {
+			DiscardR(ar[bestToSpill].mipsReg);
+		} else {
+			FlushArmReg(bestToSpill);
+		}
 		goto allocate;
 	}
 
-	// Uh oh, we have all them spilllocked....
+	// Uh oh, we have all of them spilllocked....
 	ERROR_LOG_REPORT(JIT, "Out of spillable registers at PC %08x!!!", mips_->pc);
 	return INVALID_REG;
 }
@@ -312,7 +314,7 @@ void ArmRegCache::MapInIn(MIPSGPReg rd, MIPSGPReg rs) {
 void ArmRegCache::MapDirtyIn(MIPSGPReg rd, MIPSGPReg rs, bool avoidLoad) {
 	SpillLock(rd, rs);
 	bool load = !avoidLoad || rd == rs;
-	MapReg(rd, MAP_DIRTY | (load ? 0 : MAP_NOINIT));
+	MapReg(rd, load ? MAP_DIRTY : MAP_NOINIT);
 	MapReg(rs);
 	ReleaseSpillLocks();
 }
@@ -320,7 +322,7 @@ void ArmRegCache::MapDirtyIn(MIPSGPReg rd, MIPSGPReg rs, bool avoidLoad) {
 void ArmRegCache::MapDirtyInIn(MIPSGPReg rd, MIPSGPReg rs, MIPSGPReg rt, bool avoidLoad) {
 	SpillLock(rd, rs, rt);
 	bool load = !avoidLoad || (rd == rs || rd == rt);
-	MapReg(rd, MAP_DIRTY | (load ? 0 : MAP_NOINIT));
+	MapReg(rd, load ? MAP_DIRTY : MAP_NOINIT);
 	MapReg(rt);
 	MapReg(rs);
 	ReleaseSpillLocks();
@@ -330,8 +332,8 @@ void ArmRegCache::MapDirtyDirtyIn(MIPSGPReg rd1, MIPSGPReg rd2, MIPSGPReg rs, bo
 	SpillLock(rd1, rd2, rs);
 	bool load1 = !avoidLoad || rd1 == rs;
 	bool load2 = !avoidLoad || rd2 == rs;
-	MapReg(rd1, MAP_DIRTY | (load1 ? 0 : MAP_NOINIT));
-	MapReg(rd2, MAP_DIRTY | (load2 ? 0 : MAP_NOINIT));
+	MapReg(rd1, load1 ? MAP_DIRTY : MAP_NOINIT);
+	MapReg(rd2, load2 ? MAP_DIRTY : MAP_NOINIT);
 	MapReg(rs);
 	ReleaseSpillLocks();
 }
@@ -340,8 +342,8 @@ void ArmRegCache::MapDirtyDirtyInIn(MIPSGPReg rd1, MIPSGPReg rd2, MIPSGPReg rs, 
 	SpillLock(rd1, rd2, rs, rt);
 	bool load1 = !avoidLoad || (rd1 == rs || rd1 == rt);
 	bool load2 = !avoidLoad || (rd2 == rs || rd2 == rt);
-	MapReg(rd1, MAP_DIRTY | (load1 ? 0 : MAP_NOINIT));
-	MapReg(rd2, MAP_DIRTY | (load2 ? 0 : MAP_NOINIT));
+	MapReg(rd1, load1 ? MAP_DIRTY : MAP_NOINIT);
+	MapReg(rd2, load2 ? MAP_DIRTY : MAP_NOINIT);
 	MapReg(rt);
 	MapReg(rs);
 	ReleaseSpillLocks();
@@ -357,7 +359,7 @@ void ArmRegCache::FlushArmReg(ARMReg r) {
 	}
 	if (ar[r].mipsReg != MIPS_REG_INVALID) {
 		auto &mreg = mr[ar[r].mipsReg];
-		if (mreg.loc == ML_ARMREG_IMM) {
+		if (mreg.loc == ML_ARMREG_IMM || ar[r].mipsReg == MIPS_REG_ZERO) {
 			// We know its immedate value, no need to STR now.
 			mreg.loc = ML_IMM;
 			mreg.reg = INVALID_REG;
@@ -380,6 +382,14 @@ void ArmRegCache::DiscardR(MIPSGPReg mipsReg) {
 		ar[armReg].isDirty = false;
 		ar[armReg].mipsReg = MIPS_REG_INVALID;
 		mr[mipsReg].reg = INVALID_REG;
+		if (mipsReg == MIPS_REG_ZERO) {
+			mr[mipsReg].loc = ML_IMM;
+		} else {
+			mr[mipsReg].loc = ML_MEM;
+		}
+		mr[mipsReg].imm = 0;
+	}
+	if (prevLoc == ML_IMM && mipsReg != MIPS_REG_ZERO) {
 		mr[mipsReg].loc = ML_MEM;
 		mr[mipsReg].imm = 0;
 	}
@@ -425,7 +435,11 @@ void ArmRegCache::FlushR(MIPSGPReg r) {
 		ERROR_LOG_REPORT(JIT, "FlushR: MipsReg %d with invalid location %d", r, mr[r].loc);
 		break;
 	}
-	mr[r].loc = ML_MEM;
+	if (r == MIPS_REG_ZERO) {
+		mr[r].loc = ML_IMM;
+	} else {
+		mr[r].loc = ML_MEM;
+	}
 	mr[r].reg = INVALID_REG;
 	mr[r].imm = 0;
 }
@@ -533,8 +547,10 @@ void ArmRegCache::FlushAll() {
 }
 
 void ArmRegCache::SetImm(MIPSGPReg r, u32 immVal) {
-	if (r == MIPS_REG_ZERO && immVal != 0)
-		ERROR_LOG(JIT, "Trying to set immediate %08x to r0", immVal);
+	if (r == MIPS_REG_ZERO && immVal != 0) {
+		ERROR_LOG_REPORT(JIT, "Trying to set immediate %08x to r0 at %08x", immVal, compilerPC_);
+		return;
+	}
 
 	if (mr[r].loc == ML_ARMREG_IMM && mr[r].imm == immVal) {
 		// Already have that value, let's keep it in the reg.

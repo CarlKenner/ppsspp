@@ -15,7 +15,9 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#if defined(_WIN32) && !defined(_XBOX)
+#if defined(SDL)
+#include <SDL_keyboard.h>
+#elif defined(_WIN32) && !defined(_XBOX)
 #include <windows.h>
 #endif
 #include <set>
@@ -43,6 +45,8 @@ struct DefMappingStruct {
 
 KeyMapping g_controllerMap;
 std::set<std::string> g_seenPads;
+
+bool g_swapped_keys = false;
 
 static const DefMappingStruct defaultQwertyKeyboardKeyMap[] = {
 	{CTRL_SQUARE, NKCODE_A},
@@ -290,22 +294,27 @@ static void KeyCodesFromPspButton(int btn, std::vector<keycode_t> *keycodes) {
 	}
 }
 
-void UpdateConfirmCancelKeys() {
-	std::vector<keycode_t> confirmKeys, cancelKeys;
-	std::vector<keycode_t> tabLeft, tabRight;
+void UpdateNativeMenuKeys() {
+	std::vector<KeyDef> confirmKeys, cancelKeys;
+	std::vector<KeyDef> tabLeft, tabRight;
+	std::vector<KeyDef> upKeys, downKeys, leftKeys, rightKeys;
 
 	int confirmKey = g_Config.iButtonPreference == PSP_SYSTEMPARAM_BUTTON_CROSS ? CTRL_CROSS : CTRL_CIRCLE;
 	int cancelKey = g_Config.iButtonPreference == PSP_SYSTEMPARAM_BUTTON_CROSS ? CTRL_CIRCLE : CTRL_CROSS;
 
-	KeyCodesFromPspButton(confirmKey, &confirmKeys);
-	KeyCodesFromPspButton(cancelKey, &cancelKeys);
-	KeyCodesFromPspButton(CTRL_LTRIGGER, &tabLeft);
-	KeyCodesFromPspButton(CTRL_RTRIGGER, &tabRight);
+	KeyFromPspButton(confirmKey, &confirmKeys);
+	KeyFromPspButton(cancelKey, &cancelKeys);
+	KeyFromPspButton(CTRL_LTRIGGER, &tabLeft);
+	KeyFromPspButton(CTRL_RTRIGGER, &tabRight);
+	KeyFromPspButton(CTRL_UP, &upKeys);
+	KeyFromPspButton(CTRL_DOWN, &downKeys);
+	KeyFromPspButton(CTRL_LEFT, &leftKeys);
+	KeyFromPspButton(CTRL_RIGHT, &rightKeys);
 
 	// Push several hard-coded keys before submitting to native.
-	const keycode_t hardcodedConfirmKeys[] = {
-		NKCODE_SPACE,
-		NKCODE_ENTER,
+	const KeyDef hardcodedConfirmKeys[] = {
+		KeyDef(DEVICE_ID_KEYBOARD, NKCODE_SPACE),
+		KeyDef(DEVICE_ID_KEYBOARD, NKCODE_ENTER),
 	};
 
 	// If they're not already bound, add them in.
@@ -314,9 +323,9 @@ void UpdateConfirmCancelKeys() {
 			confirmKeys.push_back(hardcodedConfirmKeys[i]);
 	}
 
-	const keycode_t hardcodedCancelKeys[] = {
-		NKCODE_ESCAPE,
-		NKCODE_BACK,
+	const KeyDef hardcodedCancelKeys[] = {
+		KeyDef(DEVICE_ID_KEYBOARD, NKCODE_ESCAPE),
+		KeyDef(DEVICE_ID_ANY, NKCODE_BACK),
 	};
 
 	for (size_t i = 0; i < ARRAY_SIZE(hardcodedCancelKeys); i++) {
@@ -324,6 +333,7 @@ void UpdateConfirmCancelKeys() {
 			cancelKeys.push_back(hardcodedCancelKeys[i]);
 	}
 
+	SetDPadKeys(upKeys, downKeys, leftKeys, rightKeys);
 	SetConfirmCancelKeys(confirmKeys, cancelKeys);
 	SetTabLeftRightKeys(tabLeft, tabRight);
 }
@@ -343,7 +353,16 @@ void SetDefaultKeyMap(DefaultMaps dmap, bool replace) {
 		{
 			bool azerty = false;
 			bool qwertz = false;
-#if defined(_WIN32) && !defined(_XBOX)
+#if defined(SDL)
+			char q, w, y;
+			q = SDL_GetKeyFromScancode(SDL_SCANCODE_Q);
+			w = SDL_GetKeyFromScancode(SDL_SCANCODE_W);
+			y = SDL_GetKeyFromScancode(SDL_SCANCODE_Y);
+			if (q == 'a' && w == 'z' && y == 'y')
+				azerty = true;
+			else if (q == 'q' && w == 'w' && y == 'z')
+				qwertz = true;
+#elif defined(_WIN32) && !defined(_XBOX)
 			HKL localeId = GetKeyboardLayout(0);
 			// TODO: Is this list complete enough?
 			switch ((int)localeId & 0xFFFF) {
@@ -377,6 +396,7 @@ void SetDefaultKeyMap(DefaultMaps dmap, bool replace) {
 	case DEFAULT_MAPPING_BLACKBERRY_QWERTY:
 		SetDefaultKeyMap(DEVICE_ID_KEYBOARD, defaultBlackberryQWERTYKeyMap, ARRAY_SIZE(defaultBlackberryQWERTYKeyMap), replace);
 		replace = false;
+		// Intentional fallthrough.
 	case DEFAULT_MAPPING_PAD:
 		SetDefaultKeyMap(DEVICE_ID_PAD_0, defaultPadMap, ARRAY_SIZE(defaultPadMap), replace);
 		break;
@@ -388,7 +408,7 @@ void SetDefaultKeyMap(DefaultMaps dmap, bool replace) {
 		break;
 	}
 
-	UpdateConfirmCancelKeys();
+	UpdateNativeMenuKeys();
 }
 
 const KeyMap_IntStrPair key_names[] = {
@@ -650,6 +670,9 @@ const KeyMap_IntStrPair psp_button_names[] = {
 	{VIRTKEY_AXIS_RIGHT_Y_MIN, "RightAn.Down"},
 	{VIRTKEY_AXIS_RIGHT_X_MIN, "RightAn.Left"},
 	{VIRTKEY_AXIS_RIGHT_X_MAX, "RightAn.Right"},
+
+	{VIRTKEY_AXIS_SWAP, "AxisSwap"},
+	{VIRTKEY_DEVMENU, "DevMenu"},
 };
 
 const int AXIS_BIND_NKCODE_START = 4000;
@@ -715,12 +738,36 @@ KeyDef AxisDef(int deviceId, int axisId, int direction) {
 	return KeyDef(deviceId, TranslateKeyCodeFromAxis(axisId, direction));
 }
 
+int CheckAxisSwap(int btn) {
+	if (g_swapped_keys) {
+		switch (btn) {
+			case CTRL_UP: btn = VIRTKEY_AXIS_Y_MAX;
+			break;
+			case VIRTKEY_AXIS_Y_MAX: btn = CTRL_UP;
+			break;
+			case CTRL_DOWN: btn = VIRTKEY_AXIS_Y_MIN;
+			break;
+			case VIRTKEY_AXIS_Y_MIN: btn = CTRL_DOWN;
+			break;
+			case CTRL_LEFT: btn = VIRTKEY_AXIS_X_MIN;
+			break;
+			case VIRTKEY_AXIS_X_MIN: btn = CTRL_LEFT;
+			break;
+			case CTRL_RIGHT: btn = VIRTKEY_AXIS_X_MAX;
+			break;
+			case VIRTKEY_AXIS_X_MAX: btn = CTRL_RIGHT;
+			break;
+		}
+	}
+	return btn;
+}
+
 static bool FindKeyMapping(int deviceId, int key, std::vector<int> *psp_button) {
 	// Brute force, let's optimize later
 	for (auto iter = g_controllerMap.begin(); iter != g_controllerMap.end(); ++iter) {
 		for (auto iter2 = iter->second.begin(); iter2 != iter->second.end(); ++iter2) {
 			if (*iter2 == KeyDef(deviceId, key)) {
-				psp_button->push_back(iter->first);
+				psp_button->push_back(CheckAxisSwap(iter->first));
 			}
 		}
 	}
@@ -747,7 +794,7 @@ bool KeyFromPspButton(int btn, std::vector<KeyDef> *keys) {
 
 bool AxisToPspButton(int deviceId, int axisId, int direction, std::vector<int> *pspKeys) {
 	int key = TranslateKeyCodeFromAxis(axisId, direction);
-	return KeyToPspButton(deviceId, key, pspKeys);	
+	return KeyToPspButton(deviceId, key, pspKeys);
 }
 
 bool AxisFromPspButton(int btn, int *deviceId, int *axisId, int *direction) {
@@ -789,7 +836,7 @@ void SetKeyMapping(int btn, KeyDef key, bool replace) {
 		g_controllerMap[btn].push_back(key);
 	}
 
-	UpdateConfirmCancelKeys();
+	UpdateNativeMenuKeys();
 }
 
 void SetAxisMapping(int btn, int deviceId, int axisId, int direction, bool replace) {
@@ -859,7 +906,7 @@ void LoadFromIni(IniFile &file) {
 		}
 	}
 
-	UpdateConfirmCancelKeys();
+	UpdateNativeMenuKeys();
 }
 
 void SaveToIni(IniFile &file) {
@@ -913,11 +960,21 @@ void AutoConfForPad(const std::string &name) {
 	} else {
 		SetDefaultKeyMap(DEFAULT_MAPPING_PAD, true);
 	}
+
+#ifndef MOBILE_DEVICE
+	// Add a couple of convenient keyboard mappings by default, too.
+	g_controllerMap[VIRTKEY_PAUSE].push_back(KeyDef(DEVICE_ID_KEYBOARD, NKCODE_ESCAPE));
+	g_controllerMap[VIRTKEY_UNTHROTTLE].push_back(KeyDef(DEVICE_ID_KEYBOARD, NKCODE_TAB));
+#endif
 }
 
 const std::set<std::string> &GetSeenPads() {
 	return g_seenPads;
 }
 
+// Swap direction buttons and left analog axis
+void SwapAxis() {
+	g_swapped_keys = !g_swapped_keys;
+}
 
 }  // KeyMap

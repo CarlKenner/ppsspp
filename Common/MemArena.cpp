@@ -99,6 +99,8 @@ int ashmem_unpin_region(int fd, size_t offset, size_t len)
 // do not make this "static"
 #ifdef MAEMO
 std::string ram_temp_file = "/home/user/gc_mem.tmp";
+#elif defined(BB)
+std::string ram_temp_file = "/home/root/gc_mem.tmp";
 #else
 std::string ram_temp_file = "/tmp/gc_mem.tmp";
 #endif
@@ -187,7 +189,7 @@ void *MemArena::CreateView(s64 offset, size_t size, void *base)
 // Do not sync memory to underlying file. Linux has this by default.
 #ifdef BLACKBERRY
 		MAP_NOSYNCFILE |
-#elif defined(__FreeBSD__)
+#elif defined(__DragonFly__) || defined(__FreeBSD__)
 		MAP_NOSYNC |
 #endif
 		((base == 0) ? 0 : MAP_FIXED), fd, offset);
@@ -227,7 +229,13 @@ u8* MemArena::Find4GBBase()
 	return reinterpret_cast<u8*>(0x2300000000ULL);
 #endif
 
-#else // 32 bit
+#elif defined(ARM64)
+
+	// Very precarious - mmap cannot return an error when trying to map already used pages.
+	// This makes the Windows approach above unusable on Linux, so we will simply pray...
+	return reinterpret_cast<u8*>(0x2300000000ULL);
+
+#else
 
 #ifdef _WIN32
 	u8* base = (u8*)VirtualAlloc(0, 0x10000000, MEM_RESERVE, PAGE_READWRITE);

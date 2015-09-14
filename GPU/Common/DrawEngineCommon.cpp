@@ -25,7 +25,30 @@
 
 #include <algorithm>
 
-DrawEngineCommon::~DrawEngineCommon() { }
+#define QUAD_INDICES_MAX 65536
+
+DrawEngineCommon::DrawEngineCommon() : dec_(nullptr) {
+	quadIndices_ = new u16[6 * QUAD_INDICES_MAX];
+	decJitCache_ = new VertexDecoderJitCache();
+}
+
+DrawEngineCommon::~DrawEngineCommon() {
+	delete[] quadIndices_;
+	delete decJitCache_;
+	for (auto iter = decoderMap_.begin(); iter != decoderMap_.end(); iter++) {
+		delete iter->second;
+	}
+}
+
+VertexDecoder *DrawEngineCommon::GetVertexDecoder(u32 vtype) {
+	auto iter = decoderMap_.find(vtype);
+	if (iter != decoderMap_.end())
+		return iter->second;
+	VertexDecoder *dec = new VertexDecoder();
+	dec->SetVertexType(vtype, decOptions_, decJitCache_);
+	decoderMap_[vtype] = dec;
+	return dec;
+}
 
 struct Plane {
 	float x, y, z, w;
@@ -43,20 +66,19 @@ static void PlanesFromMatrix(float mtx[16], Plane planes[6]) {
 }
 
 static Vec3f ClipToScreen(const Vec4f& coords) {
-	// TODO: Check for invalid parameters (x2 < x1, etc)
-	float vpx1 = getFloat24(gstate.viewportx1);
-	float vpx2 = getFloat24(gstate.viewportx2);
-	float vpy1 = getFloat24(gstate.viewporty1);
-	float vpy2 = getFloat24(gstate.viewporty2);
-	float vpz1 = getFloat24(gstate.viewportz1);
-	float vpz2 = getFloat24(gstate.viewportz2);
+	float xScale = gstate.getViewportXScale();
+	float xCenter = gstate.getViewportXCenter();
+	float yScale = gstate.getViewportYScale();
+	float yCenter = gstate.getViewportYCenter();
+	float zScale = gstate.getViewportZScale();
+	float zCenter = gstate.getViewportZCenter();
 
-	float retx = coords.x * vpx1 / coords.w + vpx2;
-	float rety = coords.y * vpy1 / coords.w + vpy2;
-	float retz = coords.z * vpz1 / coords.w + vpz2;
+	float x = coords.x * xScale / coords.w + xCenter;
+	float y = coords.y * yScale / coords.w + yCenter;
+	float z = coords.z * zScale / coords.w + zCenter;
 
 	// 16 = 0xFFFF / 4095.9375
-	return Vec3f(retx * 16, rety * 16, retz);
+	return Vec3f(x * 16, y * 16, z);
 }
 
 static Vec3f ScreenToDrawing(const Vec3f& coords) {
@@ -65,6 +87,12 @@ static Vec3f ScreenToDrawing(const Vec3f& coords) {
 	ret.y = (coords.y - gstate.getOffsetY16()) * (1.0f / 16.0f);
 	ret.z = coords.z;
 	return ret;
+}
+
+u32 DrawEngineCommon::NormalizeVertices(u8 *outPtr, u8 *bufPtr, const u8 *inPtr, int lowerBound, int upperBound, u32 vertType) {
+	const u32 vertTypeID = (vertType & 0xFFFFFF) | (gstate.getUVGenMode() << 24);
+	VertexDecoder *dec = GetVertexDecoder(vertTypeID);
+	return DrawEngineCommon::NormalizeVertices(outPtr, bufPtr, inPtr, dec, lowerBound, upperBound, vertType);
 }
 
 // This code is HIGHLY unoptimized!
@@ -144,6 +172,9 @@ bool DrawEngineCommon::GetCurrentSimpleVertices(int count, std::vector<GPUDebugV
 	u16 indexLowerBound = 0;
 	u16 indexUpperBound = count - 1;
 
+	if (!Memory::IsValidAddress(gstate_c.vertexAddr))
+		return false;
+
 	bool savedVertexFullAlpha = gstate_c.vertexFullAlpha;
 
 	if ((gstate.vertType & GE_VTYPE_IDX_MASK) != GE_VTYPE_IDX_NONE) {
@@ -216,8 +247,8 @@ bool DrawEngineCommon::GetCurrentSimpleVertices(int count, std::vector<GPUDebugV
 			Vec3f drawPos = ScreenToDrawing(screenPos);
 
 			if (gstate.vertType & GE_VTYPE_TC_MASK) {
-				vertices[i].u = vert.uv[0];
-				vertices[i].v = vert.uv[1];
+				vertices[i].u = vert.uv[0] * (float)gstate.getTextureWidth(0);
+				vertices[i].v = vert.uv[1] * (float)gstate.getTextureHeight(0);
 			} else {
 				vertices[i].u = 0.0f;
 				vertices[i].v = 0.0f;
@@ -266,7 +297,7 @@ u32 DrawEngineCommon::NormalizeVertices(u8 *outPtr, u8 *bufPtr, const u8 *inPtr,
 	if (!g_Config.bSoftwareSkinning && (vertType & GE_VTYPE_WEIGHT_MASK) != GE_VTYPE_WEIGHT_NONE) {
 		int numBoneWeights = vertTypeGetNumBoneWeights(vertType);
 		for (int i = lowerBound; i <= upperBound; i++) {
-			reader.Goto(i);
+			reader.Goto(i - lowerBound);
 			SimpleVertex &sv = sverts[i];
 			if (vertType & GE_VTYPE_TC_MASK) {
 				reader.ReadUV(sv.uv);
@@ -313,7 +344,7 @@ u32 DrawEngineCommon::NormalizeVertices(u8 *outPtr, u8 *bufPtr, const u8 *inPtr,
 		}
 	} else {
 		for (int i = lowerBound; i <= upperBound; i++) {
-			reader.Goto(i);
+			reader.Goto(i - lowerBound);
 			SimpleVertex &sv = sverts[i];
 			if (vertType & GE_VTYPE_TC_MASK) {
 				reader.ReadUV(sv.uv);

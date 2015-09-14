@@ -8,11 +8,9 @@ include(Settings.pri)
 # CPU
 arm {
 	SOURCES += $$P/Common/ArmCPUDetect.cpp \
-		$$P/Common/ArmEmitter.cpp \
 		$$P/Common/ArmThunk.cpp
-	HEADERS += $$P/Common/ArmEmitter.h
 }
-else {
+else:i86 {
 	SOURCES += $$P/Common/ABI.cpp \
 		$$P/Common/CPUDetect.cpp \
 		$$P/Common/Thunk.cpp \
@@ -23,7 +21,17 @@ else {
 		$$P/Common/x64Analyzer.h \
 		$$P/Common/x64Emitter.h
 }
-HEADERS += $$P/Common/CPUDetect.h
+else:mips: {
+	SOURCES += $$P/Common/MipsCPUDetect.cpp
+}
+else {
+	SOURCES += $$P/Common/FakeCPUDetect.cpp
+}
+SOURCES += $$P/Common/ArmEmitter.cpp \
+	$$P/Common/MipsEmitter.cpp
+HEADERS += $$P/Common/ArmEmitter.h \
+	$$P/Common/MipsEmitter.h \
+	$$P/Common/CPUDetect.h
 
 win32 {
 	SOURCES += $$P/Common/stdafx.cpp
@@ -35,7 +43,10 @@ win32 {
 	HEADERS += $$P/Common/MemArena.h
 }
 
+armv7: SOURCES += $$P/Common/ColorConvNEON.cpp
+
 SOURCES += $$P/Common/ChunkFile.cpp \
+	$$P/Common/ColorConv.cpp \
 	$$P/Common/ConsoleListener.cpp \
 	$$P/Common/FileUtil.cpp \
 	$$P/Common/LogManager.cpp \
@@ -56,8 +67,9 @@ HEADERS += $$P/Common/ChunkFile.h \
 	$$P/Common/MsgHandler.h \
 	$$P/Common/StringUtils.h \
 	$$P/Common/ThreadPools.h \
+	$$P/Common/ThreadSafeList.h \
 	$$P/Common/Timer.h \
 	$$P/Common/Crypto/*.h
 
-INCLUDEPATH += $$P/native
+INCLUDEPATH += $$P/ext/native
 

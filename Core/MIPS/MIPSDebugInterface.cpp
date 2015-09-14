@@ -45,7 +45,7 @@ class MipsExpressionFunctions: public IExpressionFunctions
 public:
 	MipsExpressionFunctions(DebugInterface* cpu): cpu(cpu) { };
 
-	virtual bool parseReference(char* str, uint32& referenceIndex)
+	bool parseReference(char* str, uint32_t& referenceIndex) override
 	{
 		for (int i = 0; i < 32; i++)
 		{
@@ -109,12 +109,12 @@ public:
 		return false;
 	}
 
-	virtual bool parseSymbol(char* str, uint32& symbolValue)
+	bool parseSymbol(char* str, uint32_t& symbolValue) override
 	{
 		return symbolMap.GetLabelValue(str,symbolValue); 
 	}
 
-	virtual uint32 getReferenceValue(uint32 referenceIndex)
+	uint32_t getReferenceValue(uint32_t referenceIndex) override
 	{
 		if (referenceIndex < 32)
 			return cpu->GetRegValue(0, referenceIndex);
@@ -131,14 +131,14 @@ public:
 		return -1;
 	}
 
-	virtual ExpressionType getReferenceType(uint32 referenceIndex) {
+	ExpressionType getReferenceType(uint32_t referenceIndex) override {
 		if (referenceIndex & REF_INDEX_IS_FLOAT) {
 			return EXPR_TYPE_FLOAT;
 		}
 		return EXPR_TYPE_UINT;
 	}
 	
-	virtual bool getMemoryValue(uint32 address, int size, uint32& dest, char* error)
+	bool getMemoryValue(uint32_t address, int size, uint32_t& dest, char* error) override
 	{
 		switch (size)
 		{

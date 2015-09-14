@@ -93,7 +93,7 @@ enum
 
 	SCRATCHPAD_SIZE = 0x00004000,
 
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	// This wraparound should work for PSP too.
 	MEMVIEW32_MASK  = 0x3FFFFFFF,
 #endif
@@ -141,7 +141,7 @@ MemoryInitedLock Lock();
 // used by JIT to read instructions. Does not resolve replacements.
 Opcode Read_Opcode_JIT(const u32 _Address);
 // used by JIT. Reads in the "Locked cache" mode
-void Write_Opcode_JIT(const u32 _Address, const Opcode _Value);
+void Write_Opcode_JIT(const u32 _Address, const Opcode& _Value);
 
 // Should be used by analyzers, disassemblers etc. Does resolve replacements.
 Opcode Read_Instruction(const u32 _Address, bool resolveReplacements = false);
@@ -157,7 +157,7 @@ u64 Read_U64(const u32 _Address);
 #endif
 
 inline u8* GetPointerUnchecked(const u32 address) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	return (u8 *)(base + (address & MEMVIEW32_MASK));
 #else
 	return (u8 *)(base + address);
@@ -175,7 +175,7 @@ void WriteUnchecked_U32(const u32 _Data, const u32 _Address);
 #else
 
 inline u32 ReadUnchecked_U32(const u32 address) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	return *(u32_le *)(base + (address & MEMVIEW32_MASK));
 #else
 	return *(u32_le *)(base + address);
@@ -183,7 +183,7 @@ inline u32 ReadUnchecked_U32(const u32 address) {
 }
 
 inline u16 ReadUnchecked_U16(const u32 address) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	return *(u16_le *)(base + (address & MEMVIEW32_MASK));
 #else
 	return *(u16_le *)(base + address);
@@ -191,7 +191,7 @@ inline u16 ReadUnchecked_U16(const u32 address) {
 }
 
 inline u8 ReadUnchecked_U8(const u32 address) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	return (*(u8 *)(base + (address & MEMVIEW32_MASK))); 
 #else
 	return (*(u8 *)(base + address));
@@ -199,7 +199,7 @@ inline u8 ReadUnchecked_U8(const u32 address) {
 }
 
 inline void WriteUnchecked_U32(u32 data, u32 address) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	*(u32_le *)(base + (address & MEMVIEW32_MASK)) = data;
 #else
 	*(u32_le *)(base + address) = data;
@@ -207,7 +207,7 @@ inline void WriteUnchecked_U32(u32 data, u32 address) {
 }
 
 inline void WriteUnchecked_U16(u16 data, u32 address) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	*(u16_le *)(base + (address & MEMVIEW32_MASK)) = data;
 #else
 	*(u16_le *)(base + address) = data;
@@ -215,7 +215,7 @@ inline void WriteUnchecked_U16(u16 data, u32 address) {
 }
 
 inline void WriteUnchecked_U8(u8 data, u32 address) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	(*(u8 *)(base + (address & MEMVIEW32_MASK))) = data;
 #else
 	(*(u8 *)(base + address)) = data;
@@ -257,64 +257,61 @@ inline const char* GetCharPointer(const u32 address) {
 	return (const char *)GetPointer(address);
 }
 
-void Memset(const u32 _Address, const u8 _Data, const u32 _iLength);
-
-inline void Memcpy(const u32 to_address, const void *from_data, const u32 len)
-{
-	u8 *to = GetPointer(to_address);
-	if (to) {
-		memcpy(to, from_data, len);
-	}
-	// if not, GetPointer will log.
-}
-
-inline void Memcpy(void *to_data, const u32 from_address, const u32 len)
-{
-	const u8 *from = GetPointer(from_address);
-	if (from) {
-		memcpy(to_data, from, len);
-	}
-	// if not, GetPointer will log.
-}
-
 inline void MemcpyUnchecked(void *to_data, const u32 from_address, const u32 len)
 {
 	memcpy(to_data, GetPointerUnchecked(from_address), len);
 }
 
+inline void MemcpyUnchecked(const u32 to_address, const void *from_data, const u32 len)
+{
+	memcpy(GetPointerUnchecked(to_address), from_data, len);
+}
+
+inline void MemcpyUnchecked(const u32 to_address, const u32 from_address, const u32 len)
+{
+	MemcpyUnchecked(GetPointer(to_address), from_address, len);
+}
+
 inline bool IsValidAddress(const u32 address) {
 	if ((address & 0x3E000000) == 0x08000000) {
 		return true;
+	} else if ((address & 0x3F800000) == 0x04000000) {
+		return true;
+	} else if ((address & 0xBFFF0000) == 0x00010000) {
+		return true;
+	} else if ((address & 0x3F000000) >= 0x08000000 && (address & 0x3F000000) < 0x08000000 + g_MemorySize) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+inline u32 ValidSize(const u32 address, const u32 requested_size) {
+	u32 max_size;
+	if ((address & 0x3E000000) == 0x08000000) {
+		max_size = 0x08000000 + g_MemorySize - address;
 	}
 	else if ((address & 0x3F800000) == 0x04000000) {
-		return true;
+		max_size = 0x04800000 - address;
 	}
 	else if ((address & 0xBFFF0000) == 0x00010000) {
-		return true;
+		max_size = 0x00014000 - address;
 	}
 	else if ((address & 0x3F000000) >= 0x08000000 && (address & 0x3F000000) < 0x08000000 + g_MemorySize) {
-		return true;
+		max_size = 0x08000000 + g_MemorySize - address;
+	} else {
+		max_size = 0;
 	}
-	else
-		return false;
+
+	if (requested_size > max_size) {
+		return max_size;
+	}
+	return requested_size;
 }
 
-
-template<class T>
-void ReadStruct(u32 address, T *ptr)
-{
-	size_t sz = sizeof(*ptr);
-	memcpy(ptr, GetPointer(address), sz);
+inline bool IsValidRange(const u32 address, const u32 size) {
+	return IsValidAddress(address) && ValidSize(address, size) == size;
 }
-
-template<class T>
-void WriteStruct(u32 address, T *ptr)
-{
-	size_t sz = sizeof(*ptr);
-	memcpy(GetPointer(address), ptr, sz);
-}
-
-const char *GetAddressName(u32 address);
 
 };
 
@@ -325,7 +322,7 @@ struct PSPPointer
 
 	inline T &operator*() const
 	{
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 		return *(T *)(Memory::base + (ptr & Memory::MEMVIEW32_MASK));
 #else
 		return *(T *)(Memory::base + ptr);
@@ -334,7 +331,7 @@ struct PSPPointer
 
 	inline T &operator[](int i) const
 	{
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 		return *((T *)(Memory::base + (ptr & Memory::MEMVIEW32_MASK)) + i);
 #else
 		return *((T *)(Memory::base + ptr) + i);
@@ -343,7 +340,7 @@ struct PSPPointer
 
 	inline T *operator->() const
 	{
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 		return (T *)(Memory::base + (ptr & Memory::MEMVIEW32_MASK));
 #else
 		return (T *)(Memory::base + ptr);
@@ -412,7 +409,7 @@ struct PSPPointer
 
 	inline operator T*()
 	{
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 		return (T *)(Memory::base + (ptr & Memory::MEMVIEW32_MASK));
 #else
 		return (T *)(Memory::base + ptr);
@@ -421,7 +418,7 @@ struct PSPPointer
 
 	inline operator const T*() const
 	{
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 		return (const T *)(Memory::base + (ptr & Memory::MEMVIEW32_MASK));
 #else
 		return (const T *)(Memory::base + ptr);

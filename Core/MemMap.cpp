@@ -28,7 +28,6 @@
 #include "Core/MemMap.h"
 #include "Core/HDRemaster.h"
 #include "Core/MIPS/MIPS.h"
-#include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/HLE/HLE.h"
 
 #include "Core/Core.h"
@@ -124,7 +123,7 @@ static MemoryView views[] =
 static const int num_views = sizeof(views) / sizeof(MemoryView);
 
 inline static bool CanIgnoreView(const MemoryView &view) {
-#if defined(_M_IX86) || defined(_M_ARM32)
+#ifdef _ARCH_32
 	// Basically, 32-bit platforms can ignore views that are masked out anyway.
 	return (view.flags & MV_MIRROR_PREVIOUS) && (view.virtual_address & ~MEMVIEW32_MASK) != 0;
 #else
@@ -186,7 +185,7 @@ static bool Memory_TryBase(u32 flags) {
 			if (!*view.out_ptr_low)
 				goto bail;
 		}
-#ifdef _M_X64
+#if defined(_ARCH_64)
 		*view.out_ptr = (u8*)g_arena.CreateView(
 			position, view.size, base + view.virtual_address);
 #else
@@ -406,7 +405,7 @@ MemoryInitedLock Lock()
 	return MemoryInitedLock();
 }
 
-static Opcode Read_Instruction(u32 address, bool resolveReplacements, Opcode inst)
+__forceinline static Opcode Read_Instruction(u32 address, bool resolveReplacements, Opcode inst)
 {
 	if (!MIPS_IS_EMUHACK(inst.encoding)) {
 		return inst;
@@ -481,7 +480,7 @@ Opcode Read_Opcode_JIT(u32 address)
 
 // WARNING! No checks!
 // We assume that _Address is cached
-void Write_Opcode_JIT(const u32 _Address, const Opcode _Value)
+void Write_Opcode_JIT(const u32 _Address, const Opcode& _Value)
 {
 	Memory::WriteUnchecked_U32(_Value.encoding, _Address);
 }
@@ -500,12 +499,6 @@ void Memset(const u32 _Address, const u8 _iValue, const u32 _iLength)
 #ifndef MOBILE_DEVICE
 	CBreakPoints::ExecMemCheck(_Address, true, _iLength, currentMIPS->pc);
 #endif
-}
-
-const char *GetAddressName(u32 address)
-{
-	// TODO, follow GetPointer
-	return "[mem]";
 }
 
 } // namespace

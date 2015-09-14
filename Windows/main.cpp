@@ -26,12 +26,14 @@
 #include "file/vfs.h"
 #include "file/zip_read.h"
 #include "base/NativeApp.h"
+#include "profiler/profiler.h"
 #include "thread/threadutil.h"
 #include "util/text/utf8.h"
 
 #include "Core/Config.h"
 #include "Core/SaveState.h"
 #include "Windows/EmuThread.h"
+#include "Windows/DSoundStream.h"
 #include "ext/disarm.h"
 
 #include "Common/LogManager.h"
@@ -71,9 +73,6 @@ CMemoryDlg *memoryWindow[MAX_CPUCOUNT] = {0};
 static std::string langRegion;
 static std::string osName;
 static std::string gpuDriverVersion;
-
-typedef BOOL(WINAPI *isProcessDPIAwareProc)();
-typedef BOOL(WINAPI *setProcessDPIAwareProc)();
 
 void LaunchBrowser(const char *url) {
 	ShellExecute(NULL, L"open", ConvertUTF8ToWString(url).c_str(), NULL, NULL, SW_SHOWNORMAL);
@@ -115,6 +114,7 @@ std::string GetWindowsVersion() {
 	const bool IsWindows7SP1 = DoesVersionMatchWindows(6, 1, 1, 0);
 	const bool IsWindows8 = DoesVersionMatchWindows(6, 2);
 	const bool IsWindows8_1 = DoesVersionMatchWindows(6, 3);
+	const bool IsWindows10 = DoesVersionMatchWindows(10, 0);
 
 	if (IsWindowsXPSP2)
 		return "Microsoft Windows XP, Service Pack 2";
@@ -142,6 +142,9 @@ std::string GetWindowsVersion() {
 
 	if (IsWindows8_1)
 		return "Microsoft Windows 8.1";
+
+	if (IsWindows10)
+		return "Microsoft Windows 10";
 
 	return "Unsupported version of Microsoft Windows.";
 }
@@ -186,6 +189,7 @@ std::string GetVideoCardDriverVersion() {
 	hr = pIWbemLocator->ConnectServer(bstrServer, NULL, NULL, 0L, 0L, NULL,	NULL, &pIWbemServices);
 	if (FAILED(hr)) {
 		pIWbemLocator->Release();
+		SysFreeString(bstrServer);
 		CoUninitialize();
 		return retvalue;
 	}
@@ -205,7 +209,7 @@ std::string GetVideoCardDriverVersion() {
 		hr = pEnum->Next(WBEM_INFINITE, 1, &pObj, &uReturned);
 	}
 
-	if (uReturned && !FAILED(hr)) {
+	if (!FAILED(hr) && uReturned) {
 		hr = pObj->Get(L"DriverVersion", 0, &var, NULL, NULL);
 		if (SUCCEEDED(hr)) {
 			char str[MAX_PATH];
@@ -257,8 +261,18 @@ std::string System_GetProperty(SystemProperty prop) {
 	}
 }
 
+// Ugly!
+extern WindowsAudioBackend *winAudioBackend;
+
 int System_GetPropertyInt(SystemProperty prop) {
-  return -1;
+	switch (prop) {
+	case SYSPROP_AUDIO_SAMPLE_RATE:
+		return winAudioBackend ? winAudioBackend->GetSampleRate() : -1;
+	case SYSPROP_DISPLAY_REFRESH_RATE:
+		return 60000;
+	default:
+		return -1;
+	}
 }
 
 void System_SendMessage(const char *command, const char *parameter) {
@@ -278,25 +292,24 @@ void System_SendMessage(const char *command, const char *parameter) {
 	}
 }
 
-void EnableCrashingOnCrashes() { 
-  typedef BOOL (WINAPI *tGetPolicy)(LPDWORD lpFlags); 
-  typedef BOOL (WINAPI *tSetPolicy)(DWORD dwFlags); 
-  const DWORD EXCEPTION_SWALLOWING = 0x1;
+void EnableCrashingOnCrashes() {
+	typedef BOOL (WINAPI *tGetPolicy)(LPDWORD lpFlags);
+	typedef BOOL (WINAPI *tSetPolicy)(DWORD dwFlags);
+	const DWORD EXCEPTION_SWALLOWING = 0x1;
 
-  HMODULE kernel32 = LoadLibrary(L"kernel32.dll");
-  tGetPolicy pGetPolicy = (tGetPolicy)GetProcAddress(kernel32, 
-    "GetProcessUserModeExceptionPolicy"); 
-  tSetPolicy pSetPolicy = (tSetPolicy)GetProcAddress(kernel32, 
-    "SetProcessUserModeExceptionPolicy"); 
-  if (pGetPolicy && pSetPolicy) 
-  { 
-    DWORD dwFlags; 
-    if (pGetPolicy(&dwFlags)) 
-    { 
-      // Turn off the filter 
-      pSetPolicy(dwFlags & ~EXCEPTION_SWALLOWING); 
-    } 
-  } 
+	HMODULE kernel32 = LoadLibrary(L"kernel32.dll");
+	tGetPolicy pGetPolicy = (tGetPolicy)GetProcAddress(kernel32,
+		"GetProcessUserModeExceptionPolicy");
+	tSetPolicy pSetPolicy = (tSetPolicy)GetProcAddress(kernel32,
+		"SetProcessUserModeExceptionPolicy");
+	if (pGetPolicy && pSetPolicy) {
+		DWORD dwFlags;
+		if (pGetPolicy(&dwFlags)) {
+			// Turn off the filter.
+			pSetPolicy(dwFlags & ~EXCEPTION_SWALLOWING);
+		}
+	}
+	FreeLibrary(kernel32);
 }
 
 bool System_InputBoxGetString(const char *title, const char *defaultValue, char *outValue, size_t outLength)
@@ -319,22 +332,6 @@ bool System_InputBoxGetWString(const wchar_t *title, const std::wstring &default
 	}
 }
 
-void MakePPSSPPDPIAware()
-{
-	isProcessDPIAwareProc isDPIAwareProc = (isProcessDPIAwareProc) 
-		GetProcAddress(GetModuleHandle(TEXT("User32.dll")), "IsProcessDPIAware");
-
-	setProcessDPIAwareProc setDPIAwareProc = (setProcessDPIAwareProc)
-		GetProcAddress(GetModuleHandle(TEXT("User32.dll")), "SetProcessDPIAware");
-
-	// If we're not DPI aware, make it so, but do it safely.
-	if (isDPIAwareProc != nullptr) {
-		if (!isDPIAwareProc()) {
-			if (setDPIAwareProc != nullptr)
-				setDPIAwareProc();
-		}
-	}
-}
 
 std::vector<std::wstring> GetWideCmdLine() {
 	wchar_t **wargv;
@@ -350,9 +347,9 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 {
 	setCurrentThreadName("Main");
 
-	// Windows Vista and above: alert Windows that PPSSPP is DPI aware,
-	// so that we don't flicker in fullscreen on some PCs.
-	MakePPSSPPDPIAware();
+	CoInitializeEx(NULL, COINIT_MULTITHREADED);
+
+	PROFILE_INIT();
 
 	// FMA3 support in the 2013 CRT is broken on Vista and Windows 7 RTM (fixed in SP1). Just disable it.
 #ifdef _M_X64
@@ -416,9 +413,9 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 			}
 
 			if (wideArgs[i].find(controlsOption) != std::wstring::npos && wideArgs[i].size() > controlsOption.size()) {
-				const std::wstring tempWide = wideArgs[i].substr(configOption.size());
+				const std::wstring tempWide = wideArgs[i].substr(controlsOption.size());
 				const std::string tempStr = ConvertWStringToUTF8(tempWide);
-				std::strncpy(configFilename, tempStr.c_str(), MAX_PATH);
+				std::strncpy(controlsConfigFilename, tempStr.c_str(), MAX_PATH);
 			}
 		}
 	}
@@ -627,5 +624,6 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	if (g_Config.bRestartRequired) {
 		W32Util::ExitAndRestart();
 	}
+	CoUninitialize();
 	return 0;
 }

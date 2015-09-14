@@ -15,8 +15,7 @@
 // Official SVN repository and contact information can be found at
 // http://code.google.com/p/dolphin-emu/
 
-#ifndef _FILEUTIL_H_
-#define _FILEUTIL_H_
+#pragma once
 
 #include <fstream>
 #include <cstdio>
@@ -58,7 +57,7 @@ bool Exists(const std::string &filename);
 bool IsDirectory(const std::string &filename);
 
 // Returns struct with modification date of file
-tm GetModifTime(const std::string &filename);
+bool GetModifTime(const std::string &filename, tm &return_time);
 
 // Returns the size of filename (64bit)
 u64 GetSize(const std::string &filename);
@@ -168,10 +167,10 @@ public:
 
 	// clear error state
 	void Clear() {
-    m_good = true;
+		m_good = true;
 #undef clearerr
-    std::clearerr(m_file);
-  }
+		std::clearerr(m_file);
+	}
 
 private:
 	IOFile& operator=(const IOFile&) /*= delete*/;
@@ -181,5 +180,3 @@ private:
 };
 
 }  // namespace
-
-#endif

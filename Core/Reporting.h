@@ -65,6 +65,12 @@ namespace Reporting
 	// Report a message string, using the format string as a key.
 	void ReportMessage(const char *message, ...);
 
+	// The same, but with a preformatted version (message is still the key.)
+	void ReportMessageFormatted(const char *message, const char *formatted);
+
+	// Report the compatibility of the current game / configuration.
+	void ReportCompatibility(const char *compat, int graphics, int speed, int gameplay);
+
 	// Returns true if that identifier has not been logged yet.
 	bool ShouldLogOnce(const char *identifier);
 }

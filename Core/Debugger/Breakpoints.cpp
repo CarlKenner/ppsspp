@@ -20,7 +20,7 @@
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/Host.h"
 #include "Core/MIPS/MIPSAnalyst.h"
-#include "Core/MIPS/JitCommon/JitCommon.h"
+#include "Core/MIPS/JitCommon/NativeJit.h"
 #include "Core/CoreTiming.h"
 #include <cstdio>
 
@@ -148,6 +148,18 @@ bool CBreakPoints::IsTempBreakPoint(u32 addr)
 {
 	size_t bp = FindBreakpoint(addr, true, true);
 	return bp != INVALID_BREAKPOINT;
+}
+
+bool CBreakPoints::RangeContainsBreakPoint(u32 addr, u32 size)
+{
+	const u32 end = addr + size;
+	for (const auto &bp : breakPoints_)
+	{
+		if (bp.addr >= addr && bp.addr < end)
+			return true;
+	}
+
+	return false;
 }
 
 void CBreakPoints::AddBreakPoint(u32 addr, bool temp)

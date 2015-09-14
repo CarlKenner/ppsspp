@@ -91,7 +91,9 @@ enum VoiceType {
 // It compresses 28 16-bit samples into a block of 16 bytes.
 class VagDecoder {
 public:
-	VagDecoder() : data_(0), read_(0), end_(true) {}
+	VagDecoder() : data_(0), read_(0), end_(true) {
+		memset(samples, 0, sizeof(samples));
+	}
 	void Start(u32 dataPtr, u32 vagSize, bool loopEnabled);
 
 	void GetSamples(s16 *outSamples, int numSamples);
@@ -126,7 +128,7 @@ public:
 	~SasAtrac3() { if (sampleQueue) delete sampleQueue; }
 	int setContext(u32 context);
 	int getNextSamples(s16* outbuf, int wantedSamples);
-	int addStreamData(u8* buf, u32 addbytes);
+	int addStreamData(u32 bufPtr, u32 addbytes);
 	void DoState(PointerWrap &p);
 
 private:
@@ -202,6 +204,8 @@ struct SasVoice {
 			vagSize(0),
 			pcmAddr(0),
 			pcmSize(0),
+			pcmIndex(0),
+			pcmLoopPos(0),
 			sampleRate(44100),
 			sampleFrac(0),
 			pitch(PSP_SAS_PITCH_BASE),
@@ -222,7 +226,7 @@ struct SasVoice {
 	void DoState(PointerWrap &p);
 
 	void ReadSamples(s16 *output, int numSamples);
-	bool HaveSamplesEnded();
+	bool HaveSamplesEnded() const;
 
 	bool playing;
 	bool paused;  // a voice can be playing AND paused. In that case, it won't play.

@@ -1,4 +1,4 @@
-VERSION = 0.9.9.1
+VERSION = 1.0.1.0
 DEFINES += USING_QT_UI USE_FFMPEG
 
 # Global specific
@@ -12,7 +12,8 @@ RCC_DIR = $$CONFIG_DIR/.rcc/$$TARGET
 QMAKE_CLEAN += -r $$OBJECTS_DIR $$MOC_DIR $$UI_DIR $$RCC_DIR
 
 P = $$_PRO_FILE_PWD_/..
-INCLUDEPATH += $$P/ext/zlib $$P/Common
+INCLUDEPATH += $$P/Common
+win32|contains(QT_CONFIG, no-zlib): INCLUDEPATH += $$P/ext/zlib
 
 # Work out arch name
 include(Platform/ArchDetection.pri)
@@ -58,10 +59,10 @@ contains(QT_CONFIG, opengles.) {
 	DEFINES += USING_GLES2
 	# How else do we know if the environment prefers windows?
 	!equals(PLATFORM_NAME, "linux")|android|maemo {
-		DEFINES += MOBILE_DEVICE
 		CONFIG += mobile_platform
 	}
 }
+mobile_platform: DEFINES += MOBILE_DEVICE
 
 # Handle flags for both C and C++
 QMAKE_CFLAGS += $$QMAKE_ALLFLAGS

@@ -19,6 +19,7 @@
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
 #include "GPU/Common/TextureDecoder.h"
+#include "Common/ColorConv.h"
 #include "Core/Config.h"
 #include "Core/Debugger/Breakpoints.h"
 #include "Core/Host.h"
@@ -28,11 +29,10 @@
 #include "Core/MIPS/MIPS.h"
 #include "Core/Reporting.h"
 #include "gfx/gl_common.h"
-#include "gfx_es2/gl_state.h"
+#include "profiler/profiler.h"
 
 #include "GPU/Software/SoftGpu.h"
 #include "GPU/Software/TransformUnit.h"
-#include "GPU/Software/Colors.h"
 #include "GPU/Software/Rasterizer.h"
 
 static GLuint temp_texture = 0;
@@ -50,7 +50,7 @@ u32 clut[4096];
 
 // TODO: This one lives in GPU/GLES/Framebuffer.cpp, move it to somewhere common.
 void CenterRect(float *x, float *y, float *w, float *h,
-								float origW, float origH, float frameW, float frameH);
+								float origW, float origH, float frameW, float frameH, int rotation);
 
 GLuint OpenGL_CompileProgram(const char* vertexShader, const char* fragmentShader)
 {
@@ -186,9 +186,9 @@ void SoftGPU::CopyToCurrentFboFromDisplayRam(int srcwidth, int srcheight)
 	float dstwidth = (float)PSP_CoreParameter().pixelWidth;
 	float dstheight = (float)PSP_CoreParameter().pixelHeight;
 
-	glstate.blend.disable();
-	glstate.viewport.set(0, 0, dstwidth, dstheight);
-	glstate.scissorTest.disable();
+	glDisable(GL_BLEND);
+	glViewport(0, 0, dstwidth, dstheight);
+	glDisable(GL_SCISSOR_TEST);
 
 	glBindTexture(GL_TEXTURE_2D, temp_texture);
 
@@ -214,19 +214,19 @@ void SoftGPU::CopyToCurrentFboFromDisplayRam(int srcwidth, int srcheight)
 			switch (displayFormat_) {
 			case GE_FORMAT_565:
 				for (int x = 0; x < srcwidth; ++x) {
-					buf_line[x] = DecodeRGB565(fb_line[x]);
+					buf_line[x] = RGB565ToRGBA8888(fb_line[x]);
 				}
 				break;
 
 			case GE_FORMAT_5551:
 				for (int x = 0; x < srcwidth; ++x) {
-					buf_line[x] = DecodeRGBA5551(fb_line[x]);
+					buf_line[x] = RGBA5551ToRGBA8888(fb_line[x]);
 				}
 				break;
 
 			case GE_FORMAT_4444:
 				for (int x = 0; x < srcwidth; ++x) {
-					buf_line[x] = DecodeRGBA4444(fb_line[x]);
+					buf_line[x] = RGBA4444ToRGBA8888(fb_line[x]);
 				}
 				break;
 
@@ -247,7 +247,7 @@ void SoftGPU::CopyToCurrentFboFromDisplayRam(int srcwidth, int srcheight)
 	glUseProgram(program);
 
 	float x, y, w, h;
-	CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, dstwidth, dstheight);
+	CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, dstwidth, dstheight, ROTATION_LOCKED_HORIZONTAL);
 
 	x /= 0.5f * dstwidth;
 	y /= 0.5f * dstheight;
@@ -274,6 +274,8 @@ void SoftGPU::CopyToCurrentFboFromDisplayRam(int srcwidth, int srcheight)
 		{texvert_u, 1}
 	};
 
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 	glVertexAttribPointer(attr_pos, 2, GL_FLOAT, GL_FALSE, 0, verts);
 	glVertexAttribPointer(attr_tex, 2, GL_FLOAT, GL_FALSE, 0, texverts);
 	glEnableVertexAttribArray(attr_pos);
@@ -311,6 +313,7 @@ void SoftGPU::ProcessEvent(GPUEvent ev) {
 }
 
 void SoftGPU::FastRunLoop(DisplayList &list) {
+	PROFILE_THIS_SCOPE("soft_runloop");
 	for (; downcount > 0; --downcount) {
 		u32 op = Memory::ReadUnchecked_U32(list.pc);
 		u32 cmd = op >> 24;
@@ -372,23 +375,6 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 		{
 			u32 count = data & 0xFFFF;
 			u32 type = data >> 16;
-			static const char* types[7] = {
-				"POINTS=0,",
-				"LINES=1,",
-				"LINE_STRIP=2,",
-				"TRIANGLES=3,",
-				"TRIANGLE_STRIP=4,",
-				"TRIANGLE_FAN=5,",
-				"RECTANGLES=6,",
-			};
-
-			/*
-			if (type == GE_PRIM_POINTS || type == GE_PRIM_LINES || type == GE_PRIM_LINE_STRIP) {
-				ERROR_LOG_REPORT(G3D, "Software: DL DrawPrim type: %s count: %i vaddr= %08x, iaddr= %08x", type<7 ? types[type] : "INVALID", count, gstate_c.vertexAddr, gstate_c.indexAddr);
-				cyclesExecuted += EstimatePerVertexCost() * count;
-				break;
-			}
-			*/
 
 			if (!Memory::IsValidAddress(gstate_c.vertexAddr)) {
 				ERROR_LOG_REPORT(G3D, "Software: Bad vertex address %08x!", gstate_c.vertexAddr);
@@ -424,7 +410,6 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 		}
 		break;
 
-	// The arrow and other rotary items in Puzbob are bezier patches, strangely enough.
 	case GE_CMD_BEZIER:
 		{
 			int bz_ucount = data & 0xFF;
@@ -461,7 +446,7 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 			}
 
 			if (!(gstate_c.skipDrawReason & SKIPDRAW_SKIPFRAME)) {
-				TransformUnit::SubmitSpline(control_points, indices, sp_ucount, sp_vcount, sp_utype, sp_vtype, gstate.getPatchPrimitiveType(), gstate.vertType);
+				//TransformUnit::SubmitSpline(control_points, indices, sp_ucount, sp_vcount, sp_utype, sp_vtype, gstate.getPatchPrimitiveType(), gstate.vertType);
 			}
 			framebufferDirty_ = true;
 			DEBUG_LOG(G3D,"DL DRAW SPLINE: %i x %i, %i x %i", sp_ucount, sp_vcount, sp_utype, sp_vtype);
@@ -574,12 +559,16 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 			u32 clutTotalBytes = gstate.getClutLoadBytes();
 
 			if (Memory::IsValidAddress(clutAddr)) {
-				Memory::MemcpyUnchecked(clut, clutAddr, clutTotalBytes);
-			// TODO: Do something to the CLUT with 0?
+				u32 validSize = Memory::ValidSize(clutAddr, clutTotalBytes);
+				Memory::MemcpyUnchecked(clut, clutAddr, validSize);
+				if (validSize < clutTotalBytes) {
+					// Zero out the parts that were outside valid memory.
+					memset((u8 *)clut + validSize, 0x00, clutTotalBytes - validSize);
+				}
 			} else if (clutAddr != 0) {
-				// TODO: Does this make any sense?
-				ERROR_LOG_REPORT_ONCE(badClut, G3D, "Software: Invalid CLUT address, filling with garbage instead of crashing");
-				memset(clut, 0xFF, clutTotalBytes);
+				// Some invalid addresses trigger a crash, others fill with zero.  We always fill zero.
+				DEBUG_LOG(G3D, "Software: Invalid CLUT address, filling with garbage instead of crashing");
+				memset(clut, 0x00, clutTotalBytes);
 			}
 		}
 		break;
@@ -768,7 +757,7 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 		break;
 
 	case GE_CMD_WORLDMATRIXNUMBER:
-		gstate.worldmtxnum = data&0xF;
+		gstate.worldmtxnum = data & 0xF;
 		break;
 
 	case GE_CMD_WORLDMATRIXDATA:
@@ -782,7 +771,7 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 		break;
 
 	case GE_CMD_VIEWMATRIXNUMBER:
-		gstate.viewmtxnum = data&0xF;
+		gstate.viewmtxnum = data & 0xF;
 		break;
 
 	case GE_CMD_VIEWMATRIXDATA:
@@ -796,7 +785,7 @@ void SoftGPU::ExecuteOp(u32 op, u32 diff)
 		break;
 
 	case GE_CMD_PROJMATRIXNUMBER:
-		gstate.projmtxnum = data&0xF;
+		gstate.projmtxnum = data & 0xF;
 		break;
 
 	case GE_CMD_PROJMATRIXDATA:

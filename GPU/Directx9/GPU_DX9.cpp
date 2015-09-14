@@ -19,8 +19,9 @@
 
 #include "Common/ChunkFile.h"
 #include "base/logging.h"
+#include "profiler/profiler.h"
 #include "Core/Debugger/Breakpoints.h"
-#include "Core/MemMap.h"
+#include "Core/MemMapHelpers.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/Host.h"
 #include "Core/Config.h"
@@ -403,6 +404,7 @@ DIRECTX9_GPU::DIRECTX9_GPU()
 	framebufferManager_.SetShaderManager(shaderManager_);
 	framebufferManager_.SetTransformDrawEngine(&transformDraw_);
 	textureCache_.SetFramebufferManager(&framebufferManager_);
+	textureCache_.SetDepalShaderCache(&depalShaderCache_);
 	textureCache_.SetShaderManager(shaderManager_);
 
 	// Sanity check gstate
@@ -438,6 +440,10 @@ DIRECTX9_GPU::DIRECTX9_GPU()
 	UpdateCmdInfo();
 
 	BuildReportingInfo();
+
+	// Some of our defaults are different from hw defaults, let's assert them.
+	// We restore each frame anyway, but here is convenient for tests.
+	dxstate.Restore();
 }
 
 void DIRECTX9_GPU::UpdateCmdInfo() {
@@ -503,6 +509,11 @@ void DIRECTX9_GPU::BeginFrame() {
 	ScheduleEvent(GPU_EVENT_BEGIN_FRAME);
 }
 
+void DIRECTX9_GPU::ReapplyGfxStateInternal() {
+	DX9::dxstate.Restore();
+	GPUCommon::ReapplyGfxStateInternal();
+}
+
 void DIRECTX9_GPU::BeginFrameInternal() {
 	if (resized_) {
 		UpdateCmdInfo();
@@ -521,7 +532,7 @@ void DIRECTX9_GPU::BeginFrameInternal() {
 
 	textureCache_.StartFrame();
 	transformDraw_.DecimateTrackedVertexArrays();
-	// depalShaderCache_.Decimate();
+	depalShaderCache_.Decimate();
 	// fragmentTestCache_.Decimate();
 
 	if (dumpNextFrame_) {
@@ -543,7 +554,7 @@ void DIRECTX9_GPU::SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferForma
 
 bool DIRECTX9_GPU::FramebufferDirty() {
 	// FIXME: Workaround for displaylists sometimes hanging unprocessed.  Not yet sure of the cause.
-	if (g_Config.bSeparateCPUThread) {
+	if (ThreadEnabled()) {
 		// FIXME: Workaround for displaylists sometimes hanging unprocessed.  Not yet sure of the cause.
 		ScheduleEvent(GPU_EVENT_PROCESS_QUEUE);
 		// Allow it to process fully before deciding if it's dirty.
@@ -559,7 +570,7 @@ bool DIRECTX9_GPU::FramebufferDirty() {
 }
 bool DIRECTX9_GPU::FramebufferReallyDirty() {
 	// FIXME: Workaround for displaylists sometimes hanging unprocessed.  Not yet sure of the cause.
-	if (g_Config.bSeparateCPUThread) {
+	if (ThreadEnabled()) {
 		// FIXME: Workaround for displaylists sometimes hanging unprocessed.  Not yet sure of the cause.
 		ScheduleEvent(GPU_EVENT_PROCESS_QUEUE);
 		// Allow it to process fully before deciding if it's dirty.
@@ -596,6 +607,7 @@ void DIRECTX9_GPU::CopyDisplayToOutputInternal() {
 
 // Maybe should write this in ASM...
 void DIRECTX9_GPU::FastRunLoop(DisplayList &list) {
+	PROFILE_THIS_SCOPE("gpuloop");
 	const CommandInfo *cmdInfo = cmdInfo_;
 	for (; downcount > 0; --downcount) {
 		// We know that display list PCs have the upper nibble == 0 - no need to mask the pointer
@@ -614,6 +626,11 @@ void DIRECTX9_GPU::FastRunLoop(DisplayList &list) {
 		}
 		list.pc += 4;
 	}
+}
+
+void DIRECTX9_GPU::FinishDeferred() {
+	// This finishes reading any vertex data that is pending.
+	transformDraw_.FinishDeferred();
 }
 
 void DIRECTX9_GPU::ProcessEvent(GPUEvent ev) {
@@ -697,6 +714,12 @@ void DIRECTX9_GPU::Execute_VertexTypeSkinning(u32 op, u32 diff) {
 		gstate.vertType ^= diff;
 		if (diff & (GE_VTYPE_TC_MASK | GE_VTYPE_THROUGH_MASK))
 			shaderManager_->DirtyUniform(DIRTY_UVSCALEOFFSET);
+		// In this case, we may be doing weights and morphs.
+		// Update any bone matrix uniforms so it uses them correctly.
+		if ((op & GE_VTYPE_MORPHCOUNT_MASK) != 0) {
+			shaderManager_->DirtyUniform(gstate_c.deferredVertTypeDirty);
+			gstate_c.deferredVertTypeDirty = 0;
+		}
 	}
 }
 
@@ -723,7 +746,7 @@ void DIRECTX9_GPU::Execute_Prim(u32 op, u32 diff) {
 	}
 
 	// This also make skipping drawing very effective.
-	framebufferManager_.SetRenderFrameBuffer();
+	framebufferManager_.SetRenderFrameBuffer(gstate_c.framebufChanged, gstate_c.skipDrawReason);
 	if (gstate_c.skipDrawReason & (SKIPDRAW_SKIPFRAME | SKIPDRAW_NON_DISPLAYED_FB)) {
 		transformDraw_.SetupVertexDecoder(gstate.vertType);
 		// Rough estimate, not sure what's correct.
@@ -732,19 +755,22 @@ void DIRECTX9_GPU::Execute_Prim(u32 op, u32 diff) {
 		return;
 	}
 
-	if (!Memory::IsValidAddress(gstate_c.vertexAddr)) {
-		ERROR_LOG_REPORT(G3D, "Bad vertex address %08x!", gstate_c.vertexAddr);
+	u32 vertexAddr = gstate_c.vertexAddr;
+	if (!Memory::IsValidAddress(vertexAddr)) {
+		ERROR_LOG_REPORT(G3D, "Bad vertex address %08x!", vertexAddr);
 		return;
 	}
 
-	void *verts = Memory::GetPointerUnchecked(gstate_c.vertexAddr);
+	void *verts = Memory::GetPointerUnchecked(vertexAddr);
 	void *inds = 0;
-	if ((gstate.vertType & GE_VTYPE_IDX_MASK) != GE_VTYPE_IDX_NONE) {
-		if (!Memory::IsValidAddress(gstate_c.indexAddr)) {
-			ERROR_LOG_REPORT(G3D, "Bad index address %08x!", gstate_c.indexAddr);
+	u32 vertexType = gstate.vertType;
+	if ((vertexType & GE_VTYPE_IDX_MASK) != GE_VTYPE_IDX_NONE) {
+		u32 indexAddr = gstate_c.indexAddr;
+		if (!Memory::IsValidAddress(indexAddr)) {
+			ERROR_LOG_REPORT(G3D, "Bad index address %08x!", indexAddr);
 			return;
 		}
-		inds = Memory::GetPointerUnchecked(gstate_c.indexAddr);
+		inds = Memory::GetPointerUnchecked(indexAddr);
 	}
 
 #ifndef MOBILE_DEVICE
@@ -754,18 +780,18 @@ void DIRECTX9_GPU::Execute_Prim(u32 op, u32 diff) {
 #endif
 
 	int bytesRead = 0;
-	transformDraw_.SubmitPrim(verts, inds, prim, count, gstate.vertType, &bytesRead);
+	transformDraw_.SubmitPrim(verts, inds, prim, count, vertexType, &bytesRead);
 
-	int vertexCost = transformDraw_.EstimatePerVertexCost();
-	gpuStats.vertexGPUCycles += vertexCost * count;
-	cyclesExecuted += vertexCost * count;
+	int vertexCost = transformDraw_.EstimatePerVertexCost() * count;
+	gpuStats.vertexGPUCycles += vertexCost;
+	cyclesExecuted += vertexCost;
 
 	// After drawing, we advance the vertexAddr (when non indexed) or indexAddr (when indexed).
 	// Some games rely on this, they don't bother reloading VADDR and IADDR.
 	// The VADDR/IADDR registers are NOT updated.
 	if (inds) {
 		int indexSize = 1;
-		if ((gstate.vertType & GE_VTYPE_IDX_MASK) == GE_VTYPE_IDX_16BIT)
+		if ((vertexType & GE_VTYPE_IDX_MASK) == GE_VTYPE_IDX_16BIT)
 			indexSize = 2;
 		gstate_c.indexAddr += count * indexSize;
 	} else {
@@ -775,7 +801,7 @@ void DIRECTX9_GPU::Execute_Prim(u32 op, u32 diff) {
 
 void DIRECTX9_GPU::Execute_Bezier(u32 op, u32 diff) {
 	// This also make skipping drawing very effective.
-	framebufferManager_.SetRenderFrameBuffer();
+	framebufferManager_.SetRenderFrameBuffer(gstate_c.framebufChanged, gstate_c.skipDrawReason);
 	if (gstate_c.skipDrawReason & (SKIPDRAW_SKIPFRAME | SKIPDRAW_NON_DISPLAYED_FB)) {
 		// TODO: Should this eat some cycles?  Probably yes.  Not sure if important.
 		return;
@@ -796,7 +822,7 @@ void DIRECTX9_GPU::Execute_Bezier(u32 op, u32 diff) {
 		indices = Memory::GetPointerUnchecked(gstate_c.indexAddr);
 	}
 
-	if (gstate.getPatchPrimitiveType() != GE_PATCHPRIM_TRIANGLES) {
+	if (gstate.getPatchPrimitiveType() == GE_PATCHPRIM_UNKNOWN) {
 		ERROR_LOG_REPORT(G3D, "Unsupported patch primitive %x", gstate.getPatchPrimitiveType());
 		return;
 	}
@@ -811,12 +837,14 @@ void DIRECTX9_GPU::Execute_Bezier(u32 op, u32 diff) {
 	GEPatchPrimType patchPrim = gstate.getPatchPrimitiveType();
 	int bz_ucount = op & 0xFF;
 	int bz_vcount = (op >> 8) & 0xFF;
-	transformDraw_.SubmitBezier(control_points, indices, bz_ucount, bz_vcount, patchPrim, gstate.vertType);
+	bool computeNormals = gstate.isLightingEnabled();
+	bool patchFacing = gstate.patchfacing & 1;
+	transformDraw_.SubmitBezier(control_points, indices, gstate.getPatchDivisionU(), gstate.getPatchDivisionV(), bz_ucount, bz_vcount, patchPrim, computeNormals, patchFacing, gstate.vertType);
 }
 
 void DIRECTX9_GPU::Execute_Spline(u32 op, u32 diff) {
 	// This also make skipping drawing very effective.
-	framebufferManager_.SetRenderFrameBuffer();
+	framebufferManager_.SetRenderFrameBuffer(gstate_c.framebufChanged, gstate_c.skipDrawReason);
 	if (gstate_c.skipDrawReason & (SKIPDRAW_SKIPFRAME | SKIPDRAW_NON_DISPLAYED_FB)) {
 		// TODO: Should this eat some cycles?  Probably yes.  Not sure if important.
 		return;
@@ -837,7 +865,7 @@ void DIRECTX9_GPU::Execute_Spline(u32 op, u32 diff) {
 		indices = Memory::GetPointerUnchecked(gstate_c.indexAddr);
 	}
 
-	if (gstate.getPatchPrimitiveType() != GE_PATCHPRIM_TRIANGLES) {
+	if (gstate.getPatchPrimitiveType() == GE_PATCHPRIM_UNKNOWN) {
 		ERROR_LOG_REPORT(G3D, "Unsupported patch primitive %x", gstate.getPatchPrimitiveType());
 		return;
 	}
@@ -854,7 +882,10 @@ void DIRECTX9_GPU::Execute_Spline(u32 op, u32 diff) {
 	int sp_utype = (op >> 16) & 0x3;
 	int sp_vtype = (op >> 18) & 0x3;
 	GEPatchPrimType patchPrim = gstate.getPatchPrimitiveType();
-	transformDraw_.SubmitSpline(control_points, indices, sp_ucount, sp_vcount, sp_utype, sp_vtype, patchPrim, gstate.vertType);
+	bool computeNormals = gstate.isLightingEnabled();
+	bool patchFacing = gstate.patchfacing & 1;
+	u32 vertType = gstate.vertType;
+	transformDraw_.SubmitSpline(control_points, indices, gstate.getPatchDivisionU(), gstate.getPatchDivisionV(), sp_ucount, sp_vcount, sp_utype, sp_vtype, patchPrim, computeNormals, patchFacing, vertType);
 }
 
 void DIRECTX9_GPU::Execute_ViewportType(u32 op, u32 diff) {
@@ -863,7 +894,7 @@ void DIRECTX9_GPU::Execute_ViewportType(u32 op, u32 diff) {
 	switch (op >> 24) {
 	case GE_CMD_VIEWPORTZ1:
 	case GE_CMD_VIEWPORTZ2:
-		shaderManager_->DirtyUniform(DIRTY_PROJMATRIX);
+		shaderManager_->DirtyUniform(DIRTY_PROJMATRIX | DIRTY_DEPTHRANGE);
 		break;
 	}
 }
@@ -995,7 +1026,7 @@ void DIRECTX9_GPU::Execute_TexLevel(u32 op, u32 diff) {
 
 void DIRECTX9_GPU::Execute_LoadClut(u32 op, u32 diff) {
 	gstate_c.textureChanged |= TEXCHANGE_PARAMSONLY;
-	textureCache_.LoadClut();
+	textureCache_.LoadClut(gstate.getClutAddress(), gstate.getClutLoadBytes());
 	// This could be used to "dirty" textures with clut.
 }
 
@@ -1067,7 +1098,7 @@ void DIRECTX9_GPU::Execute_ColorRef(u32 op, u32 diff) {
 
 void DIRECTX9_GPU::Execute_WorldMtxNum(u32 op, u32 diff) {
 	// This is almost always followed by GE_CMD_WORLDMATRIXDATA.
-	const u32_le *src = (const u32_le *)Memory::GetPointer(currentList->pc + 4);
+	const u32_le *src = (const u32_le *)Memory::GetPointerUnchecked(currentList->pc + 4);
 	u32 *dst = (u32 *)(gstate.worldMatrix + (op & 0xF));
 	const int end = 12 - (op & 0xF);
 	int i = 0;
@@ -1107,7 +1138,7 @@ void DIRECTX9_GPU::Execute_WorldMtxData(u32 op, u32 diff) {
 
 void DIRECTX9_GPU::Execute_ViewMtxNum(u32 op, u32 diff) {
 	// This is almost always followed by GE_CMD_VIEWMATRIXDATA.
-	const u32_le *src = (const u32_le *)Memory::GetPointer(currentList->pc + 4);
+	const u32_le *src = (const u32_le *)Memory::GetPointerUnchecked(currentList->pc + 4);
 	u32 *dst = (u32 *)(gstate.viewMatrix + (op & 0xF));
 	const int end = 12 - (op & 0xF);
 	int i = 0;
@@ -1147,7 +1178,7 @@ void DIRECTX9_GPU::Execute_ViewMtxData(u32 op, u32 diff) {
 
 void DIRECTX9_GPU::Execute_ProjMtxNum(u32 op, u32 diff) {
 	// This is almost always followed by GE_CMD_PROJMATRIXDATA.
-	const u32_le *src = (const u32_le *)Memory::GetPointer(currentList->pc + 4);
+	const u32_le *src = (const u32_le *)Memory::GetPointerUnchecked(currentList->pc + 4);
 	u32 *dst = (u32 *)(gstate.projMatrix + (op & 0xF));
 	const int end = 16 - (op & 0xF);
 	int i = 0;
@@ -1187,7 +1218,7 @@ void DIRECTX9_GPU::Execute_ProjMtxData(u32 op, u32 diff) {
 
 void DIRECTX9_GPU::Execute_TgenMtxNum(u32 op, u32 diff) {
 	// This is almost always followed by GE_CMD_TGENMATRIXDATA.
-	const u32_le *src = (const u32_le *)Memory::GetPointer(currentList->pc + 4);
+	const u32_le *src = (const u32_le *)Memory::GetPointerUnchecked(currentList->pc + 4);
 	u32 *dst = (u32 *)(gstate.tgenMatrix + (op & 0xF));
 	const int end = 12 - (op & 0xF);
 	int i = 0;
@@ -1227,7 +1258,7 @@ void DIRECTX9_GPU::Execute_TgenMtxData(u32 op, u32 diff) {
 
 void DIRECTX9_GPU::Execute_BoneMtxNum(u32 op, u32 diff) {
 	// This is almost always followed by GE_CMD_BONEMATRIXDATA.
-	const u32_le *src = (const u32_le *)Memory::GetPointer(currentList->pc + 4);
+	const u32_le *src = (const u32_le *)Memory::GetPointerUnchecked(currentList->pc + 4);
 	u32 *dst = (u32 *)(gstate.boneMatrix + (op & 0x7F));
 	const int end = 12 * 8 - (op & 0x7F);
 	int i = 0;
@@ -1256,6 +1287,11 @@ void DIRECTX9_GPU::Execute_BoneMtxNum(u32 op, u32 diff) {
 				break;
 			}
 		}
+
+		const int numPlusCount = (op & 0x7F) + i;
+		for (int num = op & 0x7F; num < numPlusCount; num += 12) {
+			gstate_c.deferredVertTypeDirty |= DIRTY_BONEMATRIX0 << (num / 12);
+		}
 	}
 
 	const int count = i;
@@ -1275,6 +1311,8 @@ void DIRECTX9_GPU::Execute_BoneMtxData(u32 op, u32 diff) {
 		if (!g_Config.bSoftwareSkinning || (gstate.vertType & GE_VTYPE_MORPHCOUNT_MASK) != 0) {
 			Flush();
 			shaderManager_->DirtyUniform(DIRTY_BONEMATRIX0 << (num / 12));
+		} else {
+			gstate_c.deferredVertTypeDirty |= DIRTY_BONEMATRIX0 << (num / 12);
 		}
 		((u32 *)gstate.boneMatrix)[num] = newVal;
 	}
@@ -1448,8 +1486,8 @@ void DIRECTX9_GPU::Execute_Generic(u32 op, u32 diff) {
 		{
 			// TODO: Here we should check if the transfer overlaps a framebuffer or any textures,
 			// and take appropriate action. This is a block transfer between RAM and VRAM, or vice versa.
-			// Can we skip this on SkipDraw?
-			DoBlockTransfer();
+			// Can we skip this entirely on SkipDraw? It skips some things internally.
+			DoBlockTransfer(gstate_c.skipDrawReason);
 
 			// Fixes Gran Turismo's funky text issue, since it overwrites the current texture.
 			gstate_c.textureChanged = TEXCHANGE_UPDATED;
@@ -1658,13 +1696,7 @@ void DIRECTX9_GPU::Execute_Generic(u32 op, u32 diff) {
 		break;
 
 	case GE_CMD_LOGICOPENABLE:
-		if (data != 0)
-			ERROR_LOG_REPORT_ONCE(logicOpEnable, G3D, "Unsupported logic op enabled: %x", data);
-		break;
-
 	case GE_CMD_LOGICOP:
-		if (data != 0)
-			ERROR_LOG_REPORT_ONCE(logicOp, G3D, "Unsupported logic op: %06x", data);
 		break;
 
 	case GE_CMD_ANTIALIASENABLE:
@@ -1769,15 +1801,18 @@ void DIRECTX9_GPU::Execute_Generic(u32 op, u32 diff) {
 }
 
 void DIRECTX9_GPU::FastLoadBoneMatrix(u32 target) {
+	const int num = gstate.boneMatrixNumber & 0x7F;
+	const int mtxNum = num / 12;
+	uint32_t uniformsToDirty = DIRTY_BONEMATRIX0 << mtxNum;
+	if ((num - 12 * mtxNum) != 0) {
+		uniformsToDirty |= DIRTY_BONEMATRIX0 << ((mtxNum + 1) & 7);
+	}
+
 	if (!g_Config.bSoftwareSkinning || (gstate.vertType & GE_VTYPE_MORPHCOUNT_MASK) != 0) {
 		Flush();
-		const int num = gstate.boneMatrixNumber & 0x7F;
-		int mtxNum = num / 12;
-		uint32_t uniformsToDirty = DIRTY_BONEMATRIX0 << mtxNum;
-		if ((num - 12 * mtxNum) != 0) {
-			uniformsToDirty |= DIRTY_BONEMATRIX0 << ((mtxNum + 1) & 7);
-		}
 		shaderManager_->DirtyUniform(uniformsToDirty);
+	} else {
+		gstate_c.deferredVertTypeDirty |= uniformsToDirty;
 	}
 	gstate.FastLoadBoneMatrix(target);
 }
@@ -1790,7 +1825,7 @@ void DIRECTX9_GPU::UpdateStats() {
 	gpuStats.numFBOs = (int)framebufferManager_.NumVFBs();
 }
 
-void DIRECTX9_GPU::DoBlockTransfer() {
+void DIRECTX9_GPU::DoBlockTransfer(u32 skipDrawReason) {
 	// TODO: This is used a lot to copy data around between render targets and textures,
 	// and also to quickly load textures from RAM to VRAM. So we should do checks like the following:
 	//  * Does dstBasePtr point to an existing texture? If so maybe reload it immediately.
@@ -1844,7 +1879,7 @@ void DIRECTX9_GPU::DoBlockTransfer() {
 	}
 
 	// Tell the framebuffer manager to take action if possible. If it does the entire thing, let's just return.
-	if (!framebufferManager_.NotifyBlockTransferBefore(dstBasePtr, dstStride, dstX, dstY, srcBasePtr, srcStride, srcX, srcY, width, height, bpp)) {
+	if (!framebufferManager_.NotifyBlockTransferBefore(dstBasePtr, dstStride, dstX, dstY, srcBasePtr, srcStride, srcX, srcY, width, height, bpp, skipDrawReason)) {
 		// Do the copy! (Hm, if we detect a drawn video frame (see below) then we could maybe skip this?)
 		// Can use GetPointerUnchecked because we checked the addresses above. We could also avoid them
 		// entirely by walking a couple of pointers...
@@ -1867,7 +1902,7 @@ void DIRECTX9_GPU::DoBlockTransfer() {
 		}
 
 		textureCache_.Invalidate(dstBasePtr + (dstY * dstStride + dstX) * bpp, height * dstStride * bpp, GPU_INVALIDATE_HINT);
-		framebufferManager_.NotifyBlockTransferAfter(dstBasePtr, dstStride, dstX, dstY, srcBasePtr, srcStride, srcX, srcY, width, height, bpp);
+		framebufferManager_.NotifyBlockTransferAfter(dstBasePtr, dstStride, dstX, dstY, srcBasePtr, srcStride, srcX, srcY, width, height, bpp, skipDrawReason);
 	}
 
 	CBreakPoints::ExecMemCheck(srcBasePtr + (srcY * srcStride + srcX) * bpp, false, height * srcStride * bpp, currentMIPS->pc);
@@ -1901,18 +1936,18 @@ void DIRECTX9_GPU::InvalidateCacheInternal(u32 addr, int size, GPUInvalidationTy
 }
 
 void DIRECTX9_GPU::PerformMemoryCopyInternal(u32 dest, u32 src, int size) {
-	if (!framebufferManager_.NotifyFramebufferCopy(src, dest, size)) {
+	if (!framebufferManager_.NotifyFramebufferCopy(src, dest, size, false, gstate_c.skipDrawReason)) {
 		// We use a little hack for Download/Upload using a VRAM mirror.
 		// Since they're identical we don't need to copy.
 		if (!Memory::IsVRAMAddress(dest) || (dest ^ 0x00400000) != src) {
-			Memory::Memcpy(dest, Memory::GetPointer(src), size);
+			Memory::Memcpy(dest, src, size);
 		}
 	}
 	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
 }
 
 void DIRECTX9_GPU::PerformMemorySetInternal(u32 dest, u8 v, int size) {
-	if (!framebufferManager_.NotifyFramebufferCopy(dest, dest, size, true)) {
+	if (!framebufferManager_.NotifyFramebufferCopy(dest, dest, size, true, gstate_c.skipDrawReason)) {
 		InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
 	}
 }
@@ -2130,6 +2165,10 @@ bool DIRECTX9_GPU::GetCurrentTexture(GPUDebugBuffer &buffer, int level) {
 	}
 
 	return success;
+}
+
+bool DIRECTX9_GPU::GetDisplayFramebuffer(GPUDebugBuffer &buffer) {
+	return FramebufferManagerDX9::GetDisplayFramebuffer(buffer);
 }
 
 bool DIRECTX9_GPU::GetCurrentSimpleVertices(int count, std::vector<GPUDebugVertex> &vertices, std::vector<u16> &indices) {

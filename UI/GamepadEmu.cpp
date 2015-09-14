@@ -52,6 +52,9 @@ void MultiTouchButton::Touch(const TouchInput &input) {
 	if (input.flags & TOUCH_UP) {
 		pointerDownMask_ &= ~(1 << input.id);
 	}
+	if (input.flags & TOUCH_RELEASE_ALL) {
+		pointerDownMask_ = 0;
+	}
 }
 
 void MultiTouchButton::Draw(UIContext &dc) {
@@ -62,6 +65,7 @@ void MultiTouchButton::Draw(UIContext &dc) {
 		scale *= 2.0f;
 		opacity *= 1.15f;
 	}
+
 	uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
 	uint32_t color = colorAlpha(0xFFFFFF, opacity);
 
@@ -218,7 +222,7 @@ void PSPDpad::Draw(UIContext &dc) {
 }
 
 PSPStick::PSPStick(int bgImg, int stickImg, int stick, float scale, UI::LayoutParams *layoutParams)
-	: UI::View(layoutParams), dragPointerId_(-1), bgImg_(bgImg), stickImageIndex_(stickImg), stick_(stick), scale_(scale) {
+	: UI::View(layoutParams), dragPointerId_(-1), bgImg_(bgImg), stickImageIndex_(stickImg), stick_(stick), scale_(scale), centerX_(-1), centerY_(-1) {
 	stick_size_ = 50;
 }
 
@@ -234,8 +238,13 @@ void PSPStick::Draw(UIContext &dc) {
 	uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
 	uint32_t color = colorAlpha(0x808080, opacity);
 
-	float stickX = bounds_.centerX();
-	float stickY = bounds_.centerY();
+	if (centerX_ < 0.0f) {
+		centerX_ = bounds_.centerX();
+		centerY_ = bounds_.centerY();
+	}
+
+	float stickX = centerX_;
+	float stickY = centerY_;
 
 	float dx, dy;
 	__CtrlPeekAnalog(stick_, &dx, &dy);
@@ -245,8 +254,23 @@ void PSPStick::Draw(UIContext &dc) {
 }
 
 void PSPStick::Touch(const TouchInput &input) {
+	if (input.flags & TOUCH_RELEASE_ALL) {
+		dragPointerId_ = -1;
+		centerX_ = bounds_.centerX();
+		centerY_ = bounds_.centerY();
+		__CtrlSetAnalogX(0.0f, stick_);
+		__CtrlSetAnalogY(0.0f, stick_);
+		return;
+	}
 	if (input.flags & TOUCH_DOWN) {
 		if (dragPointerId_ == -1 && bounds_.Contains(input.x, input.y)) {
+			if (g_Config.bAutoCenterTouchAnalog) {
+				centerX_ = input.x;
+				centerY_ = input.y;
+			} else {
+				centerX_ = bounds_.centerX();
+				centerY_ = bounds_.centerY();
+			}
 			dragPointerId_ = input.id;
 			ProcessTouch(input.x, input.y, true);
 		}
@@ -259,17 +283,19 @@ void PSPStick::Touch(const TouchInput &input) {
 	if (input.flags & TOUCH_UP) {
 		if (input.id == dragPointerId_) {
 			dragPointerId_ = -1;
+			centerX_ = bounds_.centerX();
+			centerY_ = bounds_.centerY();
 			ProcessTouch(input.x, input.y, false);
 		}
 	}
 }
 
 void PSPStick::ProcessTouch(float x, float y, bool down) {
-	if (down) {
+	if (down && centerX_ >= 0.0f) {
 		float inv_stick_size = 1.0f / (stick_size_ * scale_);
 
-		float dx = (x - bounds_.centerX()) * inv_stick_size;
-		float dy = (y - bounds_.centerY()) * inv_stick_size;
+		float dx = (x - centerX_) * inv_stick_size;
+		float dy = (y - centerY_) * inv_stick_size;
 		// Do not clamp to a circle! The PSP has nearly square range!
 
 		// Old code to clamp to a circle
@@ -372,9 +398,12 @@ void InitPadLayout(float xres, float yres, float globalScale) {
 		g_Config.fUnthrottleKeyScale = scale;
 	}
 
-	//L and R------------------------------------------------------------
-	int l_key_X = 70 * scale;
-	int l_key_Y = 40 * scale;
+	// L and R------------------------------------------------------------
+	// Put them above the analog stick / above the buttons to the right.
+	// The corners were very hard to reach..
+
+	int l_key_X = 60 * scale;
+	int l_key_Y = yres - 380 * scale;
 
 	if (g_Config.fLKeyX == -1.0 || g_Config.fLKeyY == -1.0 ) {
 		g_Config.fLKeyX = (float)l_key_X / xres;
@@ -383,7 +412,7 @@ void InitPadLayout(float xres, float yres, float globalScale) {
 	}
 
 	int r_key_X = xres - 60 * scale;
-	int r_key_Y = 40 * scale;
+	int r_key_Y = l_key_Y;
 
 	if (g_Config.fRKeyX == -1.0 || g_Config.fRKeyY == -1.0 ) {
 		g_Config.fRKeyX = (float)r_key_X / xres;
@@ -398,7 +427,7 @@ UI::ViewGroup *CreatePadLayout(float xres, float yres, bool *pause) {
 	using namespace UI;
 
 	AnchorLayout *root = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
-	
+
 	//PSP buttons (triangle, circle, square, cross)---------------------
 	//space between the PSP buttons (traingle, circle, square and cross)
 	const float Action_button_scale = g_Config.fActionButtonScale;
@@ -457,19 +486,24 @@ UI::ViewGroup *CreatePadLayout(float xres, float yres, bool *pause) {
 
 	const int halfW = xres / 2;
 
+	const int roundImage = g_Config.iTouchButtonStyle ? I_ROUND_LINE : I_ROUND;
+
+	// These platforms always need the pause menu button to be shown.
+#if defined(__SYMBIAN32__) || defined(IOS) || defined(MAEMO)
+	root->Add(new BoolButton(pause, roundImage, I_ARROW, 1.0f, new AnchorLayoutParams(halfW, 20, NONE, NONE, true)))->SetAngle(90);
+#endif
+
 	if (g_Config.bShowTouchControls) {
-		int roundImage = g_Config.iTouchButtonStyle ? I_ROUND_LINE : I_ROUND;
-		int rectImage = g_Config.iTouchButtonStyle ? I_RECT_LINE : I_RECT;
-		int shoulderImage = g_Config.iTouchButtonStyle ? I_SHOULDER_LINE : I_SHOULDER;
-		int dirImage = g_Config.iTouchButtonStyle ? I_DIR_LINE : I_DIR;
-		int stickImage = g_Config.iTouchButtonStyle ? I_STICK_LINE : I_STICK;
-		int stickBg = g_Config.iTouchButtonStyle ? I_STICK_BG_LINE : I_STICK_BG;
+		const int rectImage = g_Config.iTouchButtonStyle ? I_RECT_LINE : I_RECT;
+		const int shoulderImage = g_Config.iTouchButtonStyle ? I_SHOULDER_LINE : I_SHOULDER;
+		const int dirImage = g_Config.iTouchButtonStyle ? I_DIR_LINE : I_DIR;
+		const int stickImage = g_Config.iTouchButtonStyle ? I_STICK_LINE : I_STICK;
+		const int stickBg = g_Config.iTouchButtonStyle ? I_STICK_BG_LINE : I_STICK_BG;
 
 #if !defined(__SYMBIAN32__) && !defined(IOS) && !defined(MAEMO)
 		if (g_Config.bShowTouchPause)
-#endif
 			root->Add(new BoolButton(pause, roundImage, I_ARROW, 1.0f, new AnchorLayoutParams(halfW, 20, NONE, NONE, true)))->SetAngle(90);
-
+#endif
 		if (g_Config.bShowTouchCircle)
 			root->Add(new PSPButton(CTRL_CIRCLE, roundImage, I_CIRCLE, Action_button_scale, new AnchorLayoutParams(Action_circle_button_X, Action_circle_button_Y, NONE, NONE, true)));
 

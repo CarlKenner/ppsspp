@@ -17,6 +17,7 @@
 
 #include <string>
 #include <map>
+#include <memory>
 #include <algorithm>
 
 #include "base/logging.h"
@@ -37,15 +38,23 @@
 #include "Core/Config.h"
 #include "UI/GameInfoCache.h"
 
+#ifdef __SYMBIAN32__
+#define unique_ptr auto_ptr
+#endif
+
 GameInfoCache g_gameInfoCache;
 
-bool GameInfo::DeleteGame() {
+GameInfo::~GameInfo() {
+	delete fileLoader;
+}
+
+bool GameInfo::Delete() {
 	switch (fileType) {
 	case FILETYPE_PSP_ISO:
 	case FILETYPE_PSP_ISO_NP:
 		{
 			// Just delete the one file (TODO: handle two-disk games as well somehow).
-			const char *fileToRemove = fileInfo.fullName.c_str();
+			const char *fileToRemove = filePath_.c_str();
 			deleteFile(fileToRemove);
 			auto i = std::find(g_Config.recentIsos.begin(), g_Config.recentIsos.end(), fileToRemove);
 			if (i != g_Config.recentIsos.end()) {
@@ -54,10 +63,10 @@ bool GameInfo::DeleteGame() {
 			return true;
 		}
 	case FILETYPE_PSP_PBP_DIRECTORY:
+	case FILETYPE_PSP_SAVEDATA_DIRECTORY:
 		{
 			// TODO: This could be handled by Core/Util/GameManager too somehow.
-
-			const char *directoryToRemove = fileInfo.fullName.c_str();
+			const char *directoryToRemove = filePath_.c_str();
 			INFO_LOG(HLE, "Deleting %s", directoryToRemove);
 			if (!File::DeleteDirRecursively(directoryToRemove)) {
 				ERROR_LOG(HLE, "Failed to delete file");
@@ -67,8 +76,14 @@ bool GameInfo::DeleteGame() {
 			return true;
 		}
 	case FILETYPE_PSP_ELF:
+	case FILETYPE_PPSSPP_SAVESTATE:
+	case FILETYPE_UNKNOWN_BIN:
+	case FILETYPE_UNKNOWN_ELF:
+	case FILETYPE_ARCHIVE_RAR:
+	case FILETYPE_ARCHIVE_ZIP:
+	case FILETYPE_ARCHIVE_7Z:
 		{
-			const char *fileToRemove = fileInfo.fullName.c_str();
+			const char *fileToRemove = filePath_.c_str();
 			deleteFile(fileToRemove);
 			return true;
 		}
@@ -78,16 +93,35 @@ bool GameInfo::DeleteGame() {
 	}
 }
 
+static int64_t GetDirectoryRecursiveSize(std::string path) {
+	std::vector<FileInfo> fileInfo;
+	getFilesInDir(path.c_str(), &fileInfo);
+	int64_t sizeSum = 0;
+	// Note: getFileInDir does not fill in fileSize properly.
+	for (size_t i = 0; i < fileInfo.size(); i++) {
+		FileInfo finfo;
+		getFileInfo(fileInfo[i].fullName.c_str(), &finfo);
+		if (!finfo.isDirectory)
+			sizeSum += finfo.size;
+		else
+			sizeSum += GetDirectoryRecursiveSize(finfo.fullName);
+	}
+	return sizeSum;
+}
+
 u64 GameInfo::GetGameSizeInBytes() {
 	switch (fileType) {
 	case FILETYPE_PSP_PBP_DIRECTORY:
-		// TODO: Need to recurse here.
-		return 0;
+	case FILETYPE_PSP_SAVEDATA_DIRECTORY:
+	{
+		return GetDirectoryRecursiveSize(filePath_);
+	}
 	default:
-		return fileInfo.size;
+		return GetFileLoader()->FileSize();
 	}
 }
 
+// Not too meaningful if the object itself is a savedata directory...
 std::vector<std::string> GameInfo::GetSaveDataDirectories() {
 	std::string memc = GetSysDirectory(DIRECTORY_SAVEDATA);
 
@@ -108,6 +142,9 @@ std::vector<std::string> GameInfo::GetSaveDataDirectories() {
 }
 
 u64 GameInfo::GetSaveDataSizeInBytes() {
+	if (fileType == FILETYPE_PSP_SAVEDATA_DIRECTORY || fileType == FILETYPE_PPSSPP_SAVESTATE) {
+		return 0;
+	}
 	std::vector<std::string> saveDataDir = GetSaveDataDirectories();
 
 	u64 totalSize = 0;
@@ -123,7 +160,7 @@ u64 GameInfo::GetSaveDataSizeInBytes() {
 				filesSizeInDir += finfo.size;
 		}
 		if (filesSizeInDir < 0xA00000) {
-			//Generally the savedata size in a dir shouldn't be more than 10MB.
+			// HACK: Generally the savedata size in a dir shouldn't be more than 10MB.
 			totalSize += filesSizeInDir;
 		}
 		filesSizeInDir = 0;
@@ -132,6 +169,9 @@ u64 GameInfo::GetSaveDataSizeInBytes() {
 }
 
 u64 GameInfo::GetInstallDataSizeInBytes() {
+	if (fileType == FILETYPE_PSP_SAVEDATA_DIRECTORY || fileType == FILETYPE_PPSSPP_SAVESTATE) {
+		return 0;
+	}
 	std::vector<std::string> saveDataDir = GetSaveDataDirectories();
 
 	u64 totalSize = 0;
@@ -147,13 +187,36 @@ u64 GameInfo::GetInstallDataSizeInBytes() {
 				filesSizeInDir += finfo.size;
 		}
 		if (filesSizeInDir >= 0xA00000) { 
-			// Generally the savedata size in a dir shouldn't be more than 10MB.
+			// HACK: Generally the savedata size in a dir shouldn't be more than 10MB.
 			// This is probably GameInstall data.
 			totalSize += filesSizeInDir;
 		}
 		filesSizeInDir = 0;
 	}
 	return totalSize;
+}
+
+bool GameInfo::LoadFromPath(const std::string &gamePath) {
+	// No need to rebuild if we already have it loaded.
+	if (filePath_ != gamePath) {
+		delete fileLoader;
+		fileLoader = ConstructFileLoader(gamePath);
+		filePath_ = gamePath;
+	}
+
+	return GetFileLoader()->Exists();
+}
+
+FileLoader *GameInfo::GetFileLoader() {
+	if (!fileLoader) {
+		fileLoader = ConstructFileLoader(filePath_);
+	}
+	return fileLoader;
+}
+
+void GameInfo::DisposeFileLoader() {
+	delete fileLoader;
+	fileLoader = nullptr;
 }
 
 bool GameInfo::DeleteAllSaveData() {
@@ -241,13 +304,12 @@ public:
 	}
 
 	virtual void run() {
-		getFileInfo(gamePath_.c_str(), &info_->fileInfo);
-		if (!info_->fileInfo.exists)
+		if (!info_->LoadFromPath(gamePath_))
 			return;
 
 		std::string filename = gamePath_;
 		info_->path = gamePath_;
-		info_->fileType = Identify_File(filename);
+		info_->fileType = Identify_File(info_->GetFileLoader());
 		// Fallback title
 		info_->title = getFilename(info_->path);
 
@@ -340,6 +402,33 @@ handleELF:
 			}
 			break;
 
+		case FILETYPE_PSP_SAVEDATA_DIRECTORY:
+		{
+			SequentialHandleAllocator handles;
+			VirtualDiscFileSystem umd(&handles, gamePath_.c_str());
+
+			// Alright, let's fetch the PARAM.SFO.
+			std::string paramSFOcontents;
+			if (ReadFileToString(&umd, "/PARAM.SFO", &paramSFOcontents, 0)) {
+				lock_guard lock(info_->lock);
+				info_->paramSFO.ReadSFO((const u8 *)paramSFOcontents.data(), paramSFOcontents.size());
+				info_->ParseParamSFO();
+			}
+
+			ReadFileToString(&umd, "/ICON0.PNG", &info_->iconTextureData, &info_->lock);
+			info_->iconDataLoaded = true;
+			if (info_->wantFlags & GAMEINFO_WANTBG) {
+				ReadFileToString(&umd, "/PIC1.PNG", &info_->pic1TextureData, &info_->lock);
+				info_->pic1DataLoaded = true;
+			}
+			break;
+		}
+
+		case FILETYPE_PPSSPP_SAVESTATE:
+		{
+			break;
+		}
+
 		case FILETYPE_PSP_DISC_DIRECTORY:
 			{
 				info_->fileType = FILETYPE_PSP_ISO;
@@ -368,6 +457,7 @@ handleELF:
 				}
 				break;
 			}
+
 		case FILETYPE_PSP_ISO:
 		case FILETYPE_PSP_ISO_NP:
 			{
@@ -376,7 +466,7 @@ handleELF:
 				// Let's assume it's an ISO.
 				// TODO: This will currently read in the whole directory tree. Not really necessary for just a
 				// few files.
-				BlockDevice *bd = constructBlockDevice(gamePath_.c_str());
+				BlockDevice *bd = constructBlockDevice(info_->GetFileLoader());
 				if (!bd)
 					return;  // nothing to do here..
 				ISOFileSystem umd(&handles, bd, "/PSP_GAME");
@@ -445,17 +535,36 @@ handleELF:
 				}
 				break;
 
+			case FILETYPE_ARCHIVE_7Z:
+				info_->paramSFOLoaded = true;
+				{
+					// Read standard icon
+					size_t sz;
+					uint8_t *contents = VFSReadFile("7z.png", &sz);
+					if (contents) {
+						lock_guard lock(info_->lock);
+						info_->iconTextureData = std::string((const char *)contents, sz);
+						info_->iconDataLoaded = true;
+					}
+					delete[] contents;
+				}
+				break;
+
 			case FILETYPE_NORMAL_DIRECTORY:
 			default:
 				info_->paramSFOLoaded = true;
 				break;
 		}
 
+		info_->hasConfig = g_Config.hasGameConfig(info_->id);
+
 		if (info_->wantFlags & GAMEINFO_WANTSIZE) {
 			info_->gameSize = info_->GetGameSizeInBytes();
 			info_->saveDataSize = info_->GetSaveDataSizeInBytes();
 			info_->installDataSize = info_->GetInstallDataSizeInBytes();
 		}
+
+		info_->DisposeFileLoader();
 	}
 
 	virtual float priority() {
@@ -469,7 +578,6 @@ private:
 };
 
 
-
 GameInfoCache::~GameInfoCache() {
 	Clear();
 }
@@ -481,18 +589,6 @@ void GameInfoCache::Init() {
 
 void GameInfoCache::Shutdown() {
 	StopProcessingWorkQueue(gameInfoWQ_);
-}
-
-void GameInfoCache::Save() {
-	// TODO
-}
-
-void GameInfoCache::Load() {
-	// TODO
-}
-
-void GameInfoCache::Decimate() {
-	// TODO
 }
 
 void GameInfoCache::Clear() {
@@ -561,6 +657,19 @@ void GameInfoCache::FlushBGs() {
 		iter->second->wantFlags &= ~(GAMEINFO_WANTBG | GAMEINFO_WANTSND);
 	}
 }
+
+void GameInfoCache::PurgeType(IdentifiedFileType fileType) {
+	if (gameInfoWQ_)
+		gameInfoWQ_->Flush();
+	restart:
+	for (auto iter = info_.begin(); iter != info_.end(); iter++) {
+		if (iter->second->fileType == fileType) {
+			info_.erase(iter);
+			goto restart;
+		}
+	}
+}
+
 
 // Runs on the main thread.
 GameInfo *GameInfoCache::GetInfo(Thin3DContext *thin3d, const std::string &gamePath, int wantFlags) {

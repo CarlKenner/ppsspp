@@ -20,7 +20,7 @@
 #include "Core/HLE/HLE.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/CoreTiming.h"
-#include "Core/MemMap.h"
+#include "Core/MemMapHelpers.h"
 #include "Core/Reporting.h"
 #include "Common/ChunkFile.h"
 
@@ -58,9 +58,9 @@ struct EventFlagTh
 class EventFlag : public KernelObject
 {
 public:
-	const char *GetName() {return nef.name;}
-	const char *GetTypeName() {return "EventFlag";}
-	void GetQuickInfo(char *ptr, int size)
+	const char *GetName() override { return nef.name; }
+	const char *GetTypeName() override { return "EventFlag"; }
+	void GetQuickInfo(char *ptr, int size) override
 	{
 		sprintf(ptr, "init=%08x cur=%08x numwait=%i",
 			nef.initPattern,
@@ -72,9 +72,9 @@ public:
 		return SCE_KERNEL_ERROR_UNKNOWN_EVFID;
 	}
 	static int GetStaticIDType() { return SCE_KERNEL_TMID_EventFlag; }
-	int GetIDType() const { return SCE_KERNEL_TMID_EventFlag; }
+	int GetIDType() const override { return SCE_KERNEL_TMID_EventFlag; }
 
-	virtual void DoState(PointerWrap &p)
+	void DoState(PointerWrap &p) override
 	{
 		auto s = p.Section("EventFlag", 1);
 		if (!s)
@@ -142,7 +142,7 @@ KernelObject *__KernelEventFlagObject()
 	return new EventFlag;
 }
 
-bool __KernelEventFlagMatches(u32_le *pattern, u32 bits, u8 wait, u32 outAddr)
+static bool __KernelEventFlagMatches(u32_le *pattern, u32 bits, u8 wait, u32 outAddr)
 {
 	if ((wait & PSP_EVENT_WAITOR)
 		? (bits & *pattern) /* one or more bits of the mask */
@@ -160,7 +160,7 @@ bool __KernelEventFlagMatches(u32_le *pattern, u32 bits, u8 wait, u32 outAddr)
 	return false;
 }
 
-bool __KernelUnlockEventFlagForThread(EventFlag *e, EventFlagTh &th, u32 &error, int result, bool &wokeThreads)
+static bool __KernelUnlockEventFlagForThread(EventFlag *e, EventFlagTh &th, u32 &error, int result, bool &wokeThreads)
 {
 	if (!HLEKernel::VerifyWait(th.threadID, WAITTYPE_EVENTFLAG, e->GetUID()))
 		return true;
@@ -191,7 +191,7 @@ bool __KernelUnlockEventFlagForThread(EventFlag *e, EventFlagTh &th, u32 &error,
 	return true;
 }
 
-bool __KernelClearEventFlagThreads(EventFlag *e, int reason)
+static bool __KernelClearEventFlagThreads(EventFlag *e, int reason)
 {
 	u32 error;
 	bool wokeThreads = false;
@@ -394,7 +394,7 @@ void __KernelEventFlagTimeout(u64 userdata, int cycleslate)
 	}
 }
 
-void __KernelSetEventFlagTimeout(EventFlag *e, u32 timeoutPtr)
+static void __KernelSetEventFlagTimeout(EventFlag *e, u32 timeoutPtr)
 {
 	if (timeoutPtr == 0 || eventFlagWaitTimer == -1)
 		return;
@@ -633,7 +633,7 @@ u32 sceKernelReferEventFlagStatus(SceUID id, u32 statusPtr)
 	}
 	else
 	{
-		ERROR_LOG(SCEKERNEL, "sceKernelReferEventFlagStatus(%i, %08x): invalid event flag", id, statusPtr);
+		ERROR_LOG(SCEKERNEL, "%08x=sceKernelReferEventFlagStatus(%i, %08x): invalid event flag", error, id, statusPtr);
 		return error;
 	}
 }

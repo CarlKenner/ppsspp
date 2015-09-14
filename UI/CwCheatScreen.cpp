@@ -15,7 +15,6 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include "android/app-android.h"
 #include "input/input_state.h"
 #include "ui/ui.h"
 #include "util/text/utf8.h"
@@ -23,7 +22,7 @@
 
 #include "Core/Core.h"
 #include "Core/Config.h"
-#include "Core/MIPS/JitCommon/JitCommon.h"
+#include "Core/MIPS/JitCommon/NativeJit.h"
 
 #include "UI/OnScreenDisplay.h"
 #include "UI/ui_atlas.h"
@@ -60,22 +59,23 @@ void CwCheatScreen::CreateCodeList() {
 
 void CwCheatScreen::CreateViews() {
 	using namespace UI;
-	I18NCategory *k = GetI18NCategory("CwCheats");
-	I18NCategory *d = GetI18NCategory("Dialog");
+	I18NCategory *cw = GetI18NCategory("CwCheats");
+	I18NCategory *di = GetI18NCategory("Dialog");
 	CreateCodeList();
 	g_Config.bReloadCheats = true;
 	root_ = new LinearLayout(ORIENT_HORIZONTAL);
 	Margins actionMenuMargins(50, -15, 15, 0);
 
 	LinearLayout *leftColumn = new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(400, FILL_PARENT));
-	leftColumn->Add(new ItemHeader(k->T("Options")));
-	leftColumn->Add(new Choice(d->T("Back")))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-	//leftColumn->Add(new Choice(k->T("Add Cheat")))->OnClick.Handle(this, &CwCheatScreen::OnAddCheat);
-	leftColumn->Add(new Choice(k->T("Import Cheats")))->OnClick.Handle(this, &CwCheatScreen::OnImportCheat);
-#if defined(_WIN32) || defined(__APPLE__) || defined(__linux__)
-	leftColumn->Add(new Choice(k->T("Edit Cheat File")))->OnClick.Handle(this, &CwCheatScreen::OnEditCheatFile);
+	leftColumn->Add(new ItemHeader(cw->T("Options")));
+	leftColumn->Add(new Choice(di->T("Back")))->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+	//leftColumn->Add(new Choice(cw->T("Add Cheat")))->OnClick.Handle(this, &CwCheatScreen::OnAddCheat);
+	leftColumn->Add(new Choice(cw->T("Import Cheats")))->OnClick.Handle(this, &CwCheatScreen::OnImportCheat);
+#if !defined(MOBILE_DEVICE)
+	leftColumn->Add(new Choice(cw->T("Edit Cheat File")))->OnClick.Handle(this, &CwCheatScreen::OnEditCheatFile);
 #endif
-	leftColumn->Add(new Choice(k->T("Enable/Disable All")))->OnClick.Handle(this, &CwCheatScreen::OnEnableAll);
+	leftColumn->Add(new Choice(cw->T("Enable/Disable All")))->OnClick.Handle(this, &CwCheatScreen::OnEnableAll);
+	leftColumn->Add(new PopupSliderChoice(&g_Config.iCwCheatRefreshRate, 1, 1000, cw->T("Refresh Rate"), 1, screenManager()));
 
 	ScrollView *rightScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(0.5f));
 	rightScroll->SetScrollToTop(false);
@@ -85,10 +85,10 @@ void CwCheatScreen::CreateViews() {
 
 	root_->Add(leftColumn);
 	root_->Add(rightScroll);
-	rightColumn->Add(new ItemHeader(k->T("Cheats")));
+	rightColumn->Add(new ItemHeader(cw->T("Cheats")));
 	for (size_t i = 0; i < formattedList_.size(); i++) {
 		name = formattedList_[i].c_str();
-		rightColumn->Add(new CheatCheckBox(&bEnableCheat[i], k->T(name), ""))->OnClick.Handle(this, &CwCheatScreen::OnCheckBox);
+		rightColumn->Add(new CheatCheckBox(&bEnableCheat[i], cw->T(name), ""))->OnClick.Handle(this, &CwCheatScreen::OnCheckBox);
 	}
 }
 
@@ -112,7 +112,6 @@ void CwCheatScreen::onFinish(DialogResult result) {
 
 UI::EventReturn CwCheatScreen::OnEnableAll(UI::EventParams &params) {
 	std::fstream fs;
-	std::vector<std::string> temp = cheatList;
 	enableAll = !enableAll;
 	File::OpenCPPFile(fs, activeCheatFile, std::ios::out);
 	for (int j = 0; j < (int)cheatList.size(); j++) {
@@ -145,23 +144,29 @@ UI::EventReturn CwCheatScreen::OnAddCheat(UI::EventParams &params) {
 
 UI::EventReturn CwCheatScreen::OnEditCheatFile(UI::EventParams &params) {
 	std::string cheatFile;
+	g_Config.bReloadCheats = true;
+	if (MIPSComp::jit) {
+		MIPSComp::jit->ClearCache();
+	}
+	screenManager()->finishDialog(this, DR_OK);
 #ifdef _WIN32
 	cheatFile = activeCheatFile;
 	// Can't rely on a .txt file extension to auto-open in the right editor,
 	// so let's find notepad
-	wchar_t notepad_path[MAX_PATH];
-	GetSystemDirectory(notepad_path, sizeof(notepad_path) / sizeof(wchar_t));
+	wchar_t notepad_path[MAX_PATH + 1];
+	GetSystemDirectory(notepad_path, MAX_PATH);
 	wcscat(notepad_path, L"\\notepad.exe");
 
-	wchar_t cheat_path[MAX_PATH];
-	wcscpy(cheat_path, ConvertUTF8ToWString(cheatFile).c_str());
+	wchar_t cheat_path[MAX_PATH + 1] = {0};
+	wcsncpy(cheat_path, ConvertUTF8ToWString(cheatFile).c_str(), MAX_PATH);
 	// Flip any slashes...
 	for (size_t i = 0; i < wcslen(cheat_path); i++) {
 		if (cheat_path[i] == '/')
 			cheat_path[i] = '\\';
 	}
 
-	wchar_t command_line[MAX_PATH * 2 + 1];
+	// One for the space, one for the null.
+	wchar_t command_line[MAX_PATH * 2 + 1 + 1];
 	wsprintf(command_line, L"%s %s", notepad_path, cheat_path);
 
 	STARTUPINFO si;
@@ -172,17 +177,20 @@ UI::EventReturn CwCheatScreen::OnEditCheatFile(UI::EventParams &params) {
 	memset(&pi, 0, sizeof(pi));
 	UINT retval = CreateProcess(0, command_line, 0, 0, 0, 0, 0, 0, &si, &pi);
 	if (!retval) {
-		ERROR_LOG(BOOT, "Failed creating notepad process");
+		ERROR_LOG(COMMON, "Failed creating notepad process");
 	}
-#elif defined(__APPLE__) || defined(__linux__)
-#if defined(__linux__)
-	cheatFile = "xdg-open ";
-#elif defined(__APPLE__)
+#elif !defined(MOBILE_DEVICE)
+#if defined(__APPLE__)
 	cheatFile = "open ";
+#else
+	cheatFile = "xdg-open ";
 #endif
 	cheatFile.append(activeCheatFile);
 	NOTICE_LOG(BOOT, "Launching %s", cheatFile.c_str());
-	system(cheatFile.c_str());
+	int retval = system(cheatFile.c_str());
+	if (retval != 0) {
+		ERROR_LOG(COMMON, "Failed to launch cheat file");
+	}
 #endif
 	return UI::EVENT_DONE;
 }
@@ -318,7 +326,7 @@ void CheatCheckBox::Draw(UIContext &dc) {
 
 	int image = *toggle_ ? dc.theme->checkOn : dc.theme->checkOff;
 
-	Style style = dc.theme->itemStyle;
+	UI::Style style = dc.theme->itemStyle;
 	if (!IsEnabled())
 		style = dc.theme->itemDisabledStyle;
 

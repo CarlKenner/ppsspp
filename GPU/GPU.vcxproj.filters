@@ -42,9 +42,6 @@
     <ClInclude Include="GPUCommon.h">
       <Filter>Common</Filter>
     </ClInclude>
-    <ClInclude Include="Software\Colors.h">
-      <Filter>Software</Filter>
-    </ClInclude>
     <ClInclude Include="Software\Clipper.h">
       <Filter>Software</Filter>
     </ClInclude>
@@ -129,9 +126,6 @@
     <ClInclude Include="Directx9\helper\dx_state.h">
       <Filter>DirectX9\helper</Filter>
     </ClInclude>
-    <ClInclude Include="Directx9\helper\fbo.h">
-      <Filter>DirectX9\helper</Filter>
-    </ClInclude>
     <ClInclude Include="Directx9\helper\global.h">
       <Filter>DirectX9\helper</Filter>
     </ClInclude>
@@ -175,6 +169,30 @@
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="Common\DrawEngineCommon.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\DepalettizeShaderCommon.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Directx9\DepalettizeShaderDX9.h">
+      <Filter>DirectX9</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\TextureScalerCommon.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="GPU.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="GLES\FBO.h">
+      <Filter>GLES</Filter>
+    </ClInclude>
+    <ClInclude Include="Directx9\helper\dx_fbo.h">
+      <Filter>DirectX9\helper</Filter>
+    </ClInclude>
+    <ClInclude Include="GLES\GLStateCache.h">
+      <Filter>GLES</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\GPUStateUtils.h">
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="Common\VR.h">
@@ -251,9 +269,6 @@
     <ClCompile Include="Directx9\StateMappingDX9.cpp">
       <Filter>DirectX9</Filter>
     </ClCompile>
-    <ClCompile Include="Directx9\SplineDX9.cpp">
-      <Filter>DirectX9</Filter>
-    </ClCompile>
     <ClCompile Include="Directx9\ShaderManagerDX9.cpp">
       <Filter>DirectX9</Filter>
     </ClCompile>
@@ -282,9 +297,6 @@
       <Filter>Common</Filter>
     </ClCompile>
     <ClCompile Include="Directx9\helper\dx_state.cpp">
-      <Filter>DirectX9\helper</Filter>
-    </ClCompile>
-    <ClCompile Include="Directx9\helper\fbo.cpp">
       <Filter>DirectX9\helper</Filter>
     </ClCompile>
     <ClCompile Include="Directx9\helper\global.cpp">
@@ -335,14 +347,38 @@
     <ClCompile Include="Common\DrawEngineCommon.cpp">
       <Filter>Common</Filter>
     </ClCompile>
-    <ClCompile Include="GLES\Spline.cpp">
-      <Filter>GLES</Filter>
-    </ClCompile>
     <ClCompile Include="Common\SplineCommon.cpp">
       <Filter>Common</Filter>
     </ClCompile>
     <ClCompile Include="Directx9\StencilBufferDX9.cpp">
       <Filter>DirectX9</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\DepalettizeShaderCommon.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Directx9\DepalettizeShaderDX9.cpp">
+      <Filter>DirectX9</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\VertexDecoderArm64.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\TextureScalerCommon.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\GPUDebugInterface.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="GPU.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="GLES\FBO.cpp">
+      <Filter>GLES</Filter>
+    </ClCompile>
+    <ClCompile Include="Directx9\helper\dx_fbo.cpp">
+      <Filter>DirectX9\helper</Filter>
+    </ClCompile>
+    <ClCompile Include="GLES\GLStateCache.cpp">
+      <Filter>GLES</Filter>
     </ClCompile>
     <ClCompile Include="Common\VR.cpp">
       <Filter>Common</Filter>
@@ -350,8 +386,5 @@
     <ClCompile Include="Common\VR920.cpp">
       <Filter>Common</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="CMakeLists.txt" />
   </ItemGroup>
 </Project>

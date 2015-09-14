@@ -43,6 +43,8 @@ enum PSPDirectories {
 	DIRECTORY_SAVEDATA,
 	DIRECTORY_PAUTH,
 	DIRECTORY_DUMP,
+	DIRECTORY_SAVESTATE,
+	DIRECTORY_CACHE,
 };
 
 
@@ -62,6 +64,8 @@ void Audio_Init();
 
 bool IsOnSeparateCPUThread();
 bool IsAudioInitialised();
+
+void UpdateLoadedFile(FileLoader *fileLoader);
 
 std::string GetSysDirectory(PSPDirectories directoryType);
 #ifdef _WIN32

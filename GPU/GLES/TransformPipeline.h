@@ -17,12 +17,14 @@
 
 #pragma once
 
-#include <map>
+#include <unordered_map>
 
+#include "GPU/GPUState.h"
 #include "GPU/Common/GPUDebugInterface.h"
 #include "GPU/Common/IndexGenerator.h"
 #include "GPU/Common/VertexDecoderCommon.h"
 #include "GPU/Common/DrawEngineCommon.h"
+#include "GPU/GLES/FragmentShaderGenerator.h"
 #include "gfx/gl_common.h"
 #include "gfx/gl_lost_manager.h"
 
@@ -52,6 +54,13 @@ enum {
 	VAI_FLAG_VERTEXFULLALPHA = 1,
 };
 
+// Avoiding the full include of TextureDecoder.h.
+#if (defined(_M_SSE) && defined(_M_X64)) || defined(ARM64)
+typedef u64 ReliableHashType;
+#else
+typedef u32 ReliableHashType;
+#endif
+
 // Try to keep this POD.
 class VertexArrayInfo {
 public:
@@ -76,7 +85,7 @@ public:
 		VAI_UNRELIABLE,  // never cache
 	};
 
-	u32 hash;
+	ReliableHashType hash;
 	u32 minihash;
 
 	Status status;
@@ -104,8 +113,6 @@ public:
 	virtual ~TransformDrawEngine();
 
 	void SubmitPrim(void *verts, void *inds, GEPrimitiveType prim, int vertexCount, u32 vertType, int *bytesRead);
-	void SubmitSpline(void* control_points, void* indices, int count_u, int count_v, int type_u, int type_v, GEPatchPrimType prim_type, u32 vertType);
-	void SubmitBezier(void* control_points, void* indices, int count_u, int count_v, GEPatchPrimType prim_type, u32 vertType);
 
 	void SetShaderManager(ShaderManager *shaderManager) {
 		shaderManager_ = shaderManager;
@@ -167,11 +174,18 @@ public:
 		DoFlush();
 	}
 
+	void FinishDeferred() {
+		if (!numDrawCalls)
+			return;
+		DecodeVerts();
+	}
+
 	bool IsCodePtrVertexDecoder(const u8 *ptr) const;
 
-protected:
-	// Preprocessing for spline/bezier
-	virtual u32 NormalizeVertices(u8 *outPtr, u8 *bufPtr, const u8 *inPtr, int lowerBound, int upperBound, u32 vertType) override;
+	void DispatchFlush() override { Flush(); }
+	void DispatchSubmitPrim(void *verts, void *inds, GEPrimitiveType prim, int vertexCount, u32 vertType, int *bytesRead) override {
+		SubmitPrim(verts, inds, prim, vertexCount, vertType, bytesRead);
+	}
 
 private:
 	void DecodeVerts();
@@ -180,17 +194,15 @@ private:
 	void ApplyDrawState(int prim);
 	void ApplyDrawStateLate();
 	void ApplyBlendState();
-	void ApplyStencilReplaceOnly();
+	void ApplyStencilReplaceAndLogicOp(ReplaceAlphaType replaceAlphaWithStencil);
 	bool ApplyShaderBlending();
 	inline void ResetShaderBlending();
 	GLuint AllocateBuffer();
 	void FreeBuffer(GLuint buf);
 
 	u32 ComputeMiniHash();
-	u32 ComputeHash();  // Reads deferred vertex data.
+	ReliableHashType ComputeHash();  // Reads deferred vertex data.
 	void MarkUnreliable(VertexArrayInfo *vai);
-
-	VertexDecoder *GetVertexDecoder(u32 vtype);
 
 	// Defer all vertex decoding to a Flush, so that we can hash and cache the
 	// generated buffers without having to redecode them every time.
@@ -199,8 +211,8 @@ private:
 		void *inds;
 		u32 vertType;
 		u8 indexType;
-		u8 prim;
-		u16 vertexCount;
+		s8 prim;
+		u32 vertexCount;
 		u16 indexLowerBound;
 		u16 indexUpperBound;
 	};
@@ -210,19 +222,12 @@ private:
 	int decodedVerts_;
 	GEPrimitiveType prevPrim_;
 
-	// Cached vertex decoders
-	std::map<u32, VertexDecoder *> decoderMap_;
-	VertexDecoder *dec_;
-	VertexDecoderJitCache *decJitCache_;
 	u32 lastVType_;
 
 	TransformedVertex *transformed;
 	TransformedVertex *transformedExpanded;
 
-	std::map<u32, VertexArrayInfo *> vai_;
-
-	// Fixed index buffer for easy quad generation from spline/bezier
-	u16 *quadIndices_;
+	std::unordered_map<u32, VertexArrayInfo *> vai_;
 
 	// Vertex buffer objects
 	// Element buffer objects
@@ -245,6 +250,6 @@ private:
 
 	UVScale *uvScale;
 
+	bool fboTexNeedBind_;
 	bool fboTexBound_;
-	VertexDecoderOptions decOptions_;
 };

@@ -4,6 +4,8 @@
 #include "Windows/Main.h"
 #include "Core/Config.h"
 #include "GPU/Debugger/Breakpoints.h"
+#include "GPU/GPUState.h"
+
 #include <algorithm>
 
 static const int numCPUs = 1;
@@ -36,7 +38,7 @@ void CtrlDisplayListView::registerClass()
 CtrlDisplayListView::CtrlDisplayListView(HWND _wnd)
 	: wnd(_wnd)
 {
-	SetWindowLongPtr(wnd, GWLP_USERDATA, (LONG) this);
+	SetWindowLongPtr(wnd, GWLP_USERDATA, (LONG_PTR) this);
 	SetWindowLong(wnd, GWL_STYLE, GetWindowLong(wnd,GWL_STYLE) | WS_VSCROLL);
 	SetScrollRange(wnd, SB_VERT, -1,1,TRUE);
 	
@@ -314,7 +316,7 @@ void CtrlDisplayListView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
 				char *temp = new char[space];
 
 				char *p = temp, *end = temp + space;
-				for (u32 pos = selectRangeStart; pos < selectRangeEnd; pos += instructionSize)
+				for (u32 pos = selectRangeStart; pos < selectRangeEnd && p < end; pos += instructionSize)
 				{
 					GPUDebugOp op = gpuDebug->DissassembleOp(pos);
 					p += snprintf(p, end - p, "%s\r\n", op.desc.c_str());
@@ -351,7 +353,7 @@ void CtrlDisplayListView::onMouseUp(WPARAM wParam, LPARAM lParam, int button)
 				char *temp = new char[space];
 
 				char *p = temp, *end = temp + space;
-				for (u32 pos = selectRangeStart; pos < selectRangeEnd; pos += instructionSize)
+				for (u32 pos = selectRangeStart; pos < selectRangeEnd && p < end; pos += instructionSize)
 					p += snprintf(p, end - p, "%08X\r\n", Memory::ReadUnchecked_U32(pos));
 
 				W32Util::CopyTextToClipboard(wnd, temp);

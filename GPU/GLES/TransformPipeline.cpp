@@ -72,7 +72,7 @@
 #include "Core/Config.h"
 #include "Core/CoreTiming.h"
 
-#include "native/gfx_es2/gl_state.h"
+#include "profiler/profiler.h"
 
 #include "GPU/Math3D.h"
 #include "GPU/GPUState.h"
@@ -82,6 +82,7 @@
 #include "GPU/Common/SplineCommon.h"
 #include "GPU/Common/VertexDecoderCommon.h"
 #include "GPU/Common/SoftwareTransformCommon.h"
+#include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/FragmentTestCache.h"
 #include "GPU/GLES/StateMapping.h"
 #include "GPU/GLES/TextureCache.h"
@@ -103,13 +104,8 @@ extern const GLuint glprim[8] = {
 };
 
 enum {
-	VERTEX_BUFFER_MAX = 65536,
-	DECODED_VERTEX_BUFFER_SIZE = VERTEX_BUFFER_MAX * 48,
-	DECODED_INDEX_BUFFER_SIZE = VERTEX_BUFFER_MAX * 20,
 	TRANSFORMED_VERTEX_BUFFER_SIZE = VERTEX_BUFFER_MAX * sizeof(TransformedVertex)
 };
-
-#define QUAD_INDICES_MAX 32768
 
 #define VERTEXCACHE_DECIMATION_INTERVAL 17
 #define VERTEXCACHE_NAME_CACHE_SIZE 64
@@ -121,7 +117,6 @@ enum { VAI_KILL_AGE = 120, VAI_UNRELIABLE_KILL_AGE = 240, VAI_UNRELIABLE_KILL_MA
 TransformDrawEngine::TransformDrawEngine()
 	: decodedVerts_(0),
 		prevPrim_(GE_PRIM_INVALID),
-		dec_(0),
 		lastVType_(-1),
 		shaderManager_(0),
 		textureCache_(0),
@@ -131,6 +126,7 @@ TransformDrawEngine::TransformDrawEngine()
 		decodeCounter_(0),
 		dcid_(0),
 		uvScale(0),
+		fboTexNeedBind_(false),
 		fboTexBound_(false) {
 	decimationCounter_ = VERTEXCACHE_DECIMATION_INTERVAL;
 	memset(&decOptions_, 0, sizeof(decOptions_));
@@ -140,24 +136,14 @@ TransformDrawEngine::TransformDrawEngine()
 	// All this is a LOT of memory, need to see if we can cut down somehow.
 	decoded = (u8 *)AllocateMemoryPages(DECODED_VERTEX_BUFFER_SIZE);
 	decIndex = (u16 *)AllocateMemoryPages(DECODED_INDEX_BUFFER_SIZE);
+	splineBuffer = (u8 *)AllocateMemoryPages(SPLINE_BUFFER_SIZE);
 	transformed = (TransformedVertex *)AllocateMemoryPages(TRANSFORMED_VERTEX_BUFFER_SIZE);
 	transformedExpanded = (TransformedVertex *)AllocateMemoryPages(3 * TRANSFORMED_VERTEX_BUFFER_SIZE);
-
-	quadIndices_ = new u16[6 * QUAD_INDICES_MAX];
-	for (int i = 0; i < QUAD_INDICES_MAX; i++) {
-		quadIndices_[i * 6 + 0] = i * 4;
-		quadIndices_[i * 6 + 1] = i * 4 + 2;
-		quadIndices_[i * 6 + 2] = i * 4 + 1;
-		quadIndices_[i * 6 + 3] = i * 4 + 1;
-		quadIndices_[i * 6 + 4] = i * 4 + 2;
-		quadIndices_[i * 6 + 5] = i * 4 + 3;
-	}
 
 	if (g_Config.bPrescaleUV) {
 		uvScale = new UVScale[MAX_DEFERRED_DRAW_CALLS];
 	}
 	indexGen.Setup(decIndex);
-	decJitCache_ = new VertexDecoderJitCache();
 
 	InitDeviceObjects();
 	register_gl_resource_holder(this);
@@ -167,15 +153,11 @@ TransformDrawEngine::~TransformDrawEngine() {
 	DestroyDeviceObjects();
 	FreeMemoryPages(decoded, DECODED_VERTEX_BUFFER_SIZE);
 	FreeMemoryPages(decIndex, DECODED_INDEX_BUFFER_SIZE);
+	FreeMemoryPages(splineBuffer, SPLINE_BUFFER_SIZE);
 	FreeMemoryPages(transformed, TRANSFORMED_VERTEX_BUFFER_SIZE);
 	FreeMemoryPages(transformedExpanded, 3 * TRANSFORMED_VERTEX_BUFFER_SIZE);
-	delete [] quadIndices_;
 
 	unregister_gl_resource_holder(this);
-	delete decJitCache_;
-	for (auto iter = decoderMap_.begin(); iter != decoderMap_.end(); iter++) {
-		delete iter->second;
-	}
 	delete [] uvScale;
 }
 
@@ -190,6 +172,8 @@ void TransformDrawEngine::InitDeviceObjects() {
 
 void TransformDrawEngine::DestroyDeviceObjects() {
 	if (!bufferNameCache_.empty()) {
+		glstate.arrayBuffer.unbind();
+		glstate.elementArrayBuffer.unbind();
 		glDeleteBuffers((GLsizei)bufferNameCache_.size(), &bufferNameCache_[0]);
 		bufferNameCache_.clear();
 	}
@@ -248,16 +232,6 @@ static void SetupDecFmtForDraw(LinkedShader *program, const DecVtxFormat &decFmt
 	VertexAttribSetup(ATTR_POSITION, decFmt.posfmt, decFmt.stride, vertexData + decFmt.posoff);
 }
 
-VertexDecoder *TransformDrawEngine::GetVertexDecoder(u32 vtype) {
-	auto iter = decoderMap_.find(vtype);
-	if (iter != decoderMap_.end())
-		return iter->second;
-	VertexDecoder *dec = new VertexDecoder();
-	dec->SetVertexType(vtype, decOptions_, decJitCache_);
-	decoderMap_[vtype] = dec;
-	return dec;
-}
-
 void TransformDrawEngine::SetupVertexDecoder(u32 vertType) {
 	SetupVertexDecoderInternal(vertType);
 }
@@ -275,27 +249,22 @@ inline void TransformDrawEngine::SetupVertexDecoderInternal(u32 vertType) {
 }
 
 void TransformDrawEngine::SubmitPrim(void *verts, void *inds, GEPrimitiveType prim, int vertexCount, u32 vertType, int *bytesRead) {
-	if (vertexCount == 0)
-		return;  // we ignore zero-sized draw calls.
-
 	if (!indexGen.PrimCompatible(prevPrim_, prim) || numDrawCalls >= MAX_DEFERRED_DRAW_CALLS || vertexCountInDrawCalls + vertexCount > VERTEX_BUFFER_MAX)
 		Flush();
 
 	// TODO: Is this the right thing to do?
 	if (prim == GE_PRIM_KEEP_PREVIOUS) {
-		prim = prevPrim_;
+		prim = prevPrim_ != GE_PRIM_INVALID ? prevPrim_ : GE_PRIM_POINTS;
+	} else {
+		prevPrim_ = prim;
 	}
-	prevPrim_ = prim;
 
 	SetupVertexDecoderInternal(vertType);
 
-	dec_->IncrementStat(STAT_VERTSSUBMITTED, vertexCount);
+	*bytesRead = vertexCount * dec_->VertexSize();
 
-	if (bytesRead)
-		*bytesRead = vertexCount * dec_->VertexSize();
-
-	gpuStats.numDrawCalls++;
-	gpuStats.numVertsSubmitted += vertexCount;
+	if ((vertexCount < 2 && prim > 0) || (vertexCount < 3 && prim > 2 && prim != GE_PRIM_RECTANGLES))
+		return;
 
 	DeferredDrawCall &dc = drawCalls[numDrawCalls];
 	dc.verts = verts;
@@ -337,6 +306,7 @@ void TransformDrawEngine::SubmitPrim(void *verts, void *inds, GEPrimitiveType pr
 	}
 
 	if (prim == GE_PRIM_RECTANGLES && (gstate.getTextureAddress(0) & 0x3FFFFFFF) == (gstate.getFrameBufAddress() & 0x3FFFFFFF)) {
+		// Rendertarget == texture?
 		if (!g_Config.bDisableSlowFramebufEffects) {
 			gstate_c.textureChanged |= TEXCHANGE_PARAMSONLY;
 			Flush();
@@ -366,6 +336,8 @@ void TransformDrawEngine::DecodeVerts() {
 }
 
 void TransformDrawEngine::DecodeVertsStep() {
+	PROFILE_THIS_SCOPE("vertdec");
+
 	const int i = decodeCounter_;
 
 	const DeferredDrawCall &dc = drawCalls[i];
@@ -374,8 +346,7 @@ void TransformDrawEngine::DecodeVertsStep() {
 	int indexLowerBound = dc.indexLowerBound, indexUpperBound = dc.indexUpperBound;
 
 	u32 indexType = dc.indexType;
-	void *inds = dc.inds;
-	if (indexType == GE_VTYPE_IDX_NONE >> GE_VTYPE_IDX_SHIFT) {
+	if (indexType == (GE_VTYPE_IDX_NONE >> GE_VTYPE_IDX_SHIFT)) {
 		// Decode the verts and apply morphing. Simple.
 		dec_->DecodeVerts(decoded + decodedVerts_ * (int)dec_->GetDecVtxFmt().stride,
 			dc.verts, indexLowerBound, indexUpperBound);
@@ -428,9 +399,15 @@ void TransformDrawEngine::DecodeVertsStep() {
 		}
 
 		const int vertexCount = indexUpperBound - indexLowerBound + 1;
+
+		// This check is a workaround for Pangya Fantasy Golf, which sends bogus index data when switching items in "My Room" sometimes.
+		if (decodedVerts_ + vertexCount > VERTEX_BUFFER_MAX) {
+			return;
+		}
+
 		// 3. Decode that range of vertex data.
-		dec_->DecodeVerts(decoded + decodedVerts_ * (int)dec_->GetDecVtxFmt().stride,
-			dc.verts, indexLowerBound, indexUpperBound);
+		int stride = (int)dec_->GetDecVtxFmt().stride;
+		dec_->DecodeVerts(decoded + decodedVerts_ * stride, dc.verts, indexLowerBound, indexUpperBound);
 		decodedVerts_ += vertexCount;
 
 		// 4. Advance indexgen vertex counter.
@@ -448,7 +425,7 @@ inline u32 ComputeMiniHashRange(const void *ptr, size_t sz) {
 		size_t step = sz / 4;
 		u32 hash = 0;
 		for (size_t i = 0; i < sz; i += step) {
-			hash += DoReliableHash(p + i, 100, 0x3A44B9C4);
+			hash += DoReliableHash32(p + i, 100, 0x3A44B9C4);
 		}
 		return hash;
 	} else {
@@ -495,8 +472,8 @@ void TransformDrawEngine::MarkUnreliable(VertexArrayInfo *vai) {
 	}
 }
 
-u32 TransformDrawEngine::ComputeHash() {
-	u32 fullhash = 0;
+ReliableHashType TransformDrawEngine::ComputeHash() {
+	ReliableHashType fullhash = 0;
 	const int vertexSize = dec_->GetDecVtxFmt().stride;
 	const int indexSize = (dec_->VertexType() & GE_VTYPE_IDX_MASK) == GE_VTYPE_IDX_16BIT ? 2 : 1;
 
@@ -569,6 +546,8 @@ void TransformDrawEngine::DecimateTrackedVertexArrays() {
 }
 
 VertexArrayInfo::~VertexArrayInfo() {
+	glstate.arrayBuffer.unbind();
+	glstate.elementArrayBuffer.unbind();
 	if (vbo)
 		glDeleteBuffers(1, &vbo);
 	if (ebo)
@@ -592,12 +571,15 @@ void TransformDrawEngine::FreeBuffer(GLuint buf) {
 	// But let's not keep too many around, will eat up memory.
 	if (bufferNameCache_.size() >= VERTEXCACHE_NAME_CACHE_FULL_SIZE) {
 		GLsizei extra = (GLsizei)bufferNameCache_.size() - VERTEXCACHE_NAME_CACHE_SIZE;
+		glstate.arrayBuffer.unbind();
+		glstate.elementArrayBuffer.unbind();
 		glDeleteBuffers(extra, &bufferNameCache_[VERTEXCACHE_NAME_CACHE_SIZE]);
 		bufferNameCache_.resize(VERTEXCACHE_NAME_CACHE_SIZE);
 	}
 }
 
 void TransformDrawEngine::DoFlush() {
+	PROFILE_THIS_SCOPE("flush");
 	gpuStats.numFlushes++;
 	gpuStats.numTrackedVertexArrays = (int)vai_.size();
 
@@ -612,7 +594,6 @@ void TransformDrawEngine::DoFlush() {
 	if (vshader->UseHWTransform()) {
 		GLuint vbo = 0, ebo = 0;
 		int vertexCount = 0;
-		int maxIndex = 0;  // Compiler warns about this because it's only used in the #ifdeffed out RangeElements path.
 		bool useElements = true;
 
 		// Cannot cache vertex data with morph enabled.
@@ -637,7 +618,7 @@ void TransformDrawEngine::DoFlush() {
 			case VertexArrayInfo::VAI_NEW:
 				{
 					// Haven't seen this one before.
-					u32 dataHash = ComputeHash();
+					ReliableHashType dataHash = ComputeHash();
 					vai->hash = dataHash;
 					vai->minihash = ComputeMiniHash();
 					vai->status = VertexArrayInfo::VAI_HASHING;
@@ -662,7 +643,7 @@ void TransformDrawEngine::DoFlush() {
 					if (vai->drawsUntilNextFullHash == 0) {
 						// Let's try to skip a full hash if mini would fail.
 						const u32 newMiniHash = ComputeMiniHash();
-						u32 newHash = vai->hash;
+						ReliableHashType newHash = vai->hash;
 						if (newMiniHash == vai->minihash) {
 							newHash = ComputeHash();
 						}
@@ -703,25 +684,26 @@ void TransformDrawEngine::DoFlush() {
 							vai->numVerts = indexGen.PureCount();
 						}
 
+						_dbg_assert_msg_(G3D, gstate_c.vertBounds.minV >= gstate_c.vertBounds.maxV, "Should not have checked UVs when caching.");
+
 						vai->vbo = AllocateBuffer();
-						glBindBuffer(GL_ARRAY_BUFFER, vai->vbo);
+						glstate.arrayBuffer.bind(vai->vbo);
 						glBufferData(GL_ARRAY_BUFFER, dec_->GetDecVtxFmt().stride * indexGen.MaxIndex(), decoded, GL_STATIC_DRAW);
 						// If there's only been one primitive type, and it's either TRIANGLES, LINES or POINTS,
 						// there is no need for the index buffer we built. We can then use glDrawArrays instead
 						// for a very minor speed boost.
 						if (useElements) {
 							vai->ebo = AllocateBuffer();
-							glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vai->ebo);
+							glstate.elementArrayBuffer.bind(vai->ebo);
 							glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(short) * indexGen.VertexCount(), (GLvoid *)decIndex, GL_STATIC_DRAW);
 						} else {
 							vai->ebo = 0;
-							glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+							glstate.elementArrayBuffer.bind(vai->ebo);
 						}
 					} else {
 						gpuStats.numCachedDrawCalls++;
-						glBindBuffer(GL_ARRAY_BUFFER, vai->vbo);
-						if (vai->ebo)
-							glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vai->ebo);
+						glstate.arrayBuffer.bind(vai->vbo);
+						glstate.elementArrayBuffer.bind(vai->ebo);
 						useElements = vai->ebo ? true : false;
 						gpuStats.numCachedVertsDrawn += vai->numVerts;
 						gstate_c.vertexFullAlpha = vai->flags & VAI_FLAG_VERTEXFULLALPHA;
@@ -729,7 +711,6 @@ void TransformDrawEngine::DoFlush() {
 					vbo = vai->vbo;
 					ebo = vai->ebo;
 					vertexCount = vai->numVerts;
-					maxIndex = vai->maxIndex;
 					prim = static_cast<GEPrimitiveType>(vai->prim);
 					break;
 				}
@@ -745,11 +726,9 @@ void TransformDrawEngine::DoFlush() {
 					gpuStats.numCachedVertsDrawn += vai->numVerts;
 					vbo = vai->vbo;
 					ebo = vai->ebo;
-					glBindBuffer(GL_ARRAY_BUFFER, vbo);
-					if (ebo)
-						glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+					glstate.arrayBuffer.bind(vbo);
+					glstate.elementArrayBuffer.bind(ebo);
 					vertexCount = vai->numVerts;
-					maxIndex = vai->maxIndex;
 					prim = static_cast<GEPrimitiveType>(vai->prim);
 
 					gstate_c.vertexFullAlpha = vai->flags & VAI_FLAG_VERTEXFULLALPHA;
@@ -775,12 +754,11 @@ rotateVBO:
 			gpuStats.numUncachedVertsDrawn += indexGen.VertexCount();
 			useElements = !indexGen.SeenOnlyPurePrims();
 			vertexCount = indexGen.VertexCount();
-			maxIndex = indexGen.MaxIndex();
 			if (!useElements && indexGen.PureCount()) {
 				vertexCount = indexGen.PureCount();
 			}
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+			glstate.arrayBuffer.unbind();
+			glstate.elementArrayBuffer.unbind();
 
 			prim = indexGen.Prim();
 		}
@@ -798,18 +776,10 @@ rotateVBO:
 		SetupDecFmtForDraw(program, dec_->GetDecVtxFmt(), vbo ? 0 : decoded);
 
 		if (useElements) {
-#if 1  // USING_GLES2
 			glDrawElements(glprim[prim], vertexCount, GL_UNSIGNED_SHORT, ebo ? 0 : (GLvoid*)decIndex);
-#else
-			glDrawRangeElements(glprim[prim], 0, maxIndex, vertexCount, GL_UNSIGNED_SHORT, ebo ? 0 : (GLvoid*)decIndex);
-#endif
-			if (ebo)
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 		} else {
 			glDrawArrays(glprim[prim], 0, vertexCount);
 		}
-		if (vbo)
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
 	} else {
 		DecodeVerts();
 		bool hasColor = (lastVType_ & GE_VTYPE_COL_MASK) != GE_VTYPE_COL_NONE;
@@ -819,8 +789,6 @@ rotateVBO:
 			gstate_c.vertexFullAlpha = gstate_c.vertexFullAlpha && ((hasColor && (gstate.materialupdate & 1)) || gstate.getMaterialAmbientA() == 255) && (!gstate.isLightingEnabled() || gstate.getAmbientA() == 255);
 		}
 
-		ApplyDrawStateLate();
-		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, prim, lastVType_);
 		gpuStats.numUncachedVertsDrawn += indexGen.VertexCount();
 		prim = indexGen.Prim();
 		// Undo the strip optimization, not supported by the SW code yet.
@@ -834,10 +802,14 @@ rotateVBO:
 		SoftwareTransformResult result;
 		memset(&result, 0, sizeof(result));
 
+		int maxIndex = indexGen.MaxIndex();
 		SoftwareTransform(
 			prim, decoded, indexGen.VertexCount(),
-			dec_->VertexType(), (void *)inds, GE_VTYPE_IDX_16BIT, dec_->GetDecVtxFmt(),
-			indexGen.MaxIndex(), framebufferManager_, textureCache_, transformed, transformedExpanded, drawBuffer, numTrans, drawIndexed, &result);
+			dec_->VertexType(), inds, GE_VTYPE_IDX_16BIT, dec_->GetDecVtxFmt(),
+			maxIndex, framebufferManager_, textureCache_, transformed, transformedExpanded, drawBuffer, numTrans, drawIndexed, &result, 1.0);
+
+		ApplyDrawStateLate();
+		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, prim, lastVType_);
 
 		if (result.action == SW_DRAW_PRIMITIVES) {
 			if (result.setStencil) {
@@ -846,18 +818,15 @@ rotateVBO:
 			const int vertexSize = sizeof(transformed[0]);
 
 			bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			glstate.arrayBuffer.unbind();
+			glstate.elementArrayBuffer.unbind();
 			glVertexAttribPointer(ATTR_POSITION, 4, GL_FLOAT, GL_FALSE, vertexSize, drawBuffer);
 			int attrMask = program->attrMask;
 			if (attrMask & (1 << ATTR_TEXCOORD)) glVertexAttribPointer(ATTR_TEXCOORD, doTextureProjection ? 3 : 2, GL_FLOAT, GL_FALSE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, u));
 			if (attrMask & (1 << ATTR_COLOR0)) glVertexAttribPointer(ATTR_COLOR0, 4, GL_UNSIGNED_BYTE, GL_TRUE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, color0));
 			if (attrMask & (1 << ATTR_COLOR1)) glVertexAttribPointer(ATTR_COLOR1, 3, GL_UNSIGNED_BYTE, GL_TRUE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, color1));
 			if (drawIndexed) {
-#if 1  // USING_GLES2
 				glDrawElements(glprim[prim], numTrans, GL_UNSIGNED_SHORT, inds);
-#else
-				glDrawRangeElements(glprim[prim], 0, indexGen.MaxIndex(), numTrans, GL_UNSIGNED_SHORT, inds);
-#endif
 			} else {
 				glDrawArrays(glprim[prim], 0, numTrans);
 			}
@@ -898,9 +867,12 @@ rotateVBO:
 			// Stencil takes alpha.
 			glClearStencil(clearColor >> 24);
 			glClear(target);
-			framebufferManager_->SetColorUpdated();
+			framebufferManager_->SetColorUpdated(gstate_c.skipDrawReason);
 		}
 	}
+
+	gpuStats.numDrawCalls += numDrawCalls;
+	gpuStats.numVertsSubmitted += vertexCountInDrawCalls;
 
 	indexGen.Reset();
 	decodedVerts_ = 0;
@@ -910,7 +882,13 @@ rotateVBO:
 	dcid_ = 0;
 	prevPrim_ = GE_PRIM_INVALID;
 	gstate_c.vertexFullAlpha = true;
-	framebufferManager_->SetColorUpdated();
+	framebufferManager_->SetColorUpdated(gstate_c.skipDrawReason);
+
+	// Now seems as good a time as any to reset the min/max coords, which we may examine later.
+	gstate_c.vertBounds.minU = 512;
+	gstate_c.vertBounds.minV = 512;
+	gstate_c.vertBounds.maxU = 0;
+	gstate_c.vertBounds.maxV = 0;
 
 #ifndef MOBILE_DEVICE
 	host->GPUNotifyDraw();
