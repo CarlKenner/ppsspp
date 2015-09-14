@@ -343,25 +343,25 @@ void GameSettingsScreen::CreateViews() {
 	vrSettingsScroll->Add(vrSettings);
 	tabHolder->AddTab(ms->T("VR"), vrSettingsScroll);
 
-	vrSettings->Add(new ItemHeader(gs->T("All games")));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gs->T("Scale"), 0.01f, screenManager()));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fLeanBackAngle, -180.0f, 180.0f, gs->T("Lean back angle"), 1.0f, screenManager()));
+	vrSettings->Add(new ItemHeader(gr->T("All games")));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gr->T("Scale"), 0.01f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fLeanBackAngle, -180.0f, 180.0f, gr->T("Lean back angle"), 1.0f, screenManager()));
 
-	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gs->T("Enable VR")));
-	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gs->T("Low persistence")));
-	vrSettings->Add(new CheckBox(&g_Config.bDynamicPrediction, gs->T("Dynamic prediction")));
-	vrSettings->Add(new CheckBox(&g_Config.bOrientationTracking, gs->T("Orientation tracking")));
-	vrSettings->Add(new CheckBox(&g_Config.bMagYawCorrection, gs->T("Magnetic yaw")));
-	vrSettings->Add(new CheckBox(&g_Config.bPositionTracking, gs->T("Position tracking")));
-	vrSettings->Add(new CheckBox(&g_Config.bChromatic, gs->T("Chromatic aberration")));
-	vrSettings->Add(new CheckBox(&g_Config.bTimewarp, gs->T("Timewarp")));
-	vrSettings->Add(new CheckBox(&g_Config.bVignette, gs->T("Vignette")));
-	vrSettings->Add(new CheckBox(&g_Config.bNoRestore, gs->T("Don't restore")));
-	vrSettings->Add(new CheckBox(&g_Config.bFlipVertical, gs->T("Flip vertical")));
-	vrSettings->Add(new CheckBox(&g_Config.bSRGB, gs->T("sRGB")));
-	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gs->T("Overdrive")));
-	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gs->T("HQ distortion")));
-	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gs->T("Asynchronous timewarp")));
+	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
+	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
+	vrSettings->Add(new CheckBox(&g_Config.bDynamicPrediction, gr->T("Dynamic prediction")));
+	vrSettings->Add(new CheckBox(&g_Config.bOrientationTracking, gr->T("Orientation tracking")));
+	vrSettings->Add(new CheckBox(&g_Config.bMagYawCorrection, gr->T("Magnetic yaw")));
+	vrSettings->Add(new CheckBox(&g_Config.bPositionTracking, gr->T("Position tracking")));
+	vrSettings->Add(new CheckBox(&g_Config.bChromatic, gr->T("Chromatic aberration")));
+	vrSettings->Add(new CheckBox(&g_Config.bTimewarp, gr->T("Timewarp")));
+	vrSettings->Add(new CheckBox(&g_Config.bVignette, gr->T("Vignette")));
+	vrSettings->Add(new CheckBox(&g_Config.bNoRestore, gr->T("Don't restore")));
+	vrSettings->Add(new CheckBox(&g_Config.bFlipVertical, gr->T("Flip vertical")));
+	vrSettings->Add(new CheckBox(&g_Config.bSRGB, gr->T("sRGB")));
+	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
+	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
+	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 
 	// Audio
 	ViewGroup *audioSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
