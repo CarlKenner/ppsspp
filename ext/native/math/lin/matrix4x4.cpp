@@ -15,6 +15,13 @@
 // See http://code.google.com/p/oolongengine/source/browse/trunk/Oolong+Engine2/Math/neonmath/neon_matrix_impl.cpp?spec=svn143&r=143	when we need speed
 // no wait. http://code.google.com/p/math-neon/
 
+Matrix4x4 &Matrix4x4::operator= (const Matrix3x3 &other) {
+	xx = other.xx; xy = other.xy; xz = other.xz;
+	yx = other.yx; yy = other.yy; yz = other.yz;
+	zx = other.zx; zy = other.zy; zz = other.zz;
+	return *this;
+}
+
 Matrix4x4 Matrix4x4::simpleInverse() const {
 	Matrix4x4 out;
 	out.xx = xx;
@@ -266,3 +273,247 @@ void Matrix4x4::print() const {
 	toText(buffer, 256);
 	puts(buffer);
 }
+
+///////////////////////////////////////////
+
+Matrix3x3 Matrix3x3::simpleInverse() const {
+	return transpose();
+}
+
+Matrix3x3 Matrix3x3::transpose() const
+{
+	Matrix3x3 out;
+	out.xx = xx; out.xy = yx; out.xz = zx;
+	out.yx = xy; out.yy = yy; out.yz = zy;
+	out.zx = xz; out.zy = yz; out.zz = zz;
+	return out;
+}
+
+Matrix3x3 Matrix3x3::operator * (const Matrix3x3 &other) const
+{
+	Matrix3x3 temp;
+	fast_matrix_mul_3x3(temp.m, other.m, this->m);
+	return temp;
+}
+
+Matrix3x3 Matrix3x3::inverse() const {
+	Matrix3x3 temp;
+	float dW = 1.0f / (xx*(yy*zz - yz*zy) - xy*(yx*zz - yz*zx) - xz*(yy*zx - yx*zy));
+
+	temp.xx = (yy*zz - yz*zy) * dW;
+	temp.xy = (xz*zy - xy*zz) * dW;
+	temp.xz = (xy*yz - xz*yy) * dW;
+
+	temp.yx = (yz*zx - yx*zz) * dW;
+	temp.yy = (xx*zz - xz*zx) * dW;
+	temp.yz = (xz*yx - xx*zx) * dW;
+
+	temp.zx = (yx*zy - yy*zx) * dW;
+	temp.zy = (xy*zx - xx*zy) * dW;
+	temp.zz = (xx*yy - xy*yx) * dW;
+
+	return temp;
+}
+
+//YXZ euler angles
+void Matrix3x3::setRotation(float x, float y, float z)
+{
+	setRotationY(y);
+	Matrix3x3 temp;
+	temp.setRotationX(x);
+	*this *= temp;
+	temp.setRotationZ(z);
+	*this *= temp;
+}
+
+void Matrix3x3::setRotationAxisAngle(const Vec3 &axis, float angle) {
+	Quaternion quat;
+	quat.setRotation(axis, angle);
+	quat.toMatrix(this);
+}
+
+// from a (Position, Rotation, Scale) vec3 quat vec3 tuple
+Matrix3x3 Matrix3x3::fromPRS(const Vec3 &positionv, const Quaternion &rotv, const Vec3 &scalev) {
+	Matrix3x3 newM;
+	newM.setIdentity();
+	Matrix4x4 rot4;
+	Matrix3x3 rot, scale;
+	rotv.toMatrix(&rot4);
+	rot = rot4;
+	scale.setScaling(scalev);
+	newM = rot * scale;
+	return newM;
+}
+
+void Matrix3x3::toText(char *buffer, int len) const {
+	snprintf(buffer, len, "%f %f %f\n%f %f %f\n%f %f %f\n",
+		xx, xy, xz,
+		yx, yy, yz,
+		zx, zy, zz);
+	buffer[len - 1] = '\0';
+}
+
+void Matrix3x3::print() const {
+	char buffer[256];
+	toText(buffer, 256);
+	puts(buffer);
+}
+
+inline void MatrixMul(int n, const float *a, const float *b, float *result)
+{
+	for (int i = 0; i < n; ++i)
+	{
+		for (int j = 0; j < n; ++j)
+		{
+			float temp = 0;
+			for (int k = 0; k < n; ++k)
+			{
+				temp += a[i * n + k] * b[k * n + j];
+			}
+			result[i * n + j] = temp;
+		}
+	}
+}
+
+void Matrix3x3::LoadIdentity(Matrix3x3 &mtx)
+{
+	mtx.setIdentity();
+}
+
+void Matrix3x3::LoadQuaternion(Matrix3x3 &mtx, const Quaternion &quat)
+{
+	quat.toMatrix(&mtx);
+}
+
+// this Dolphin VR function rotates the opposite direction from PPSSPP's setRotationX
+void Matrix3x3::RotateX(Matrix3x3 &mtx, float rad)
+{
+	float s = sinf(rad);
+	float c = cosf(rad);
+	memset(mtx.data, 0, sizeof(mtx.data));
+	mtx.data[0] = 1;  //xx
+	mtx.data[4] = c;  //yy
+	mtx.data[5] = -s; //yz
+	mtx.data[7] = s;  //zy
+	mtx.data[8] = c;  //zz 
+}
+
+// this Dolphin VR function rotates the opposite direction from PPSSPP's setRotationY
+void Matrix3x3::RotateY(Matrix3x3 &mtx, float rad)
+{
+	float s = sinf(rad);
+	float c = cosf(rad);
+	memset(mtx.data, 0, sizeof(mtx.data));
+	mtx.data[0] = c; //xx
+	mtx.data[2] = s; //xz
+	mtx.data[4] = 1; //yy
+	mtx.data[6] = -s;//zx
+	mtx.data[8] = c; //zz
+}
+
+// this Dolphin VR function rotates the opposite direction from PPSSPP's setRotationZ
+void Matrix3x3::RotateZ(Matrix3x3 &mtx, float rad)
+{
+	float s = sin(rad);
+	float c = cos(rad);
+	memset(mtx.data, 0, sizeof(mtx.data));
+	mtx.data[0] = c;  //xx
+	mtx.data[1] = -s; //xy
+	mtx.data[3] = s;
+	mtx.data[4] = c;
+	mtx.data[8] = 1;
+}
+
+void Matrix3x3::Multiply(const Matrix3x3 &a, const Matrix3x3 &b, Matrix3x3 &result)
+{
+	MatrixMul(3, a.data, b.data, result.data);
+}
+
+void Matrix3x3::Multiply(const Matrix3x3 &a, const float vec[3], float result[3])
+{
+	for (int i = 0; i < 3; ++i)
+	{
+		result[i] = 0;
+
+		for (int k = 0; k < 3; ++k)
+		{
+			result[i] += a.data[i * 3 + k] * vec[k];
+		}
+	}
+}
+
+// GlovePIE function for extracting yaw, pitch, and roll from a rotation matrix
+void Matrix3x3::GetPieYawPitchRollR(const Matrix3x3 &m, float &yaw, float &pitch, float &roll)
+{
+	float s, c, cp;
+	pitch = asin(m.data[2 * 3 + 1]);
+	cp = cos(pitch);
+
+	//yaw:=arcsin(m[2][0]/cp);
+	s = m.data[2 * 3 + 0] / cp;
+	c = m.data[2 * 3 + 2] / cp;
+	yaw = atan2(s, c);
+
+	s = -m.data[0 * 3 + 1] / cp;
+	c = m.data[1 * 3 + 1] / cp;
+	roll = atan2(s, c);
+}
+
+void Matrix4x4::LoadIdentity(Matrix4x4 &mtx)
+{
+	mtx.setIdentity();
+}
+
+void Matrix4x4::LoadMatrix33(Matrix4x4 &mtx, const Matrix3x3 &m33)
+{
+	for (int i = 0; i < 3; ++i)
+	{
+		for (int j = 0; j < 3; ++j)
+		{
+			mtx.data[i * 4 + j] = m33.data[i * 3 + j];
+		}
+	}
+
+	for (int i = 0; i < 3; ++i)
+	{
+		mtx.data[i * 4 + 3] = 0;
+		mtx.data[i + 12] = 0;
+	}
+	mtx.data[15] = 1.0f;
+}
+
+void Matrix4x4::Set(Matrix4x4 &mtx, const float mtxArray[16])
+{
+	for (int i = 0; i < 16; ++i)
+	{
+		mtx.data[i] = mtxArray[i];
+	}
+}
+
+void Matrix4x4::Translate(Matrix4x4 &mtx, const float vec[3])
+{
+	LoadIdentity(mtx);
+	mtx.data[3] = vec[0];
+	mtx.data[7] = vec[1];
+	mtx.data[11] = vec[2];
+}
+
+void Matrix4x4::Shear(Matrix4x4 &mtx, const float a, const float b)
+{
+	LoadIdentity(mtx);
+	mtx.data[2] = a;
+	mtx.data[6] = b;
+}
+void Matrix4x4::Scale(Matrix4x4 &mtx, const float vec[3])
+{
+	LoadIdentity(mtx);
+	mtx.data[0] = vec[0];
+	mtx.data[5] = vec[1];
+	mtx.data[10] = vec[2];
+}
+
+void Matrix4x4::Multiply(const Matrix4x4 &a, const Matrix4x4 &b, Matrix4x4 &result)
+{
+	MatrixMul(4, a.data, b.data, result.data);
+}
+

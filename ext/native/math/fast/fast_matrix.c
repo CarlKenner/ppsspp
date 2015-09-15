@@ -43,3 +43,45 @@ void fast_matrix_mul_4x4_c(float *dest, const float *a, const float *b) {
 #ifndef fast_matrix_mul_4x4
 fptr_fast_matrix_mul_4x4 fast_matrix_mul_4x4 = &fast_matrix_mul_4x4_c;
 #endif
+
+#undef xx
+#undef xy
+#undef xz
+#undef xw
+#undef yx
+#undef yy
+#undef yz
+#undef yw
+#undef zx
+#undef zy
+#undef zz
+#undef zw
+#undef wx
+#undef wy
+#undef wz
+#undef ww
+
+#define xx 0
+#define xy 1
+#define xz 2
+#define yx 3
+#define yy 4
+#define yz 5
+#define zx 6
+#define zy 7
+#define zz 8
+
+void fast_matrix_mul_3x3_c(float *dest, const float *a, const float *b) {
+	dest[xx] = b[xx] * a[xx] + b[xy] * a[yx] + b[xz] * a[zx];
+	dest[xy] = b[xx] * a[xy] + b[xy] * a[yy] + b[xz] * a[zy];
+	dest[xz] = b[xx] * a[xz] + b[xy] * a[yz] + b[xz] * a[zz];
+
+	dest[yx] = b[yx] * a[xx] + b[yy] * a[yx] + b[yz] * a[zx];
+	dest[yy] = b[yx] * a[xy] + b[yy] * a[yy] + b[yz] * a[zy];
+	dest[yz] = b[yx] * a[xz] + b[yy] * a[yz] + b[yz] * a[zz];
+
+	dest[zx] = b[zx] * a[xx] + b[zy] * a[yx] + b[zz] * a[zx];
+	dest[zy] = b[zx] * a[xy] + b[zy] * a[yy] + b[zz] * a[zy];
+	dest[zz] = b[zx] * a[xz] + b[zy] * a[yz] + b[zz] * a[zz];
+}
+

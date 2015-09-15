@@ -24,6 +24,29 @@ void Quaternion::toMatrix(Matrix4x4 *out) const {
 	*out = temp;
 }
 
+void Quaternion::toMatrix(Matrix3x3 *out) const {
+	Matrix3x3 temp;
+	temp.setIdentity();
+	float ww, xx, yy, zz, wx, wy, wz, xy, xz, yz;
+	ww = w*w;	 xx = x*x;	 yy = y*y;	 zz = z*z;
+	wx = w*x * 2; wy = w*y * 2; wz = w*z * 2;
+	xy = x*y * 2; xz = x*z * 2; yz = y*z * 2;
+
+	temp.xx = ww + xx - yy - zz;
+	temp.xy = xy + wz;
+	temp.xz = xz - wy;
+
+	temp.yx = xy - wz;
+	temp.yy = ww - xx + yy - zz;
+	temp.yz = yz + wx;
+
+	temp.zx = xz + wy;
+	temp.zy = yz - wx;
+	temp.zz = ww - xx - yy + zz;
+
+	*out = temp;
+}
+
 Quaternion Quaternion::fromMatrix(Matrix4x4 &m)
 {
 	// Algorithm in Ken Shoemake's article in 1987 SIGGRAPH course notes
@@ -75,6 +98,13 @@ Quaternion Quaternion::fromMatrix(Matrix4x4 &m)
 	q.normalize(); */
 	return q;
 };
+
+Quaternion Quaternion::fromMatrix(Matrix3x3 &m)
+{
+	Quaternion q(0, 0, 0, 1);
+	// not implemented!
+	return q;
+}
 
 // TODO: Allegedly, lerp + normalize can achieve almost as good results.
 Quaternion Quaternion::slerp(const Quaternion &to, const float a) const {

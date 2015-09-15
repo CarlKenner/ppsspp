@@ -3,6 +3,7 @@
 
 #include "math/lin/vec3.h"
 
+class Matrix3x3;
 class Matrix4x4;
 
 class Quaternion
@@ -22,7 +23,9 @@ public:
 	void setYRotation(const float r) { w = cosf(r / 2); y = sinf(r / 2); x = z = 0; }
 	void setZRotation(const float r) { w = cosf(r / 2); z = sinf(r / 2); x = y = 0; }
 	void toMatrix(Matrix4x4 *out) const;
+	void toMatrix(Matrix3x3 *out) const;
 	static Quaternion fromMatrix(Matrix4x4 &m);
+	static Quaternion fromMatrix(Matrix3x3 &m);
 
 	Quaternion operator *(Quaternion &q) const
 	{

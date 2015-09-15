@@ -4,6 +4,7 @@
 #include "math/lin/vec3.h"
 
 class Quaternion;
+class Matrix3x3;
 
 class Matrix4x4 {
 public:
@@ -15,6 +16,7 @@ public:
 			float wx, wy, wz, ww;
 		};
 		float m[16];
+		float data[16];
 	};
 
 	const Vec3 right() const {return Vec3(xx, xy, xz);}
@@ -36,6 +38,7 @@ public:
 	}
 
 
+	Matrix4x4 &operator=(const Matrix3x3 &other);
 	const float &operator[](int i) const {
 		return *(((const float *)this) + i);
 	}
@@ -166,7 +169,134 @@ public:
 		wy = wy * scale.y + ww * trans.y;
 		wz = wz * scale.z + ww * trans.z;
 	}
+public:
+	static void LoadIdentity(Matrix4x4 &mtx);
+	static void LoadMatrix33(Matrix4x4 &mtx, const Matrix3x3 &m33);
+	static void Set(Matrix4x4 &mtx, const float mtxArray[16]);
+
+	static void Translate(Matrix4x4 &mtx, const float vec[3]);
+	static void Shear(Matrix4x4 &mtx, const float a, const float b = 0);
+	static void Scale(Matrix4x4 &mtx, const float vec[3]);
+
+	static void Multiply(const Matrix4x4 &a, const Matrix4x4 &b, Matrix4x4 &result);
 };
+
+class Matrix3x3 {
+public:
+	union {
+		struct {
+			float xx, xy, xz;
+			float yx, yy, yz;
+			float zx, zy, zz;
+		};
+		float m[9];
+		float data[9];
+	};
+
+	const Vec3 right() const { return Vec3(xx, xy, xz); }
+	const Vec3 up()		const { return Vec3(yx, yy, yz); }
+	const Vec3 front() const { return Vec3(zx, zy, zz); }
+
+	void setRight(const Vec3 &v) {
+		xx = v.x; xy = v.y; xz = v.z;
+	}
+	void setUp(const Vec3 &v) {
+		yx = v.x; yy = v.y; yz = v.z;
+	}
+	void setFront(const Vec3 &v) {
+		zx = v.x; zy = v.y; zz = v.z;
+	}
+
+	const float &operator[](int i) const {
+		return *(((const float *)this) + i);
+	}
+	float &operator[](int i) {
+		return *(((float *)this) + i);
+	}
+	Matrix3x3 &operator=(const Matrix4x4 &other) {
+		xx = other.xx; xy = other.xy; xz = other.xz;
+		yx = other.yx; yy = other.yy; yz = other.yz;
+		zx = other.zx; zy = other.zy; zz = other.zz;
+		return *this;
+	}
+	Matrix3x3 operator * (const Matrix3x3 &other) const;
+	void operator *= (const Matrix3x3 &other) {
+		*this = *this * other;
+	}
+	const float *getReadPtr() const {
+		return (const float *)this;
+	}
+	void empty() {
+		memset(this, 0, 9 * sizeof(float));
+	}
+	void setScaling(const float f) {
+		empty();
+		xx = yy = zz = f;
+	}
+	void setScaling(const Vec3 f) {
+		empty();
+		xx = f.x;
+		yy = f.y;
+		zz = f.z;
+	}
+
+	void setIdentity() {
+		setScaling(1.0f);
+	}
+
+	Matrix3x3 inverse() const;
+	Matrix3x3 simpleInverse() const;
+	Matrix3x3 transpose() const;
+
+	void setRotationX(const float a) {
+		empty();
+		float c = cosf(a);
+		float s = sinf(a);
+		xx = 1.0f;
+		yy = c;			yz = s;
+		zy = -s;			zz = c;
+	}
+	void setRotationY(const float a)	 {
+		empty();
+		float c = cosf(a);
+		float s = sinf(a);
+		xx = c;									 xz = -s;
+		yy = 1.0f;
+		zx = s;									 zz = c;
+	}
+	void setRotationZ(const float a)	 {
+		empty();
+		float c = cosf(a);
+		float s = sinf(a);
+		xx = c;		xy = s;
+		yx = -s;	 yy = c;
+		zz = 1.0f;
+	}
+	void setRotationAxisAngle(const Vec3 &axis, float angle);
+	void setRotation(float x, float y, float z);
+
+	void toText(char *buffer, int len) const;
+	void print() const;
+	static Matrix3x3 fromPRS(const Vec3 &position, const Quaternion &normal, const Vec3 &scale);
+
+public:
+	static void LoadIdentity(Matrix3x3 &mtx);
+	static void LoadQuaternion(Matrix3x3 &mtx, const Quaternion &quat);
+
+	// set mtx to be a rotation matrix around the x axis
+	static void RotateX(Matrix3x3 &mtx, float rad);
+	// set mtx to be a rotation matrix around the y axis
+	static void RotateY(Matrix3x3 &mtx, float rad);
+	// set mtx to be a rotation matrix around the z axis
+	static void RotateZ(Matrix3x3 &mtx, float rad);
+
+	// set result = a x b
+	static void Multiply(const Matrix3x3 &a, const Matrix3x3 &b, Matrix3x3 &result);
+	static void Multiply(const Matrix3x3 &a, const float vec[3], float result[3]);
+
+	static void GetPieYawPitchRollR(const Matrix3x3 &m, float &yaw, float &pitch, float &roll);
+};
+
 
 #endif	// _MATH_LIN_MATRIX4X4_H
 
