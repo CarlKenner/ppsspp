@@ -109,7 +109,7 @@ SetCompressor /SOLID lzma
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
 !define UN_NAME "Uninstall $(^Name)"
 OutFile "ppsspp-vr-${PRODUCT_VERSION}.exe"
-InstallDir "${BASE_INSTALL_DIR}\$(^Name)"
+InstallDir "${BASE_INSTALL_DIR}\${PRODUCT_NAME}"
 InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
 ShowInstDetails show
 ShowUnInstDetails show
@@ -191,6 +191,7 @@ Section "Base" SEC01
   Push "$INSTDIR\README.md"
   Push "$INSTDIR\README.txt"
   Call unix2dos
+  File /oname=installed.txt "${BASE_DIR}\notinstalled.txt"
   File /nonfatal "${BASE_DIR}\*.dll"
   File /r /x .git "${BASE_DIR}\lang"
   File /r /x .git "${BASE_DIR}\flash0"
@@ -227,7 +228,10 @@ Section Uninstall
   ; Only uninstall what we put there; all $INSTDIR\User is left as is
   Delete "$INSTDIR\uninst.exe"
   Delete "$INSTDIR\LICENSE.TXT"
+  Delete "$INSTDIR\LICENSE.TMP"
   Delete "$INSTDIR\README.txt"
+  Delete "$INSTDIR\README.md"
+  Delete "$INSTDIR\installed.txt"
   Delete "$INSTDIR\*.dll"
   Delete "$INSTDIR\PPSSPPWindows64.exe"
 
