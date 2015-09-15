@@ -43,8 +43,11 @@ PPSSPPControls.dat
 # Qt Linguist files
 *.qm
 
-# Oculus SDK
-ext/LibOVR
+# Ignore Oculus Rift, OpenVR, or OSVR SDKs if present
+LibOVR
+LibOVRKernel
+openvr
+OSVR
 
 Logs
 Memstick
