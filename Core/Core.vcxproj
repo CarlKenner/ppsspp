@@ -171,6 +171,15 @@
       <Message>Updating git-version.cpp</Message>
     </PreBuildEvent>
   </ItemDefinitionGroup>
+    <ItemDefinitionGroup>
+    <ClCompile>
+      <!--Allow compile-time testing of whether Oculus SDK (aka LibOVR) is present-->
+      <PreprocessorDefinitions Condition="Exists('../ext/LibOVR')">HAVE_OCULUSSDK;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('../ext/openvr')">HAVE_OPENVR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('../ext/OSVR')">HAVE_OSVR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../ext/zlib;../ext/LibOVR/Include;../ext/LibOVR/Src;../ext/openvr/headers;../ext/OSVR/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\ext\disarm.cpp" />
     <ClCompile Include="..\ext\sfmt19937\SFMT.c" />

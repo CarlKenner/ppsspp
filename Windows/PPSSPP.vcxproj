@@ -276,14 +276,22 @@
     <ClCompile>
       <!--Allow compile-time testing of whether Oculus SDK (aka LibOVR) is present-->
       <PreprocessorDefinitions Condition="Exists('../ext/LibOVR')">HAVE_OCULUSSDK;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../ext/zlib;../ext/LibOVR/Include;../ext/LibOVR/Src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions Condition="Exists('../ext/openvr')">HAVE_OPENVR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('../ext/OSVR')">HAVE_OSVR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>../ext/zlib;../ext/LibOVR/Include;../ext/LibOVR/Src;../ext/openvr/headers;../ext/OSVR/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>../ext/LibOVR/Lib/$(PlatformName)/VS2013;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And Exists('../ext/LibOVR')">libovr64d.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32' And Exists('../ext/LibOVR')">libovrd.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64' And Exists('../ext/LibOVR')">libovr64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>../ext/OpenAL\$(PlatformName);../ext/LibOVR\Lib\$(PlatformName)\VS2013;../ext/LibOVR\Lib\Windows\$(PlatformName)\$(Configuration)\VS2013;../ext/openvr\lib\win64;../ext/OSVR\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies Condition="Exists('../ext/OSVR/lib/osvrClientKit.lib')">osvrClientKit.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And Exists('../ext/LibOVR/Lib/x64/VS2013/libovr64d.lib')">libovr64d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And Exists('../ext/LibOVR/Lib/Windows/x64/Debug/VS2013/libovr.lib')">libovr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32' And Exists('../ext/LibOVR/Lib/Win32/VS2013/libovr64d.lib')">libovrd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32' And Exists('../ext/LibOVR/Lib/Windows/Win32/Debug/VS2013/libovr.lib')">libovr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64' And Exists('../ext/LibOVR/Lib/x64/VS2013/libovr64.lib')">libovr64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|x64' And Exists('../ext/LibOVR/Lib/Windows/x64/Release/VS2013/libovr.lib')">libovr.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)|$(Platform)'=='Release|Win32' And Exists('../ext/LibOVR')">libovr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Platform)'=='x64' And Exists('../ext/openvr/lib/win64/openvr_api.lib')">openvr_api.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(Platform)'=='Win32' And Exists('../ext/openvr/lib/win32/openvr_api.lib')">openvr_api.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -466,4 +474,13 @@
       <UserProperties RESOURCE_FILE="DaSh.rc" />
     </VisualStudio>
   </ProjectExtensions>
+  <!--Copy DLLs which should be located in the executable directory-->
+  <ItemGroup>
+    <ExternalDlls Include="..\ext\OSVR\bin\osvr*.dll;..\ext\openvr\bin\win64\*.dll" />
+    <AllInputFiles Include="@(ExternalDlls)" />
+  </ItemGroup>
+  <Target Name="AfterBuild" Inputs="@(AllInputFiles)" Outputs="@(AllInputFiles -> '$(BinaryOutputDir)%(RecursiveDir)%(Filename)%(Extension)')">
+    <Message Text="Copying External .dlls" Importance="High" />
+    <Copy SourceFiles="@(ExternalDlls)" DestinationFolder=".." Condition="!Exists('$(BinaryOutputDir)%(RecursiveDir)%(Filename)%(ExternalDlls.Extension)') OR $([System.DateTime]::Parse('%(ModifiedTime)').Ticks) &gt; $([System.IO.File]::GetLastWriteTime('$(BinaryOutputDir)%(RecursiveDir)%(Filename)%(ExternalDlls.Extension)').Ticks)" />
+  </Target>
 </Project>
