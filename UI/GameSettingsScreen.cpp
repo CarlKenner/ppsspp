@@ -361,6 +361,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bSRGB, gr->T("sRGB")));
 	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
 	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
+	vrSettings->Add(new CheckBox(&g_Config.bNoMirrorToWindow, gr->T("No mirror window")));
 	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 
 	// Audio

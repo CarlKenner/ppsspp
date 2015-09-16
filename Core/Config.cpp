@@ -499,6 +499,7 @@ static ConfigSetting vrSettings[] = {
 	ReportedConfigSetting("SRGB", &g_Config.bSRGB, false),
 	ReportedConfigSetting("Overdrive", &g_Config.bOverdrive, false),
 	ReportedConfigSetting("HqDistortion", &g_Config.bHqDistortion, false),
+	ReportedConfigSetting("NoMirrorToWindow", &g_Config.bNoMirrorToWindow, false),
 
 	ConfigSetting(false),
 };

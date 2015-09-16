@@ -95,7 +95,7 @@ int skipped_opcode_replay_count = 0;
 static char hmd_device_name[MAX_PATH] = "";
 #endif
 
-void NewVRFrame()
+void VR_NewVRFrame()
 {
 	INFO_LOG(VR, "-- NewVRFrame --");
 	g_new_tracking_frame = true;

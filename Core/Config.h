@@ -217,6 +217,7 @@ public:
 	bool bSRGB;
 	bool bOverdrive;
 	bool bHqDistortion;
+	bool bNoMirrorToWindow;
 
 	// VR Game specific
 	float fUnitsPerMetre;

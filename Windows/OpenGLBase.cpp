@@ -26,9 +26,12 @@
 #include "Core/Config.h"
 #include "util/text/utf8.h"
 #include "i18n/i18n.h"
+#include "GPU/Common/VR.h"
+#include "GPU/GLES/VROGL.h"
 
 #include "Windows/W32Util/Misc.h"
 #include "Windows/OpenGLBase.h"
+
 
 static HDC hDC;     // Private GDI Device Context
 static HGLRC hRC;   // Permanent Rendering Context
@@ -40,8 +43,11 @@ static int xres, yres;
 static bool enableGLDebug = false;
 
 void GL_SwapBuffers() {
-	SwapBuffers(hDC);
-
+	//OGL::VR_PresentHMDFrame();
+	//VR_NewVRFrame();
+	if (!g_has_hmd)
+		SwapBuffers(hDC);
+	//OGL::VR_BeginFrame();
 	// According to some sources, doing this *after* swapbuffers can reduce frame latency
 	// at a large performance cost.
 	// glFinish();
