@@ -35,6 +35,7 @@
 #include "GPU/Math3D.h"
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
+#include "GPU/Common/VR.h"
 #include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/GLES/TransformPipeline.h"
@@ -396,55 +397,59 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 
 	// Update any dirty uniforms before we draw
 	if (dirty & DIRTY_PROJMATRIX) {
-		Matrix4x4 flippedMatrix;
-		memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
+		if (g_has_hmd) {
+			SetProjectionConstants();
+		} else {
+			Matrix4x4 flippedMatrix;
+			memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 
-		const bool invertedY = gstate_c.vpHeight < 0;
-		if (invertedY) {
-			flippedMatrix[5] = -flippedMatrix[5];
-			flippedMatrix[13] = -flippedMatrix[13];
-		}
-		const bool invertedX = gstate_c.vpWidth < 0;
-		if (invertedX) {
-			flippedMatrix[0] = -flippedMatrix[0];
-			flippedMatrix[12] = -flippedMatrix[12];
-		}
+			const bool invertedY = gstate_c.vpHeight < 0;
+			if (invertedY) {
+				flippedMatrix[5] = -flippedMatrix[5];
+				flippedMatrix[13] = -flippedMatrix[13];
+			}
+			const bool invertedX = gstate_c.vpWidth < 0;
+			if (invertedX) {
+				flippedMatrix[0] = -flippedMatrix[0];
+				flippedMatrix[12] = -flippedMatrix[12];
+			}
 
-		// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
-		// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
-		if (g_Config.bDepthRangeHack) {
-			float zScale = gstate.getViewportZScale() / 65535.0f;
-			float zCenter = gstate.getViewportZCenter() / 65535.0f;
+			// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
+			// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
+			if (g_Config.bDepthRangeHack) {
+				float zScale = gstate.getViewportZScale() / 65535.0f;
+				float zCenter = gstate.getViewportZCenter() / 65535.0f;
 
-			// if far depth range < 0
-			if (zCenter + zScale < 0.0f) {
-				// if perspective projection
-				if (flippedMatrix[11] < 0.0f) {
-					float depthMax = gstate.getDepthRangeMax() / 65535.0f;
-					float depthMin = gstate.getDepthRangeMin() / 65535.0f;
+				// if far depth range < 0
+				if (zCenter + zScale < 0.0f) {
+					// if perspective projection
+					if (flippedMatrix[11] < 0.0f) {
+						float depthMax = gstate.getDepthRangeMax() / 65535.0f;
+						float depthMin = gstate.getDepthRangeMin() / 65535.0f;
 
-					float a = flippedMatrix[10];
-					float b = flippedMatrix[14];
+						float a = flippedMatrix[10];
+						float b = flippedMatrix[14];
 
-					float n = b / (a - 1.0f);
-					float f = b / (a + 1.0f);
+						float n = b / (a - 1.0f);
+						float f = b / (a + 1.0f);
 
-					f = (n * f) / (n + ((zCenter + zScale) * (n - f) / (depthMax - depthMin)));
+						f = (n * f) / (n + ((zCenter + zScale) * (n - f) / (depthMax - depthMin)));
 
-					a = (n + f) / (n - f);
-					b = (2.0f * n * f) / (n - f);
+						a = (n + f) / (n - f);
+						b = (2.0f * n * f) / (n - f);
 
-					if (!my_isnan(a) && !my_isnan(b)) {
-						flippedMatrix[10] = a;
-						flippedMatrix[14] = b;
+						if (!my_isnan(a) && !my_isnan(b)) {
+							flippedMatrix[10] = a;
+							flippedMatrix[14] = b;
+						}
 					}
 				}
 			}
+
+			ScaleProjMatrix(flippedMatrix);
+
+			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 		}
-
-		ScaleProjMatrix(flippedMatrix);
-
-		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 	}
 	if (dirty & DIRTY_PROJTHROUGHMATRIX)
 	{
@@ -700,6 +705,87 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 			if (u_lightspecular[i] != -1) SetColorUniform3(u_lightspecular[i], gstate.lcolor[i * 3 + 2]);
 		}
 	}
+}
+
+void LinkedShader::SetProjectionConstants() {
+	//UpdateHeadTrackingIfNeeded();
+	Matrix4x4 flippedMatrix;
+	memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
+	// green = Game's suggestion
+	float p5 = flippedMatrix.data[2 * 4 + 3];
+	float p4 = flippedMatrix.data[2 * 4 + 2];
+
+	float hfov = 2 * atan(1.0f / flippedMatrix.data[0 * 4 + 0])*180.0f / 3.1415926535f;
+	float vfov = 2 * atan(1.0f / flippedMatrix.data[1 * 4 + 1])*180.0f / 3.1415926535f;
+	float zfar = flippedMatrix.data[3 * 4 + 2] / flippedMatrix.data[2 * 4 + 2];
+	float znear = (1 + flippedMatrix.data[2 * 4 + 2] * zfar) / flippedMatrix.data[2 * 4 + 2];
+	float zn2 = p5 / (p4 - 1);
+	float zf2 = p5 / (p4 + 1);
+
+	Matrix44 hmd_left, hmd_right;
+
+	VR_GetProjectionMatrices(hmd_left, hmd_right, 1, 5000);
+	flippedMatrix.xx = hmd_left.xx;
+	flippedMatrix.yy = hmd_left.yy;
+
+	//ERROR_LOG(VR, "Real 3D scene: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, zn2, zf2);
+	//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
+	//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
+	//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[2 * 4 + 0], flippedMatrix.data[2 * 4 + 1], flippedMatrix.data[2 * 4 + 2], flippedMatrix.data[2 * 4 + 3]);
+	//NOTICE_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", flippedMatrix.data[3 * 4 + 0], flippedMatrix.data[3 * 4 + 1], flippedMatrix.data[3 * 4 + 2], flippedMatrix.data[3 * 4 + 3]);
+	//WARN_LOG(VR, "---");
+
+	const bool invertedY = gstate_c.vpHeight < 0;
+	if (invertedY) {
+		flippedMatrix[5] = -flippedMatrix[5];
+		flippedMatrix[13] = -flippedMatrix[13];
+	}
+	const bool invertedX = gstate_c.vpWidth < 0;
+	if (invertedX) {
+		flippedMatrix[0] = -flippedMatrix[0];
+		flippedMatrix[12] = -flippedMatrix[12];
+	}
+
+	// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
+	// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
+	if (g_Config.bDepthRangeHack) {
+		float zScale = gstate.getViewportZScale() / 65535.0f;
+		float zCenter = gstate.getViewportZCenter() / 65535.0f;
+
+		// if far depth range < 0
+		if (zCenter + zScale < 0.0f) {
+			// if perspective projection
+			if (flippedMatrix[11] < 0.0f) {
+				float depthMax = gstate.getDepthRangeMax() / 65535.0f;
+				float depthMin = gstate.getDepthRangeMin() / 65535.0f;
+
+				float a = flippedMatrix[10];
+				float b = flippedMatrix[14];
+
+				float n = b / (a - 1.0f);
+				float f = b / (a + 1.0f);
+
+				f = (n * f) / (n + ((zCenter + zScale) * (n - f) / (depthMax - depthMin)));
+
+				a = (n + f) / (n - f);
+				b = (2.0f * n * f) / (n - f);
+
+				if (!my_isnan(a) && !my_isnan(b)) {
+					flippedMatrix[10] = a;
+					flippedMatrix[14] = b;
+				}
+			}
+		}
+	}
+
+	Matrix44 m;
+	Matrix44::LoadIdentity(m);
+
+	m = flippedMatrix; // * g_head_tracking_matrix
+
+	ScaleProjMatrix(m);
+
+	glUniformMatrix4fv(u_proj, 1, GL_FALSE, m.m);
 }
 
 ShaderManager::ShaderManager() : lastShader_(NULL), globalDirty_(0xFFFFFFFF), shaderSwitchDirty_(0) {

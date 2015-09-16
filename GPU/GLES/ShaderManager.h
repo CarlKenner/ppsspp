@@ -68,6 +68,7 @@ public:
 	void use(u32 vertType, LinkedShader *previous);
 	void stop();
 	void UpdateUniforms(u32 vertType);
+	void SetProjectionConstants();
 
 	Shader *vs_;
 	// Set to false if the VS failed, happens on Mali-400 a lot for complex shaders.
