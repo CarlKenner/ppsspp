@@ -43,11 +43,7 @@ static int xres, yres;
 static bool enableGLDebug = false;
 
 void GL_SwapBuffers() {
-	//OGL::VR_PresentHMDFrame();
-	//VR_NewVRFrame();
-	if (!g_has_hmd)
-		SwapBuffers(hDC);
-	//OGL::VR_BeginFrame();
+	SwapBuffers(hDC);
 	// According to some sources, doing this *after* swapbuffers can reduce frame latency
 	// at a large performance cost.
 	// glFinish();

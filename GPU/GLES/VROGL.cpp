@@ -714,7 +714,7 @@ void VR_PresentHMDFrame()
 				0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight,
 				GL_COLOR_BUFFER_BIT, GL_NEAREST);
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-			GL_SwapBuffers();
+			//GL_SwapBuffers();
 		}
 	}
 #endif
@@ -752,7 +752,7 @@ void VR_PresentHMDFrame()
 				0, 0, w, h,
 				GL_COLOR_BUFFER_BIT, GL_NEAREST);
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-			GL_SwapBuffers();
+			//GL_SwapBuffers();
 		}
 #endif
 	}
