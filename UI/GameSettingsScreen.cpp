@@ -364,6 +364,19 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bNoMirrorToWindow, gr->T("No mirror window")));
 	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 
+	// VR Game
+	vrSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
+	vrSettings = new LinearLayout(ORIENT_VERTICAL);
+	vrSettings->SetSpacing(0);
+	vrSettingsScroll->Add(vrSettings);
+	tabHolder->AddTab(ms->T("VR Game"), vrSettingsScroll);
+	vrSettings->Add(new ItemHeader(gr->T("For This Game Only")));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fUnitsPerMetre, 0.001f, 1000.0f, gr->T("Units Per Metre"), 0.01f, screenManager()));
+	vrSettings->Add(new CheckBox(&g_Config.bHudOnTop, gr->T("HUD on Top")));
+	vrSettings->Add(new CheckBox(&g_Config.bDontClearScreen, gr->T("Don't Clear Screen")));
+	vrSettings->Add(new CheckBox(&g_Config.bCanReadCameraAngles, gr->T("Read Camera Angles")));
+	vrSettings->Add(new CheckBox(&g_Config.bDetectSkybox, gr->T("Detect Skybox")));
+
 	// Audio
 	ViewGroup *audioSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
 	LinearLayout *audioSettings = new LinearLayout(ORIENT_VERTICAL);

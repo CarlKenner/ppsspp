@@ -80,6 +80,7 @@ float vr_widest_3d_zNear = 0;
 float vr_widest_3d_zFar = 0;
 float g_game_camera_pos[3];
 Matrix44 g_game_camera_rotmat;
+bool debug_newScene = true, debug_nextScene = false;
 
 ControllerStyle vr_left_controller = CS_HYDRA_LEFT, vr_right_controller = CS_HYDRA_RIGHT;
 

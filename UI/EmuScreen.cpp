@@ -42,6 +42,7 @@
 #include "Core/System.h"
 #include "GPU/GPUState.h"
 #include "GPU/GPUInterface.h"
+#include "GPU/Common/VR.h"
 #include "GPU/GLES/FBO.h"
 #include "GPU/GLES/Framebuffer.h"
 #include "Core/HLE/sceCtrl.h"
@@ -303,6 +304,7 @@ bool EmuScreen::touch(const TouchInput &touch) {
 
 void EmuScreen::onVKeyDown(int virtualKeyCode) {
 	I18NCategory *sc = GetI18NCategory("Screen"); 
+	float freeLookSpeed = 0.1f * g_Config.fFreeLookSensitivity;
 
 	switch (virtualKeyCode) {
 	case VIRTKEY_UNTHROTTLE:
@@ -378,6 +380,238 @@ void EmuScreen::onVKeyDown(int virtualKeyCode) {
 		break;
 	case VIRTKEY_TOGGLE_FULLSCREEN:
 		System_SendMessage("toggle_fullscreen", "");
+		break;
+	case VIRTKEY_FREELOOK_RESET:
+		NOTICE_LOG(VR, "Recenter");
+		VR_RecenterHMD();
+		break;
+	case VIRTKEY_LARGER_SCALE:
+		if (g_has_hmd)
+		{
+			// Make everything 10% bigger (and further)
+			g_Config.fUnitsPerMetre /= 1.10f;
+			//VertexShaderManager::ScaleView(1.10f);
+			NOTICE_LOG(VR, "%f units per metre (each unit is %f cm)", g_Config.fUnitsPerMetre, 100.0f / g_Config.fUnitsPerMetre);
+		}
+		break;
+	case VIRTKEY_SMALLER_SCALE:
+		if (g_has_hmd)
+		{
+			// Make everything 10% smaller (and closer)
+			g_Config.fUnitsPerMetre *= 1.10f;
+			//VertexShaderManager::ScaleView(1.0f / 1.10f);
+			NOTICE_LOG(VR, "%f units per metre (each unit is %f cm)", g_Config.fUnitsPerMetre, 100.0f / g_Config.fUnitsPerMetre);
+		}
+		break;
+	case VIRTKEY_GLOBAL_LARGER_SCALE:
+		if (g_has_hmd)
+		{
+			// Make everything 10% bigger (and further)
+			g_Config.fScale *= 1.10f;
+			//SConfig::GetInstance().SaveSingleSetting("VR", "Scale", g_Config.fScale);
+			//VertexShaderManager::ScaleView(1.10f);
+		}
+		break;
+	case VIRTKEY_GLOBAL_SMALLER_SCALE:
+		if (g_has_hmd)
+		{
+			// Make everything 10% smaller (and closer)
+			g_Config.fScale /= 1.10f;
+			//SConfig::GetInstance().SaveSingleSetting("VR", "Scale", g_Config.fScale);
+			//VertexShaderManager::ScaleView(1.0f / 1.10f);
+		}
+		break;
+	case VIRTKEY_PERMANENT_CAMERA_FORWARD:
+		if (g_has_hmd) {
+			// Move camera forward 10cm
+			g_Config.fCameraForward += freeLookSpeed;
+			NOTICE_LOG(VR, "Camera is %5.1fm (%5.0fcm) forward", g_Config.fCameraForward, g_Config.fCameraForward * 100);
+		}
+		break;
+	case VIRTKEY_PERMANENT_CAMERA_BACKWARD:
+		if (g_has_hmd) {
+			// Move camera back 10cm
+			g_Config.fCameraForward -= freeLookSpeed;
+			NOTICE_LOG(VR, "Camera is %5.1fm (%5.0fcm) forward", g_Config.fCameraForward, g_Config.fCameraForward * 100);
+		}
+		break;
+	case VIRTKEY_CAMERA_TILT_UP:
+		if (g_has_hmd) {
+			// Pitch camera up 5 degrees
+			g_Config.fCameraPitch += 5.0f;
+			NOTICE_LOG(VR, "Camera is pitched %5.1f degrees up", g_Config.fCameraPitch);
+		}
+		break;
+	case VIRTKEY_CAMERA_TILT_DOWN:
+		if (g_has_hmd) {
+			// Pitch camera down 5 degrees
+			g_Config.fCameraPitch -= 5.0f;
+			NOTICE_LOG(VR, "Camera is pitched %5.1f degrees up", g_Config.fCameraPitch);
+		}
+		break;
+	case VIRTKEY_HUD_FORWARD:
+		if (g_has_hmd) {
+			// Move HUD out 10cm
+			g_Config.fHudDistance += 0.1f;
+			NOTICE_LOG(VR, "HUD is %5.1fm (%5.0fcm) away", g_Config.fHudDistance, g_Config.fHudDistance * 100);
+		}
+		break;
+	case VIRTKEY_HUD_BACKWARD:
+		if (g_has_hmd) {
+			// Move HUD in 10cm
+			g_Config.fHudDistance -= 0.1f;
+			if (g_Config.fHudDistance <= 0)
+				g_Config.fHudDistance = 0;
+			NOTICE_LOG(VR, "HUD is %5.1fm (%5.0fcm) away", g_Config.fHudDistance, g_Config.fHudDistance * 100);
+		}
+		break;
+	case VIRTKEY_HUD_THICKER:
+		if (g_has_hmd) {
+			// Make HUD 10cm thicker
+			if (g_Config.fHudThickness < 0.01f)
+				g_Config.fHudThickness = 0.01f;
+			else if (g_Config.fHudThickness < 0.1f)
+				g_Config.fHudThickness += 0.01f;
+			else
+				g_Config.fHudThickness += 0.1f;
+			NOTICE_LOG(VR, "HUD is %5.2fm (%5.0fcm) thick", g_Config.fHudThickness, g_Config.fHudThickness * 100);
+		}
+		break;
+	case VIRTKEY_HUD_THINNER:
+		if (g_has_hmd) {
+			// Make HUD 10cm thinner
+			if (g_Config.fHudThickness <= 0.01f)
+				g_Config.fHudThickness = 0;
+			else if (g_Config.fHudThickness <= 0.1f)
+				g_Config.fHudThickness -= 0.01f;
+			else
+				g_Config.fHudThickness -= 0.1f;
+			NOTICE_LOG(VR, "HUD is %5.2fm (%5.0fcm) thick", g_Config.fHudThickness, g_Config.fHudThickness * 100);
+		}
+		break;
+	case VIRTKEY_HUD_3D_CLOSER:
+		if (g_has_hmd) {
+			// Make HUD 3D elements 5% closer (and smaller)
+			if (g_Config.fHud3DCloser >= 0.95f)
+				g_Config.fHud3DCloser = 1;
+			else
+				g_Config.fHud3DCloser += 0.05f;
+			NOTICE_LOG(VR, "HUD 3D Items are %5.1f%% closer", g_Config.fHud3DCloser * 100);
+		}
+		break;
+	case VIRTKEY_HUD_3D_FURTHER:
+		if (g_has_hmd) {
+			// Make HUD 3D elements 5% further (and smaller)
+			if (g_Config.fHud3DCloser <= 0.05f)
+				g_Config.fHud3DCloser = 0;
+			else
+				g_Config.fHud3DCloser -= 0.05f;
+			NOTICE_LOG(VR, "HUD 3D Items are %5.1f%% closer", g_Config.fHud3DCloser * 100);
+		}
+		break;
+	case VIRTKEY_2D_SCREEN_LARGER:
+		if (g_has_hmd) {
+			// Make everything 20% smaller (and closer)
+			g_Config.fScreenHeight *= 1.05f;
+			NOTICE_LOG(VR, "Screen is %fm high", g_Config.fScreenHeight);
+		}
+		break;
+	case VIRTKEY_2D_SCREEN_SMALLER:
+		if (g_has_hmd) {
+			// Make everything 20% bigger (and further)
+			g_Config.fScreenHeight /= 1.05f;
+			NOTICE_LOG(VR, "Screen is %fm High", g_Config.fScreenHeight);
+		}
+		break;
+	case VIRTKEY_2D_SCREEN_THICKER:
+		if (g_has_hmd) {
+			// Make Screen 10cm thicker
+			if (g_Config.fScreenThickness < 0.01f)
+				g_Config.fScreenThickness = 0.01f;
+			else if (g_Config.fScreenThickness < 0.1f)
+				g_Config.fScreenThickness += 0.01f;
+			else
+				g_Config.fScreenThickness += 0.1f;
+			NOTICE_LOG(VR, "Screen is %5.2fm (%5.0fcm) thick", g_Config.fScreenThickness, g_Config.fScreenThickness * 100);
+		}
+		break;
+	case VIRTKEY_2D_SCREEN_THINNER:
+		if (g_has_hmd) {
+			// Make Screen 10cm thinner
+			if (g_Config.fScreenThickness <= 0.01f)
+				g_Config.fScreenThickness = 0;
+			else if (g_Config.fScreenThickness <= 0.1f)
+				g_Config.fScreenThickness -= 0.01f;
+			else
+				g_Config.fScreenThickness -= 0.1f;
+			NOTICE_LOG(VR, "Screen is %5.2fm (%5.0fcm) thick", g_Config.fScreenThickness, g_Config.fScreenThickness * 100);
+		}
+		break;
+	case VIRTKEY_2D_CAMERA_FORWARD:
+		if (g_has_hmd) {
+			// Move Screen in 10cm
+			g_Config.fScreenDistance -= 0.1f;
+			if (g_Config.fScreenDistance <= 0)
+				g_Config.fScreenDistance = 0;
+			NOTICE_LOG(VR, "Screen is %5.1fm (%5.0fcm) away", g_Config.fScreenDistance, g_Config.fScreenDistance * 100);
+		}
+		break;
+	case VIRTKEY_2D_CAMERA_BACKWARD:
+		if (g_has_hmd) {
+			// Move Screen out 10cm
+			g_Config.fScreenDistance += 0.1f;
+			NOTICE_LOG(VR, "Screen is %5.1fm (%5.0fcm) away", g_Config.fScreenDistance, g_Config.fScreenDistance * 100);
+		}
+		break;
+	case VIRTKEY_2D_CAMERA_UP:
+		if (g_has_hmd) {
+			// Move Screen Down (Camera Up) 10cm
+			g_Config.fScreenUp -= 0.1f;
+			NOTICE_LOG(VR, "Screen is %5.1fm up", g_Config.fScreenUp);
+		}
+		break;
+	case VIRTKEY_2D_CAMERA_DOWN:
+		if (g_has_hmd) {
+			// Move Screen Up (Camera Down) 10cm
+			g_Config.fScreenUp += 0.1f;
+			NOTICE_LOG(VR, "Screen is %5.1fm up", g_Config.fScreenUp);
+		}
+		break;
+	case VIRTKEY_2D_CAMERA_TILT_UP:
+		if (g_has_hmd) {
+			// Pitch camera up 5 degrees
+			g_Config.fScreenPitch += 5.0f;
+			NOTICE_LOG(VR, "2D Camera is pitched %5.1f degrees up", g_Config.fScreenPitch);
+		}
+		break;
+	case VIRTKEY_2D_CAMERA_TILT_DOWN:
+		if (g_has_hmd) {
+			// Pitch camera down 5 degrees
+			g_Config.fScreenPitch -= 5.0f;
+			NOTICE_LOG(VR, "2D Camera is pitched %5.1f degrees up", g_Config.fScreenPitch);;
+		}
+		break;
+	case VIRTKEY_DEBUG_NEXT_LAYER:
+		if (g_has_hmd) {
+			g_Config.iSelectedLayer++;
+			NOTICE_LOG(VR, "Selected layer %d", g_Config.iSelectedLayer);
+			debug_nextScene = true;
+		}
+		break;
+	case VIRTKEY_DEBUG_PREVIOUS_LAYER:
+		if (g_has_hmd) {
+			g_Config.iSelectedLayer--;
+			if (g_Config.iSelectedLayer < -1)
+				g_Config.iSelectedLayer = -2;
+			NOTICE_LOG(VR, "Selected layer %d", g_Config.iSelectedLayer);
+			debug_nextScene = true;
+		}
+		break;
+	case VIRTKEY_DEBUG_SCENE:
+		if (g_has_hmd) {
+			NOTICE_LOG(VR, "--- pressed DEBUG SCENE ---");
+			debug_nextScene = true;
+		}
 		break;
 	}
 }

@@ -199,13 +199,40 @@ public:
 	// VR command line
 	bool bForceVR;
 
+	// Stereoscopy
+	bool bStereoEFBMonoDepth;
+	int iStereoDepthPercentage;
+	int iStereoConvergenceMinimum;
+
 	// VR global
 	float fScale;
 	float fLeanBackAngle;
+	bool bStabilizeRoll;
+	bool bStabilizePitch;
+	bool bStabilizeYaw;
+	bool bStabilizeX;
+	bool bStabilizeY;
+	bool bStabilizeZ;
+	bool bKeyhole;
+	float fKeyholeWidth;
+	bool bKeyholeSnap;
+	float fKeyholeSnapSize;
+	bool bPullUp20fps;
+	bool bPullUp30fps;
+	bool bPullUp60fps;
+	bool bSynchronousTimewarp;
+	bool bOpcodeWarningDisable;
+	bool bReplayVertexData;
+	bool bReplayOtherData;
+	bool bPullUp20fpsTimewarp;
+	bool bPullUp30fpsTimewarp;
+	bool bPullUp60fpsTimewarp;
+	bool bOpcodeReplay;
 	bool bAsynchronousTimewarp;
 	bool bEnableVR;
 	bool bLowPersistence;
 	bool bDynamicPrediction;
+	bool bNoMirrorToWindow;
 	bool bOrientationTracking;
 	bool bMagYawCorrection;
 	bool bPositionTracking;
@@ -217,15 +244,44 @@ public:
 	bool bSRGB;
 	bool bOverdrive;
 	bool bHqDistortion;
-	bool bNoMirrorToWindow;
+	bool bDisableNearClipping;
+	bool bShowHands;
+	bool bShowFeet;
+	bool bShowController;
+	bool bShowSensorBar;
+	bool bShowGameCamera;
+	bool bShowGameFrustum;
+	bool bShowTrackingCamera;
+	bool bShowTrackingVolume;
+	bool bShowBaseStation;
 
-	// VR Game specific
+	bool bMotionSicknessAlways;
+	bool bMotionSicknessFreelook;
+	bool bMotionSickness2D;
+	bool bMotionSicknessLeftStick;
+	bool bMotionSicknessRightStick;
+	bool bMotionSicknessDPad;
+	bool bMotionSicknessIR;
+	int iMotionSicknessMethod;
+	int iMotionSicknessSkybox;
+	float fMotionSicknessFOV;
+
+	int iVRPlayer;
+	float fTimeWarpTweak;
+	int iExtraTimewarpedFrames;
+	int iExtraVideoLoops;
+	int iExtraVideoLoopsDivider;
+
+	// VR per game
 	float fUnitsPerMetre;
+	float fFreeLookSensitivity;
 	float fHudThickness;
 	float fHudDistance;
+	float fHud3DCloser;
 	float fCameraForward;
 	float fCameraPitch;
 	float fAimDistance;
+	float fMinFOV;
 	float fScreenHeight;
 	float fScreenThickness;
 	float fScreenDistance;
@@ -233,8 +289,13 @@ public:
 	float fScreenUp;
 	float fScreenPitch;
 	float fTelescopeMaxFOV;
+	float fReadPitch;
 	bool bDisable3D;
 	bool bHudFullscreen;
+	bool bHudOnTop;
+	bool bDontClearScreen;
+	bool bCanReadCameraAngles;
+	bool bDetectSkybox;
 	int iTelescopeEye;
 	int iMetroidPrime;
 	// VR layer debugging
