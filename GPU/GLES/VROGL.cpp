@@ -645,6 +645,11 @@ void VR_StopFramebuffer()
 
 void VR_BeginFrame()
 {
+	if (g_Config.bDisableNearClipping)
+		glEnable(GL_DEPTH_CLAMP);
+	else
+		glDisable(GL_DEPTH_CLAMP);
+
 	// At the start of a frame, we get the frame timing and begin the frame.
 #ifdef OVR_MAJOR_VERSION
 	if (g_has_rift)

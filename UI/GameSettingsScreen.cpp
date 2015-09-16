@@ -346,6 +346,16 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new ItemHeader(gr->T("All games")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gr->T("Scale"), 0.01f, screenManager()));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fLeanBackAngle, -180.0f, 180.0f, gr->T("Lean back angle"), 1.0f, screenManager()));
+	vrSettings->Add(new CheckBox(&g_Config.bStabilizePitch, gr->T("Stabilize Pitch")));
+	vrSettings->Add(new CheckBox(&g_Config.bStabilizeRoll, gr->T("Stabilize Roll")));
+	vrSettings->Add(new CheckBox(&g_Config.bStabilizeYaw, gr->T("Stabilize Yaw")));
+	vrSettings->Add(new CheckBox(&g_Config.bStabilizeX, gr->T("Stabilize X")));
+	vrSettings->Add(new CheckBox(&g_Config.bStabilizeY, gr->T("Stabilize Y")));
+	vrSettings->Add(new CheckBox(&g_Config.bStabilizeZ, gr->T("Stabilize Z")));
+	vrSettings->Add(new CheckBox(&g_Config.bKeyhole, gr->T("Stabilize Keyhole")));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeWidth, 10.0f, 175.0f, gr->T("Keyhole Width"), 1.0f, screenManager()));
+	vrSettings->Add(new CheckBox(&g_Config.bKeyholeSnap, gr->T("Keyhole Snap")));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeSnapSize, 10.0f, 120.0f, gr->T("Keyhole Snap Size"), 1.0f, screenManager()));
 
 	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
 	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
@@ -362,16 +372,31 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
 	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
 	vrSettings->Add(new CheckBox(&g_Config.bNoMirrorToWindow, gr->T("No mirror window")));
+	vrSettings->Add(new CheckBox(&g_Config.bDisableNearClipping, gr->T("Disable Near Clipping")));
 	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 
 	// VR Game
-	vrSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
-	vrSettings = new LinearLayout(ORIENT_VERTICAL);
-	vrSettings->SetSpacing(0);
-	vrSettingsScroll->Add(vrSettings);
-	tabHolder->AddTab(ms->T("VR Game"), vrSettingsScroll);
+	//vrSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
+	//vrSettings = new LinearLayout(ORIENT_VERTICAL);
+	//vrSettings->SetSpacing(0);
+	//vrSettingsScroll->Add(vrSettings);
+	//tabHolder->AddTab(ms->T("VR Game"), vrSettingsScroll);
 	vrSettings->Add(new ItemHeader(gr->T("For This Game Only")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fUnitsPerMetre, 0.001f, 1000.0f, gr->T("Units Per Metre"), 0.01f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudDistance, 0.0f, 500.0f, gr->T("HUD Distance"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudThickness, 0.0f, 500.0f, gr->T("HUD Thickness"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHud3DCloser, 0.0f, 1.0f, gr->T("HUD 3D Closer"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fCameraForward, -100.0f, 100.0f, gr->T("Permanent Camera Forward"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fCameraPitch, -180.0f, 180.0f, gr->T("Camera Pitch"), 1.0f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fAimDistance, 0.1f, 500.0f, gr->T("Aim Distance"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenDistance, 0.0f, 500.0f, gr->T("2D Screen Distance"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenHeight, 0.0f, 500.0f, gr->T("2D Screen Height"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenThickness, 0.0f, 500.0f, gr->T("2D Screen Thickness"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenUp, -500.0f, 500.0f, gr->T("2D Screen Up"), 0.1f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenPitch, -180.0f, 180.0f, gr->T("Screen Pitch"), 1.0f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fMinFOV, 0.0f, 179.0f, gr->T("Min HFOV"), 1.0f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fReadPitch, -180.0f, 180.0f, gr->T("Camera Read Pitch"), 1.0f, screenManager()));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fTelescopeMaxFOV, 0.0f, 90.0f, gr->T("Telescope Max FOV"), 1.0f, screenManager()));
 	vrSettings->Add(new CheckBox(&g_Config.bHudOnTop, gr->T("HUD on Top")));
 	vrSettings->Add(new CheckBox(&g_Config.bDontClearScreen, gr->T("Don't Clear Screen")));
 	vrSettings->Add(new CheckBox(&g_Config.bCanReadCameraAngles, gr->T("Read Camera Angles")));
