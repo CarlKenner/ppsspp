@@ -337,6 +337,7 @@ public:
 
 	virtual bool CanBeFocused() const { return true; }
 	virtual bool SubviewFocused(View *view) { return false; }
+
 	bool HasFocus() const {
 		return GetFocusedView() == this;
 	}
@@ -583,7 +584,7 @@ public:
 
 protected:
 	// hackery
-	virtual bool IsSticky() const { return true; }
+	bool IsSticky() const override { return true; }
 };
 
 class InfoItem : public Item {
@@ -598,6 +599,9 @@ public:
 
 	void SetText(const std::string &text) {
 		text_ = text;
+	}
+	const std::string &GetText() const {
+		return text_;
 	}
 	void SetRightText(const std::string &text) {
 		rightText_ = text;
@@ -655,7 +659,7 @@ public:
 		: InertView(layoutParams), size_(0.0f) {}
 	Spacer(float size, LayoutParams *layoutParams = 0)
 		: InertView(layoutParams), size_(size) {}
-	virtual void GetContentDimensions(const UIContext &dc, float &w, float &h) const {
+	void GetContentDimensions(const UIContext &dc, float &w, float &h) const override {
 		w = size_; h = size_;
 	}
 	void Draw(UIContext &dc) override {}
@@ -675,6 +679,7 @@ public:
 	void Draw(UIContext &dc) override;
 
 	void SetText(const std::string &text) { text_ = text; }
+	const std::string &GetText() const { return text_; }
 	void SetSmall(bool small) { small_ = small; }
 	void SetTextColor(uint32_t color) { textColor_ = color; }
 	void SetShadow(bool shadow) { shadow_ = shadow; }
