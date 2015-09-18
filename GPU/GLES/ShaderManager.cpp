@@ -397,9 +397,11 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 
 	// Update any dirty uniforms before we draw
 	if (dirty & DIRTY_PROJMATRIX) {
-		if (g_has_hmd) {
+		if (g_Config.bEnableVR && g_has_hmd) {
 			SetProjectionConstants();
 		} else {
+			if (g_has_hmd)
+				UpdateHeadTrackingIfNeeded();
 			Matrix4x4 flippedMatrix;
 			memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 
@@ -710,8 +712,9 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 void LinkedShader::SetProjectionConstants() {
 	Matrix4x4 flippedMatrix;
 	memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
+	bool isPerspective = flippedMatrix.data[2 * 4 + 3] == -1;
 	// green = Game's suggestion
-	float p5 = flippedMatrix.data[2 * 4 + 3];
+	float p5 = flippedMatrix.data[3 * 4 + 2];
 	float p4 = flippedMatrix.data[2 * 4 + 2];
 
 	float hfov = 2 * atan(1.0f / flippedMatrix.data[0 * 4 + 0])*180.0f / 3.1415926535f;
@@ -727,12 +730,24 @@ void LinkedShader::SetProjectionConstants() {
 	flippedMatrix.xx = hmd_left.xx;
 	flippedMatrix.yy = hmd_left.yy;
 
-	//ERROR_LOG(VR, "Real 3D scene: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, zn2, zf2);
-	//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
-	//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
-	//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[2 * 4 + 0], flippedMatrix.data[2 * 4 + 1], flippedMatrix.data[2 * 4 + 2], flippedMatrix.data[2 * 4 + 3]);
-	//NOTICE_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", flippedMatrix.data[3 * 4 + 0], flippedMatrix.data[3 * 4 + 1], flippedMatrix.data[3 * 4 + 2], flippedMatrix.data[3 * 4 + 3]);
-	//WARN_LOG(VR, "---");
+	if (isPerspective)
+	{
+		ERROR_LOG(VR, "Real 3D scene: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, zn2, zf2);
+		//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
+		//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
+		NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[2 * 4 + 0], flippedMatrix.data[2 * 4 + 1], flippedMatrix.data[2 * 4 + 2], flippedMatrix.data[2 * 4 + 3]);
+		NOTICE_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", flippedMatrix.data[3 * 4 + 0], flippedMatrix.data[3 * 4 + 1], flippedMatrix.data[3 * 4 + 2], flippedMatrix.data[3 * 4 + 3]);
+		WARN_LOG(VR, "---");
+	}
+	else
+	{
+		ERROR_LOG(VR, "2D Matrix!");
+		ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
+		ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
+		ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[2 * 4 + 0], flippedMatrix.data[2 * 4 + 1], flippedMatrix.data[2 * 4 + 2], flippedMatrix.data[2 * 4 + 3]);
+		ERROR_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", flippedMatrix.data[3 * 4 + 0], flippedMatrix.data[3 * 4 + 1], flippedMatrix.data[3 * 4 + 2], flippedMatrix.data[3 * 4 + 3]);
+		WARN_LOG(VR, "---");
+	}
 
 	const bool invertedY = gstate_c.vpHeight < 0;
 	if (invertedY) {
@@ -779,7 +794,7 @@ void LinkedShader::SetProjectionConstants() {
 
 	Matrix4x4 rotation_matrix;
 	// head tracking
-	if (g_Config.bOrientationTracking)
+	if (g_Config.bOrientationTracking && isPerspective)
 	{
 		UpdateHeadTrackingIfNeeded();
 		rotation_matrix = g_head_tracking_matrix.transpose();
