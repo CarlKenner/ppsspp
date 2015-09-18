@@ -708,7 +708,6 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 }
 
 void LinkedShader::SetProjectionConstants() {
-	//UpdateHeadTrackingIfNeeded();
 	Matrix4x4 flippedMatrix;
 	memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 	// green = Game's suggestion
@@ -778,14 +777,23 @@ void LinkedShader::SetProjectionConstants() {
 		}
 	}
 
-	Matrix44 m;
-	Matrix44::LoadIdentity(m);
+	Matrix4x4 rotation_matrix;
+	// head tracking
+	if (g_Config.bOrientationTracking)
+	{
+		UpdateHeadTrackingIfNeeded();
+		rotation_matrix = g_head_tracking_matrix.transpose();
+	}
+	else
+	{
+		rotation_matrix.setIdentity();
+	}
 
-	m = flippedMatrix; // * g_head_tracking_matrix
+	Matrix4x4 final_matrix = rotation_matrix * flippedMatrix;
 
-	ScaleProjMatrix(m);
+	ScaleProjMatrix(final_matrix);
 
-	glUniformMatrix4fv(u_proj, 1, GL_FALSE, m.m);
+	glUniformMatrix4fv(u_proj, 1, GL_FALSE, final_matrix.m);
 }
 
 ShaderManager::ShaderManager() : lastShader_(NULL), globalDirty_(0xFFFFFFFF), shaderSwitchDirty_(0) {
