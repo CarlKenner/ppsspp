@@ -603,7 +603,6 @@ void UpdateOculusHeadTracking()
 #else
 		g_head_tracking_position[2] = -z;
 #endif
-		NOTICE_LOG(VR, "xyz=%5.2f %5.2f %5.2f", x, y, z);
 		Matrix33 m, yp, ya, p, r;
 		Matrix33::RotateY(ya, DEGREES_TO_RADIANS(yaw));
 		Matrix33::RotateX(p, DEGREES_TO_RADIANS(pitch));

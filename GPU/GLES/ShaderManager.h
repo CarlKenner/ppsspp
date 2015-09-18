@@ -19,6 +19,8 @@
 
 #include "base/basictypes.h"
 #include "../../Globals.h"
+#include "math/lin/matrix4x4.h"
+
 #include <map>
 #include "VertexShaderGenerator.h"
 #include "FragmentShaderGenerator.h"
@@ -88,7 +90,7 @@ public:
 	void use(u32 vertType, LinkedShader *previous);
 	void stop();
 	void UpdateUniforms(u32 vertType);
-	void SetProjectionConstants(bool shouldLog);
+	Matrix4x4 SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough);
 
 	Shader *vs_;
 	// Set to false if the VS failed, happens on Mali-400 a lot for complex shaders.

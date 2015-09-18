@@ -759,7 +759,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 		// VR adjust the projection matrix for the new kind of viewport
 		//else if (g_viewport_type != g_old_viewport_type)
 		//{
-		//	skybox_changed = true;
+		//	skybox_changed = true;tr
 		//}
 	}
 	if (position_changed && g_Config.bDetectSkybox && !g_is_skybox)
@@ -773,8 +773,8 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 	}
 	if (dirty & DIRTY_PROJMATRIX || (bFrameChanged && g_Config.bEnableVR && g_has_hmd)) {
 		if (g_Config.bEnableVR && g_has_hmd) {
-			bFrameChanged = false;
-			SetProjectionConstants(dirty & DIRTY_PROJMATRIX);
+			Matrix4x4 flippedMatrix = SetProjectionConstants(gstate.projMatrix, dirty & DIRTY_PROJMATRIX, false);
+			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m); 
 			//bProjectionChanged = false;
 		}
 		else {
@@ -833,14 +833,26 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 	} 
 	else if (skybox_changed && g_Config.bEnableVR && g_has_hmd)
 	{
-		SetProjectionConstants(false);
+		Matrix4x4 flippedMatrix = SetProjectionConstants(gstate.projMatrix, false, false);
+		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 	}
-	if (dirty & DIRTY_PROJTHROUGHMATRIX)
+	if (dirty & DIRTY_PROJTHROUGHMATRIX || (bFrameChanged && g_Config.bEnableVR && g_has_hmd))
 	{
 		Matrix4x4 proj_through;
 		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0.0f, 1.0f);
-		glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, proj_through.getReadPtr());
+		NOTICE_LOG(VR, "proj_through: (%d, %d) to (%d, %d), %g to %g", 0, 0, gstate_c.curRTWidth, gstate_c.curRTHeight, 0.0f, 1.0f);
+		if (g_Config.bEnableVR && g_has_hmd)
+		{
+			Matrix4x4 flippedMatrix = SetProjectionConstants(proj_through.m, false, true);
+			glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, flippedMatrix.m);
+		}
+		else
+		{
+			glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, proj_through.m);
+		}
 	}
+	bFrameChanged = false;
+
 	//if (g_Config.iMotionSicknessSkybox == 2 && g_is_skybox)
 	//	LockSkybox();
 
@@ -944,9 +956,9 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 	}
 }
 
-void LinkedShader::SetProjectionConstants(bool shouldLog) {
+Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough) {
 	Matrix4x4 flippedMatrix;
-	memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
+	memcpy(&flippedMatrix, input_proj_matrix, 16 * sizeof(float));
 
 	bool isPerspective = flippedMatrix.zw == -1;
 
@@ -1067,17 +1079,14 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 		// If we are supposed to hide the layer, zero out the projection matrix
 		Matrix4x4 final_matrix;
 		final_matrix.empty();
-		glUniformMatrix4fv(u_proj, 1, GL_FALSE, final_matrix.m);
-		return;
+		return final_matrix;
 	}
 	// don't do anything fancy for rendering to a texture
 	// render exactly as we are told, and in mono
 	else if (g_viewport_type == VIEW_RENDER_TO_TEXTURE)
 	{
 		// we aren't applying viewport correction, because Render To Texture never has a viewport larger than the framebufffer
-
-		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
-		return;
+		return flippedMatrix;
 	}
 	// This was already copied from the fullscreen EFB.
 	// Which makes it already correct for the HMD's FOV.
@@ -1086,9 +1095,7 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 	else if (bFullscreenLayer)
 	{
 		ScaleProjMatrix(flippedMatrix);
-
-		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
-		return;
+		return flippedMatrix;
 	}
 
 	// VR HMD 3D projection matrix, needs to include head-tracking
@@ -1116,8 +1123,8 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 		float zf2 = p5 / (p4 + 1);
 		hfov = 2 * atan(1.0f / flippedMatrix.xx)*180.0f / 3.1415926535f;
 		vfov = 2 * atan(1.0f / flippedMatrix.yy)*180.0f / 3.1415926535f;
-		if (debug_newScene)
-			INFO_LOG(VR, "Real 3D scene: hfov=%8.4f    vfov=%8.4f      znear=%8.4f or %8.4f   zfar=%8.4f or %8.4f", hfov, vfov, znear, zn2, zfar, zf2);
+		//if (debug_newScene)
+		//	INFO_LOG(VR, "Real 3D scene: hfov=%8.4f    vfov=%8.4f      znear=%8.4f or %8.4f   zfar=%8.4f or %8.4f", hfov, vfov, znear, zn2, zfar, zf2);
 
 		// Find the game's camera angle and position by looking at the view/model matrix of the first real 3D object drawn.
 		// This won't work for all games.
@@ -1152,7 +1159,7 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 				vfov = vr_widest_3d_VFOV;
 			}
 			if (debug_newScene)
-				INFO_LOG(VR, "2D to fit 3D world: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, znear, zfar);
+				NOTICE_LOG(VR, "2D to fit 3D world: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, znear, zfar);
 		}
 		else
 		{
@@ -1163,12 +1170,12 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 			vfov = 180.0f / 3.14159f * 2 * atanf(tanf((hfov*3.14159f / 180.0f) / 2)* 9.0f / 16.0f); // 2D screen is always meant to be 16:9 aspect ratio
 			// TODO: fix aspect ratio in portrait mode
 			if (debug_newScene)
-				DEBUG_LOG(VR, "Only 2D Projecting: %g x %g, n=%fm f=%fm", hfov, vfov, znear, zfar);
+				NOTICE_LOG(VR, "Only 2D Projecting: %g x %g, n=%fm f=%fm", hfov, vfov, znear, zfar);
 		}
 		zNear3D = znear;
 		znear /= 40.0f;
 		if (debug_newScene)
-			DEBUG_LOG(VR, "2D: zNear3D = %f, znear = %f, zFar = %f", zNear3D, znear, zfar);
+			NOTICE_LOG(VR, "2D: zNear3D = %f, znear = %f, zFar = %f", zNear3D, znear, zfar);
 		//ERROR_LOG(VR, "2D Matrix!");
 		//ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
 		//ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
@@ -1199,10 +1206,10 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 		DEBUG_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[2 * 4 + 0], hmd_left.data[2 * 4 + 1], hmd_left.data[2 * 4 + 2], hmd_left.data[2 * 4 + 3]);
 		DEBUG_LOG(VR, "O {%8.4f %8.4f %8.4f   %8.4f}", hmd_left.data[3 * 4 + 0], hmd_left.data[3 * 4 + 1], hmd_left.data[3 * 4 + 2], hmd_left.data[3 * 4 + 3]);
 		// green = Game's suggestion
-		INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[0 * 4 + 0], proj_left.data[0 * 4 + 1], proj_left.data[0 * 4 + 2], proj_left.data[0 * 4 + 3]);
-		INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[1 * 4 + 0], proj_left.data[1 * 4 + 1], proj_left.data[1 * 4 + 2], proj_left.data[1 * 4 + 3]);
-		INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[2 * 4 + 0], proj_left.data[2 * 4 + 1], proj_left.data[2 * 4 + 2], proj_left.data[2 * 4 + 3]);
-		INFO_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", proj_left.data[3 * 4 + 0], proj_left.data[3 * 4 + 1], proj_left.data[3 * 4 + 2], proj_left.data[3 * 4 + 3]);
+		//INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[0 * 4 + 0], proj_left.data[0 * 4 + 1], proj_left.data[0 * 4 + 2], proj_left.data[0 * 4 + 3]);
+		//INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[1 * 4 + 0], proj_left.data[1 * 4 + 1], proj_left.data[1 * 4 + 2], proj_left.data[1 * 4 + 3]);
+		//INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[2 * 4 + 0], proj_left.data[2 * 4 + 1], proj_left.data[2 * 4 + 2], proj_left.data[2 * 4 + 3]);
+		//INFO_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", proj_left.data[3 * 4 + 0], proj_left.data[3 * 4 + 1], proj_left.data[3 * 4 + 2], proj_left.data[3 * 4 + 3]);
 	}
 	// red = my combination
 	proj_left.xx = hmd_left.xx * SignOf(proj_left.xx) * fLeftWidthHack; // h fov
@@ -1231,7 +1238,7 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 	Matrix44 rotation_matrix;
 	Matrix44 lean_back_matrix;
 	Matrix44 camera_pitch_matrix;
-	if (bStuckToHead || !isPerspective)
+	if (bStuckToHead)
 	{
 		Matrix44::LoadIdentity(rotation_matrix);
 		Matrix44::LoadIdentity(lean_back_matrix);
@@ -1388,13 +1395,15 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 	else
 		//if (xfmem.projection.type != GX_PERSPECTIVE || g_viewport_type == VIEW_HUD_ELEMENT || g_viewport_type == VIEW_OFFSCREEN)
 	{
-		if (debug_newScene)
-			INFO_LOG(VR, "2D: hacky test");
+		//if (debug_newScene)
+		//	INFO_LOG(VR, "2D: hacky test");
 
 		float HudWidth, HudHeight, HudThickness, HudDistance, HudUp, CameraForward, AimDistance;
 
 		proj_left[15] = 0.0f;
 		proj_right[15] = 0.0f;
+
+		proj_left = hmd_left;
 
 		// 2D Screen
 		if (vr_widest_3d_HFOV <= 0)
@@ -1467,14 +1476,20 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 			float right2D = left2D + 2 / flippedMatrix.xx;
 			float bottom2D = -(flippedMatrix.zy + 1) / flippedMatrix.yy;
 			float top2D = bottom2D + 2 / flippedMatrix.yy;
-			float zFar2D = flippedMatrix.wz / flippedMatrix.zz;
-			float zNear2D = zFar2D*flippedMatrix.zz / (flippedMatrix.zz - 1);
+			//OpenGL: f = (1 - wz) / zz; n = (-1 - wz) / zz
+			float zFar2D = (1 - flippedMatrix.wz) / flippedMatrix.zz;
+			float zNear2D = (-1 - flippedMatrix.wz) / flippedMatrix.zz;
 			float zObj = zNear2D + (zFar2D - zNear2D) * g_Config.fHud3DCloser;
+
+			HACK_LOG(VR, "3D HUD: (%g, %g) to (%g, %g); z: %g to %g, %g", left2D, top2D, right2D, bottom2D, zNear2D, zFar2D, zObj);
+
 
 			left2D *= zObj;
 			right2D *= zObj;
 			bottom2D *= zObj;
 			top2D *= zObj;
+
+
 
 			// Scale the width and height to fit the HUD in metres
 			if (flippedMatrix.xx == 0 || right2D == left2D) {
@@ -1513,8 +1528,13 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 			float bottom2D = -(flippedMatrix.wy + 1) / flippedMatrix.yy;
 			float top2D = bottom2D + 2 / flippedMatrix.yy;
 			float zFar2D, zNear2D;
-			zFar2D = flippedMatrix.wz / flippedMatrix.zz;
-			zNear2D = (1 + flippedMatrix.zz * zFar2D) / flippedMatrix.zz;
+			//OpenGL: f = (1 - wz) / zz; n = (-1 - wz) / zz
+			zFar2D = (1 - flippedMatrix.wz) / flippedMatrix.zz;
+			zNear2D = (-1 - flippedMatrix.wz) / flippedMatrix.zz;
+
+			// proj_through
+			NOTICE_LOG(VR, "2D: (%g, %g) to (%g, %g), %g to %g", left2D, top2D, right2D, bottom2D, zNear2D, zFar2D);
+			NOTICE_LOG(VR, "HUDWidth = %g, HudHeight = %g, HudThickness = %g, HudDistance = %g", HudWidth, HudHeight, HudThickness, HudDistance);
 
 			// for 2D, work out the fraction of the HUD we should fill, and multiply the scale by that
 			// also work out what fraction of the height we should shift it up, and what fraction of the width we should shift it left
@@ -1545,15 +1565,17 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 				position[2] = -HudDistance;
 			else
 				position[2] = -HudDistance; // - CameraForward;
+			NOTICE_LOG(VR, "2D: Scale: [x%g, x%g, x%g]; Pos: (%g, %g, %g)", scale[0], scale[1], scale[2], position[0], position[1], position[2]);
 		}
 
-		Matrix44 A, B, scale_matrix, position_matrix, box_matrix;
+		Matrix44 scale_matrix, position_matrix;
 		scale_matrix.setScaling(scale);
 		position_matrix.setTranslation(position);
 
 		// order: scale, position
 		look_matrix = scale_matrix * position_matrix * camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
-
+		//look_matrix = camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
+		//look_matrix = scale_matrix * head_position_matrix;
 	}
 
 	Matrix44 eye_pos_matrix_left, eye_pos_matrix_right;
@@ -1586,6 +1608,11 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 	//Matrix44::Multiply(proj_left, view_matrix_left, final_matrix_left);
 	//Matrix44::Multiply(proj_right, view_matrix_right, final_matrix_right);
 	final_matrix_left = view_matrix_left * proj_left;
+
+	if (!isPerspective)
+	{
+		//final_matrix_left = flippedMatrix;
+	}
 
 	if (flipped_x < 0)
 	{
@@ -1624,11 +1651,8 @@ void LinkedShader::SetProjectionConstants(bool shouldLog) {
 		final_matrix_right.data[13] *= -1;
 	}
 
-	//Matrix4x4 final_matrix = rotation_matrix * proj_left;
-
 	ScaleProjMatrix(final_matrix_left);
-
-	glUniformMatrix4fv(u_proj, 1, GL_FALSE, final_matrix_left.m);
+	return final_matrix_left;
 }
 
 ShaderManager::ShaderManager() : lastShader_(NULL), globalDirty_(0xFFFFFFFF), shaderSwitchDirty_(0) {
