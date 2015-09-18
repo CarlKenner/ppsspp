@@ -81,6 +81,7 @@ float vr_widest_3d_zFar = 0;
 float g_game_camera_pos[3];
 Matrix44 g_game_camera_rotmat;
 bool debug_newScene = true, debug_nextScene = false;
+float s_fViewTranslationVector[3] = { 0, 0, 0 }; // freelook
 
 ControllerStyle vr_left_controller = CS_HYDRA_LEFT, vr_right_controller = CS_HYDRA_RIGHT;
 
@@ -570,15 +571,21 @@ void UpdateOculusHeadTracking()
 	ovrVector3f useHmdToEyeViewOffset[2] = { g_eye_render_desc[0].HmdToEyeViewOffset, g_eye_render_desc[1].HmdToEyeViewOffset };
 #if OVR_MAJOR_VERSION >= 7
 	ovr_GetEyePoses(hmd, g_ovr_frameindex, useHmdToEyeViewOffset, g_eye_poses, nullptr);
+	OVR::Posef pose = g_eye_poses[ovrEye_Left];
+#elif OVR_MAJOR_VERSION >= 6
+	ovrFrameTiming timing = ovrHmd_GetFrameTiming(hmd, g_ovr_frameindex);
+	ovrTrackingState state = ovrHmd_GetTrackingState(hmd, timing.DisplayMidpointSeconds);
+	ovr_CalcEyePoses(state.HeadPose.ThePose, useHmdToEyeViewOffset, g_eye_poses);
+	OVR::Posef pose = state.HeadPose.ThePose;
 #else
 	ovrHmd_GetEyePoses(hmd, g_ovr_frameindex, useHmdToEyeViewOffset, g_eye_poses, nullptr);
+	OVR::Posef pose = g_eye_poses[ovrEye_Left];
 #endif
 #endif
 	//ovrTrackingState ss = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.ScanoutMidpointSeconds);
 	//if (ss.StatusFlags & (ovrStatus_OrientationTracked | ovrStatus_PositionTracked))
 	{
 		//OVR::Posef pose = ss.HeadPose.ThePose;
-		OVR::Posef pose = g_eye_poses[ovrEye_Left];
 		float yaw = 0.0f, pitch = 0.0f, roll = 0.0f;
 		pose.Rotation.GetEulerAngles<OVR::Axis_Y, OVR::Axis_X, OVR::Axis_Z>(&yaw, &pitch, &roll);
 
@@ -596,6 +603,7 @@ void UpdateOculusHeadTracking()
 #else
 		g_head_tracking_position[2] = -z;
 #endif
+		NOTICE_LOG(VR, "xyz=%5.2f %5.2f %5.2f", x, y, z);
 		Matrix33 m, yp, ya, p, r;
 		Matrix33::RotateY(ya, DEGREES_TO_RADIANS(yaw));
 		Matrix33::RotateX(p, DEGREES_TO_RADIANS(pitch));

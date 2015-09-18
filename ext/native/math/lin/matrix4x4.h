@@ -6,6 +6,12 @@
 class Quaternion;
 class Matrix3x3;
 
+inline float SignOf(float x)
+{
+	// VR 1 if x is positive, -1 if x is negative, or 0 if x is zero
+	return (float)((x > 0) - (x < 0));
+}
+
 class Matrix4x4 {
 public:
 	union {

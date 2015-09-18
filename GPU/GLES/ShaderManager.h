@@ -23,6 +23,26 @@
 #include "VertexShaderGenerator.h"
 #include "FragmentShaderGenerator.h"
 
+// Virtual Reality stuff
+enum ViewportType {
+	VIEW_FULLSCREEN = 0,
+	VIEW_LETTERBOXED,
+	VIEW_HUD_ELEMENT,
+	VIEW_SKYBOX,
+	VIEW_PLAYER_1,
+	VIEW_PLAYER_2,
+	VIEW_PLAYER_3,
+	VIEW_PLAYER_4,
+	VIEW_OFFSCREEN,
+	VIEW_RENDER_TO_TEXTURE,
+};
+extern enum ViewportType g_viewport_type, g_old_viewport_type;
+//void ScaleRequestedToRendered(EFBRectangle *requested, EFBRectangle *rendered);
+//extern EFBRectangle g_final_screen_region, g_requested_viewport, g_rendered_viewport;
+extern bool debug_newScene;
+extern bool m_layer_on_top;
+
+
 class Shader;
 
 struct ShaderID {
@@ -68,7 +88,7 @@ public:
 	void use(u32 vertType, LinkedShader *previous);
 	void stop();
 	void UpdateUniforms(u32 vertType);
-	void SetProjectionConstants();
+	void SetProjectionConstants(bool shouldLog);
 
 	Shader *vs_;
 	// Set to false if the VS failed, happens on Mali-400 a lot for complex shaders.

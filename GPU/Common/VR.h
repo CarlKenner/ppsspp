@@ -203,6 +203,7 @@ extern float vr_widest_3d_zNear;
 extern float vr_widest_3d_zFar;
 extern float g_game_camera_pos[3];
 extern Matrix44 g_game_camera_rotmat;
+extern float s_fViewTranslationVector[3];
 
 //Opcode Replay Buffer
 extern bool g_opcode_replay_enabled;
