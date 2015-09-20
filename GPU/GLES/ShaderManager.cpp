@@ -166,16 +166,16 @@ void LogProj(const Matrix4x4 & m) { //VR
 	p[4] = m.zz;
 	p[5] = m.wz;
 	p[6] = m.zw;
+	float left, right, bottom, top, zfar, znear, vfov, hfov;
+	m.getOpenGLProjection(&left, &right, &bottom, &top, &znear, &zfar, &hfov, &vfov);
+	vfov = vfov*180.0f / 3.1415926535f;
+	hfov = hfov*180.0f / 3.1415926535f;
 
 	if (m.zw == -1) { // perspective projection
 		p[1] = m.zx;
 		p[3] = m.zy;
 		// don't change this formula!
 		// metroid layer detection depends on exact values
-		float vfov = (2 * atan(1.0f / m.yy)*180.0f / 3.1415926535f);
-		float hfov = (2 * atan(1.0f / m.xx)*180.0f / 3.1415926535f);
-		float f = m.wz / m.zz;
-		float n = f*m.zz / (m.zz - 1);
 
 		if (debug_newScene && fabs(hfov) > vr_widest_3d_HFOV && fabs(hfov) <= 125 && (fabs(m.yy) != fabs(m.xx))) {
 			DEBUG_LOG(VR, "***** New Widest 3D *****");
@@ -183,8 +183,8 @@ void LogProj(const Matrix4x4 & m) { //VR
 			vr_widest_3d_projNum = debug_projNum;
 			vr_widest_3d_HFOV = fabs(hfov);
 			vr_widest_3d_VFOV = fabs(vfov);
-			vr_widest_3d_zNear = fabs(n);
-			vr_widest_3d_zFar = fabs(f);
+			vr_widest_3d_zNear = fabs(znear);
+			vr_widest_3d_zFar = fabs(zfar);
 			DEBUG_LOG(VR, "%d: %g x %g deg, n=%g f=%g, p4=%g p5=%g; xs=%g ys=%g", vr_widest_3d_projNum, vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar, m.zz, m.wz, m.xx, m.yy);
 		}
 	}
@@ -957,8 +957,14 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 }
 
 Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough) {
+	char s[1024];
 	Matrix4x4 flippedMatrix;
 	memcpy(&flippedMatrix, input_proj_matrix, 16 * sizeof(float));
+
+	if (debug_newScene) {
+		flippedMatrix.toOpenGL(s, 1024);
+		NOTICE_LOG(VR, "input: %s", s);
+	}
 
 	bool isPerspective = flippedMatrix.zw == -1;
 
@@ -1004,9 +1010,16 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			}
 		}
 	}
+	if (debug_newScene) {
+		flippedMatrix.toOpenGL(s, 1024);
+		NOTICE_LOG(VR, "flipped: %s", s);
+	}
 	if (shouldLog)
 		LogProj(flippedMatrix);
 
+	float gameLeft, gameRight, gameBottom, gameTop, gameZNear, gameZFar, gameHFOV, gameVFOV;
+	flippedMatrix.getOpenGLProjection(&gameLeft, &gameRight, &gameBottom, &gameTop, &gameZNear, &gameZFar, &gameHFOV, &gameVFOV);
+	
 	///////////////////////////////////////////////////////
 	// First, identify any special layers and hacks
 
@@ -1017,11 +1030,11 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	int flipped_x = 1, flipped_y = 1, iTelescopeHack = -1;
 	float fScaleHack = 1, fWidthHack = 1, fHeightHack = 1, fUpHack = 0, fRightHack = 0;
 
-	if (g_Config.iMetroidPrime)
-	{
+	//if (g_Config.iMetroidPrime)
+	//{
 		//GetMetroidPrimeValues(&bStuckToHead, &bFullscreenLayer, &bHide, &bFlashing,
 		//	&fScaleHack, &fWidthHack, &fHeightHack, &fUpHack, &fRightHack, &iTelescopeHack);
-	}
+	//}
 
 	// VR: in split-screen, only draw VR player TODO: fix offscreen to render to a separate texture in VR 
 	bHide = bHide || (g_has_hmd && (g_viewport_type == VIEW_OFFSCREEN || (g_viewport_type >= VIEW_PLAYER_1 && g_viewport_type <= VIEW_PLAYER_4 && g_Config.iVRPlayer != g_viewport_type - VIEW_PLAYER_1)));
@@ -1115,16 +1128,11 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	// Real 3D scene
 	if (isPerspective && g_viewport_type != VIEW_HUD_ELEMENT && g_viewport_type != VIEW_OFFSCREEN)
 	{
-		float p5 = flippedMatrix.wz;
-		float p4 = flippedMatrix.zz;
-		zfar = flippedMatrix.wz / flippedMatrix.zz;
-		znear = (1 + flippedMatrix.zz * zfar) / flippedMatrix.zz;
-		float zn2 = p5 / (p4 - 1);
-		float zf2 = p5 / (p4 + 1);
-		hfov = 2 * atan(1.0f / flippedMatrix.xx)*180.0f / 3.1415926535f;
-		vfov = 2 * atan(1.0f / flippedMatrix.yy)*180.0f / 3.1415926535f;
-		//if (debug_newScene)
-		//	INFO_LOG(VR, "Real 3D scene: hfov=%8.4f    vfov=%8.4f      znear=%8.4f or %8.4f   zfar=%8.4f or %8.4f", hfov, vfov, znear, zn2, zfar, zf2);
+		znear = gameZNear;
+		zNear3D = znear;
+		zfar = gameZFar;
+		hfov = gameHFOV;
+		vfov = gameVFOV;
 
 		// Find the game's camera angle and position by looking at the view/model matrix of the first real 3D object drawn.
 		// This won't work for all games.
@@ -1132,12 +1140,6 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			//CheckOrientationConstants();
 			g_vr_had_3D_already = true;
 		}
-
-		//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
-		//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
-		//NOTICE_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[2 * 4 + 0], flippedMatrix.data[2 * 4 + 1], flippedMatrix.data[2 * 4 + 2], flippedMatrix.data[2 * 4 + 3]);
-		//NOTICE_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", flippedMatrix.data[3 * 4 + 0], flippedMatrix.data[3 * 4 + 1], flippedMatrix.data[3 * 4 + 2], flippedMatrix.data[3 * 4 + 3]);
-		//WARN_LOG(VR, "---");
 	}
 	// 2D layer we will turn into a 3D scene
 	// or 3D HUD element that we will treat like a part of the 2D HUD 
@@ -1164,47 +1166,49 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		else
 		{
 			// default, if no 3D in scene
-			znear = 0.2f*UnitsPerMetre * 20; // 50cm
+			znear = 0.2f*UnitsPerMetre; // 50cm
 			zfar = 40 * UnitsPerMetre; // 40m
 			hfov = 70; // 70 degrees
 			vfov = 180.0f / 3.14159f * 2 * atanf(tanf((hfov*3.14159f / 180.0f) / 2)* 9.0f / 16.0f); // 2D screen is always meant to be 16:9 aspect ratio
 			// TODO: fix aspect ratio in portrait mode
-			if (debug_newScene)
-				NOTICE_LOG(VR, "Only 2D Projecting: %g x %g, n=%fm f=%fm", hfov, vfov, znear, zfar);
+			//if (debug_newScene)
+			//	NOTICE_LOG(VR, "Only 2D Projecting: %g x %g, n=%fm f=%fm", hfov, vfov, znear, zfar);
+		}
+		// proj_through matrix is strangely hardcoded to always have znear=0 zfar=-1
+		if (zfar < 0 && znear <= 0) {
+			zfar = -zfar;
+			znear = -znear;
 		}
 		zNear3D = znear;
 		znear /= 40.0f;
-		if (debug_newScene)
-			NOTICE_LOG(VR, "2D: zNear3D = %f, znear = %f, zFar = %f", zNear3D, znear, zfar);
-		//ERROR_LOG(VR, "2D Matrix!");
-		//ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
-		//ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
-		//ERROR_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[2 * 4 + 0], flippedMatrix.data[2 * 4 + 1], flippedMatrix.data[2 * 4 + 2], flippedMatrix.data[2 * 4 + 3]);
-		//ERROR_LOG(VR, "G {%8.4f %8.4f %8.4f   %8.4f}", flippedMatrix.data[3 * 4 + 0], flippedMatrix.data[3 * 4 + 1], flippedMatrix.data[3 * 4 + 2], flippedMatrix.data[3 * 4 + 3]);
-		//WARN_LOG(VR, "---");
+		//if (debug_newScene)
+		//	NOTICE_LOG(VR, "2D: zNear3D = %f, znear = %f, zFar = %f", zNear3D, znear, zfar);
 	}
 
 	Matrix44 proj_left, proj_right, hmd_left, hmd_right, temp;
-	Matrix44::Set(proj_left, flippedMatrix.data);
-	Matrix44::Set(proj_right, flippedMatrix.data);
-	VR_GetProjectionMatrices(temp, hmd_right, znear, zfar);
+	VR_GetProjectionMatrices(temp, hmd_right, zNear3D, zfar, true);
 	hmd_left = temp.transpose();
 	temp = hmd_right;
 	hmd_right = temp.transpose();
-	proj_left.xx = hmd_left.xx;
-	proj_left.yy = hmd_left.yy;
+	proj_left = hmd_left;
+	proj_right = hmd_right;
 	float hfov2 = 2 * atan(1.0f / hmd_left.data[0 * 4 + 0])*180.0f / 3.1415926535f;
 	float vfov2 = 2 * atan(1.0f / hmd_left.data[1 * 4 + 1])*180.0f / 3.1415926535f;
 	float zfar2 = hmd_left.wz / hmd_left.zz;
 	float znear2 = (1 + hmd_left.zz * zfar) / hmd_left.zz;
 	if (debug_newScene)
 	{
+		if (debug_newScene) {
+			hmd_left.toOpenGL(s, 1024);
+			WARN_LOG(VR, "hmd_left: %s", s);
+		}
+
 		// yellow = HMD's suggestion
-		DEBUG_LOG(VR, "O hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov2, vfov2, znear2, zfar2);
-		DEBUG_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[0 * 4 + 0], hmd_left.data[0 * 4 + 1], hmd_left.data[0 * 4 + 2], hmd_left.data[0 * 4 + 3]);
-		DEBUG_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[1 * 4 + 0], hmd_left.data[1 * 4 + 1], hmd_left.data[1 * 4 + 2], hmd_left.data[1 * 4 + 3]);
-		DEBUG_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[2 * 4 + 0], hmd_left.data[2 * 4 + 1], hmd_left.data[2 * 4 + 2], hmd_left.data[2 * 4 + 3]);
-		DEBUG_LOG(VR, "O {%8.4f %8.4f %8.4f   %8.4f}", hmd_left.data[3 * 4 + 0], hmd_left.data[3 * 4 + 1], hmd_left.data[3 * 4 + 2], hmd_left.data[3 * 4 + 3]);
+		WARN_LOG(VR, "O hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov2, vfov2, znear2, zfar2);
+		WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[0 * 4 + 0], hmd_left.data[0 * 4 + 1], hmd_left.data[0 * 4 + 2], hmd_left.data[0 * 4 + 3]);
+		WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[1 * 4 + 0], hmd_left.data[1 * 4 + 1], hmd_left.data[1 * 4 + 2], hmd_left.data[1 * 4 + 3]);
+		WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[2 * 4 + 0], hmd_left.data[2 * 4 + 1], hmd_left.data[2 * 4 + 2], hmd_left.data[2 * 4 + 3]);
+		WARN_LOG(VR, "O {%8.4f %8.4f %8.4f   %8.4f}", hmd_left.data[3 * 4 + 0], hmd_left.data[3 * 4 + 1], hmd_left.data[3 * 4 + 2], hmd_left.data[3 * 4 + 3]);
 		// green = Game's suggestion
 		//INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[0 * 4 + 0], proj_left.data[0 * 4 + 1], proj_left.data[0 * 4 + 2], proj_left.data[0 * 4 + 3]);
 		//INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[1 * 4 + 0], proj_left.data[1 * 4 + 1], proj_left.data[1 * 4 + 2], proj_left.data[1 * 4 + 3]);
@@ -1224,6 +1228,11 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	//if (g_ActiveConfig.backend_info.bSupportsGeometryShaders)
 	{
 		proj_left.zx = 0;
+	}
+
+	if (debug_newScene) {
+		flippedMatrix.toOpenGL(s, 1024);
+		ERROR_LOG(VR, "mine: %s", s);
 	}
 
 	if (debug_newScene)
@@ -1649,6 +1658,10 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		final_matrix_right.data[7] *= -1;
 		final_matrix_right.data[9] *= -1;
 		final_matrix_right.data[13] *= -1;
+	}
+	if (debug_newScene) {
+		final_matrix_left.toOpenGL(s, 1024);
+		INFO_LOG(VR, "final: %s", s);
 	}
 
 	ScaleProjMatrix(final_matrix_left);

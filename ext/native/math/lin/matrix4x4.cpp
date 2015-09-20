@@ -260,11 +260,96 @@ Matrix4x4 Matrix4x4::fromPRS(const Vec3 &positionv, const Quaternion &rotv, cons
 }
 
 void Matrix4x4::toText(char *buffer, int len) const {
-	snprintf(buffer, len, "%f %f %f %f\n%f %f %f %f\n%f %f %f %f\n%f %f %f %f\n",
+	snprintf(buffer, len, "%5.2f %5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f %5.2f\n",
 		xx,xy,xz,xw,
 		yx,yy,yz,yw,
 		zx,zy,zz,zw,
 		wx,wy,wz,ww);
+	buffer[len - 1] = '\0';
+}
+
+bool Matrix4x4::getOpenGLProjection(float *l, float *r, float *b, float *t, float *zNear, float *zFar, float *hfov, float *vfov) const {
+	// orthographic projection
+	if (ww == 1.0f && zw == 0.0f) {
+		// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=x+%3D+2%2F(r-l)%0Ay+%3D+2%2F(t-b)%0Au+%3D+-(r%2Bl)%2F(r-l)%0Av+%3D+-(t%2Bb)%2F(t-b)%0Az+%3D+-2%2F(f-n)%0Aw+%3D+-(f%2Bn)%2F(f-n)&v2=l%0Ar%0Ab%0At%0An%0Af
+		*zNear = (wz + 1) / zz;
+		*zFar = (wz - 1) / zz;
+		*l = -(wx + 1.0f) / xx;
+		*r = -(wx - 1.0f) / xx;
+		*b = -(wy + 1.0f) / yy;
+		*t = -(wy - 1.0f) / yy;
+		*hfov = 0;
+		*vfov = 0;
+		return true;
+	} else {
+	// assume perspective projection
+		if (zz == -1.0f) {
+			// infinite far
+			*zNear = wz / -2;
+			*zFar = INFINITY;
+		}
+		else {
+			// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=z+%3D+-(f%2Bn)%2F(f-n)%0Aw+%3D+-2*(f*n)%2F(f-n)&v2=f%0An
+			*zNear = wz*(zz - 1);
+			*zFar = wz*(zz + 1);
+		}
+		// glFrustum
+		*r = *zNear*(zx + 1.0f) / xx;
+		*l = *zNear*(zx - 1.0f) / xx;
+		*t = *zNear*(zy + 1.0f) / yy;
+		*b = *zNear*(zy - 1.0f) / yy;
+		*hfov = 2 * atan(1.0f / xx);
+		*vfov = 2 * atan(1.0f / yy);
+		return false;
+	}
+}
+
+void Matrix4x4::toOpenGL(char *buffer, int len) const {
+	float zNear, zFar;
+	// perspective projection
+	if (ww == 0.0f && zw == -1.0f) {
+		if (zz == -1.0f) {
+			// infinite far
+			zNear = wz / -2;
+			zFar = INFINITY;
+		} else {
+			// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=z+%3D+-(f%2Bn)%2F(f-n)%0Aw+%3D+-2*(f*n)%2F(f-n)&v2=f%0An
+			zNear = wz / (zz - 1);
+			zFar = wz / (zz + 1);
+		}
+		if (zx == 0.0f && zy == 0.0f) {
+			// gluPerspective
+			float fovy = 2 * atan(1.0f / yy);
+			float fovx = 2 * atan(1.0f / xx);
+			float aspect = yy / xx;
+			snprintf(buffer, len, "gluPerspective(fovy=%g deg, aspect=%g, zNear=%g, zFar=%g) //16:%g, hfov=%g degl zz=%g, wz=%g", RADIANS_TO_DEGREES(fovy), aspect, zNear, zFar, 16.0f / aspect, RADIANS_TO_DEGREES(fovx), zz, wz);
+		} else {
+			// glFrustum
+			float r = zNear*(zx + 1.0f) / xx;
+			float l = zNear*(zx - 1.0f) / xx;
+			float t = zNear*(zy + 1.0f) / yy;
+			float b = zNear*(zy - 1.0f) / yy;
+			snprintf(buffer, len, "glFrustum(left=%g, right=%g, bottom=%g, top=%g, zNear=%g, zFar=%g) //zz=%g, wz=%g", l,r,b,t, zNear, zFar, zz, wz);
+		}
+	}
+	// orthographic projection
+	else if (ww == 1.0f && zw == 0.0f) {
+		// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=x+%3D+2%2F(r-l)%0Ay+%3D+2%2F(t-b)%0Au+%3D+-(r%2Bl)%2F(r-l)%0Av+%3D+-(t%2Bb)%2F(t-b)%0Az+%3D+-2%2F(f-n)%0Aw+%3D+-(f%2Bn)%2F(f-n)&v2=l%0Ar%0Ab%0At%0An%0Af
+		zNear = (wz + 1) / zz;
+		zFar = (wz - 1) / zz;
+		float l = -(wx + 1.0f) / xx;
+		float r = -(wx - 1.0f) / xx;
+		float b = -(wy + 1.0f) / yy;
+		float t = -(wy - 1.0f) / yy;
+		snprintf(buffer, len, "glOrtho(left=%g, right=%g, bottom=%g, top=%g, zNear=%g, zFar=%g) //zz=%g, wz=%g", l, r, b, t, zNear, zFar, zz, wz);
+	}
+	else {
+		snprintf(buffer, len, "glUnknown:\n%5.2f %5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f %5.2f\n",
+			xx, xy, xz, xw,
+			yx, yy, yz, yw,
+			zx, zy, zz, zw,
+			wx, wy, wz, ww);
+	}
 	buffer[len - 1] = '\0';
 }
 
@@ -346,7 +431,7 @@ Matrix3x3 Matrix3x3::fromPRS(const Vec3 &positionv, const Quaternion &rotv, cons
 }
 
 void Matrix3x3::toText(char *buffer, int len) const {
-	snprintf(buffer, len, "%f %f %f\n%f %f %f\n%f %f %f\n",
+	snprintf(buffer, len, "%5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f\n%5.2f %5.2f %5.2f\n",
 		xx, xy, xz,
 		yx, yy, yz,
 		zx, zy, zz);

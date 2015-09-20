@@ -6,6 +6,12 @@
 class Quaternion;
 class Matrix3x3;
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#define RADIANS_TO_DEGREES(rad) ((float) rad * (float) (180.0 / M_PI))
+#define DEGREES_TO_RADIANS(deg) ((float) deg * (float) (M_PI / 180.0))
+
 inline float SignOf(float x)
 {
 	// VR 1 if x is positive, -1 if x is negative, or 0 if x is zero
@@ -155,6 +161,8 @@ public:
 		*/
 	}
 	void toText(char *buffer, int len) const;
+	bool getOpenGLProjection(float *l, float *r, float *b, float *t, float *zNear, float *zFar, float *hfov, float *vfov) const;
+	void toOpenGL(char *buffer, int len) const;
 	void print() const;
 	static Matrix4x4 fromPRS(const Vec3 &position, const Quaternion &normal, const Vec3 &scale);
 
@@ -185,6 +193,7 @@ public:
 	static void Scale(Matrix4x4 &mtx, const float vec[3]);
 
 	static void Multiply(const Matrix4x4 &a, const Matrix4x4 &b, Matrix4x4 &result);
+
 };
 
 class Matrix3x3 {

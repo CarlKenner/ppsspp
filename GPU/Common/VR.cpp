@@ -735,22 +735,38 @@ void VR_GetProjectionHalfTan(float &hmd_halftan)
 		}
 }
 
-void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar)
+void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar, bool isOpenGL)
 {
 #ifdef OVR_MAJOR_VERSION
 	if (g_has_rift)
 	{
-		ovrMatrix4f rift_left = ovrMatrix4f_Projection(g_eye_fov[0], znear, zfar, true);
-		ovrMatrix4f rift_right = ovrMatrix4f_Projection(g_eye_fov[1], znear, zfar, true);
+		unsigned flags = ovrProjection_None;
+		flags |= ovrProjection_RightHanded; // is this right for Dolphin VR?
+		if (isOpenGL)
+			flags |= ovrProjection_ClipRangeOpenGL;
+		if (isinf(zfar))
+			flags |= ovrProjection_FarClipAtInfinity;
+		INFO_LOG(VR, "GetProjectionMatrices(%g, %g, %d)", znear, zfar, flags);
+		ovrMatrix4f rift_left = ovrMatrix4f_Projection(g_eye_fov[0], znear, zfar, flags);
+		ovrMatrix4f rift_right = ovrMatrix4f_Projection(g_eye_fov[1], znear, zfar, flags);
 		Matrix44::Set(left_eye, rift_left.M[0]);
 		Matrix44::Set(right_eye, rift_right.M[0]);
+		// Oculus don't give us the correct z values for infinite zfar
+		if (isinf(zfar))
+		{
+			left_eye.zz = -1.0f;
+			left_eye.zw = -2.0f * znear;
+			right_eye.zz = left_eye.zz;
+			right_eye.zw = left_eye.zw;
+		}
 	}
 	else
 #endif
 #ifdef HAVE_OPENVR
 		if (g_has_steamvr)
 		{
-			vr::HmdMatrix44_t mat = m_pHMD->GetProjectionMatrix(vr::Eye_Left, znear, zfar, vr::API_DirectX);
+			vr::GraphicsAPIConvention flags = isOpenGL ? vr::API_OpenGL : vr::API_DirectX;
+			vr::HmdMatrix44_t mat = m_pHMD->GetProjectionMatrix(vr::Eye_Left, znear, zfar, flags);
 			for (int r = 0; r < 4; ++r)
 				for (int c = 0; c < 4; ++c)
 					left_eye.data[r * 4 + c] = mat.m[r][c];

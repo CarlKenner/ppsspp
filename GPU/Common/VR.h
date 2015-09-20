@@ -110,12 +110,6 @@ typedef Matrix3x3 Matrix33;
 #endif
 #define RADIANS_TO_DEGREES(rad) ((float) rad * (float) (180.0 / M_PI))
 #define DEGREES_TO_RADIANS(deg) ((float) deg * (float) (M_PI / 180.0))
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-#define RADIANS_TO_DEGREES(rad) ((float) rad * (float) (180.0 / M_PI))
-#define DEGREES_TO_RADIANS(deg) ((float) deg * (float) (M_PI / 180.0))
 //#define RECURSIVE_OPCODE
 #define INLINE_OPCODE
 
@@ -172,7 +166,7 @@ void VR_GetEyePoses();
 void ReadHmdOrientation(float *roll, float *pitch, float *yaw, float *x, float *y, float *z);
 void UpdateHeadTrackingIfNeeded();
 void VR_GetProjectionHalfTan(float &hmd_halftan);
-void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar);
+void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar, bool isOpenGL);
 void VR_GetEyePos(float *posLeft, float *posRight);
 void VR_GetFovTextureSize(int *width, int *height);
 
