@@ -32,6 +32,7 @@
 #include "GPU/ge_constants.h"
 #include "GPU/GeDisasm.h"
 #include "GPU/Common/FramebufferCommon.h"
+#include "GPU/Common/VR.h"
 
 #include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/ShaderManager.h"
@@ -780,7 +781,11 @@ void GLES_GPU::CopyDisplayToOutputInternal() {
 	}
 #endif
 #endif
-
+	// This doesn't work here, it just clears the mirror window. 
+	//if (g_Config.bEnableVR && g_has_hmd && !g_Config.bDontClearScreen) {
+	//	framebufferManager_.RebindFramebuffer();
+	//	framebufferManager_.ClearBuffer();
+	//}
 	gstate_c.textureChanged = TEXCHANGE_UPDATED;
 }
 

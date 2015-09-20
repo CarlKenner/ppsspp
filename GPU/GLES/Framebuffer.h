@@ -122,9 +122,9 @@ public:
 	// Cardboard Settings Calculator
 	struct CardboardSettings * GetCardboardSettings(struct CardboardSettings * cardboardSettings);
 
+	virtual void ClearBuffer() override;
 protected:
 	virtual void DisableState() override;
-	virtual void ClearBuffer() override;
 	virtual void ClearDepthBuffer() override;
 	virtual void FlushBeforeCopy() override;
 	virtual void DecimateFBOs() override;
