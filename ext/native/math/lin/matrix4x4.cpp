@@ -332,6 +332,26 @@ void Matrix4x4::toOpenGL(char *buffer, int len) const {
 			snprintf(buffer, len, "glFrustum(left=%g, right=%g, bottom=%g, top=%g, zNear=%g, zFar=%g) //zz=%g, wz=%g", l,r,b,t, zNear, zFar, zz, wz);
 		}
 	}
+	// D3D perspective projection
+	else if (ww == 0.0f && zw == 1.0f) {
+		zNear = -wz / zz;
+		zFar = -wz / (zz - 1);
+		if (zx == 0.0f && zy == 0.0f) {
+			// D3DXMatrixPerspectiveFovLH
+			float fovy = 2 * atan(1.0f / yy);
+			float fovx = 2 * atan(1.0f / xx);
+			float aspect = yy / xx;
+			snprintf(buffer, len, "D3DXMatrixPerspectiveFovLH(fovy=%g deg, aspect=%g, zNear=%g, zFar=%g) //16:%g, hfov=%g degl zz=%g, wz=%g", RADIANS_TO_DEGREES(fovy), aspect, zNear, zFar, 16.0f / aspect, RADIANS_TO_DEGREES(fovx), zz, wz);
+		}
+		else {
+			// D3DXMatrixPerspectiveOffCenterLH
+			float r = zNear*(zx + 1.0f) / xx;
+			float l = zNear*(zx - 1.0f) / xx;
+			float t = zNear*(zy + 1.0f) / yy;
+			float b = zNear*(zy - 1.0f) / yy;
+			snprintf(buffer, len, "D3DXMatrixPerspectiveOffCenterLH(left=%g, right=%g, bottom=%g, top=%g, zNear=%g, zFar=%g) //zz=%g, wz=%g", l, r, b, t, zNear, zFar, zz, wz);
+		}
+	}
 	// orthographic projection
 	else if (ww == 1.0f && zw == 0.0f) {
 		// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=x+%3D+2%2F(r-l)%0Ay+%3D+2%2F(t-b)%0Au+%3D+-(r%2Bl)%2F(r-l)%0Av+%3D+-(t%2Bb)%2F(t-b)%0Az+%3D+-2%2F(f-n)%0Aw+%3D+-(f%2Bn)%2F(f-n)&v2=l%0Ar%0Ab%0At%0An%0Af
