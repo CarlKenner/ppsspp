@@ -71,23 +71,14 @@ int PrimToPrimitiveType(int prim) {
 //u32 primitive_type : 2;
 //u32 wireframe : 1;
 //u32 vr : 1;
-void ComputeGeometryShaderID(ShaderID *id, int primitive_type) {
-
+void ComputeGeometryShaderID(ShaderID *id, int prim) {
 	int id0 = 0;
 	int id1 = 0;
 
-	//bool stereo = true;
-	//u8 numTexGens = 0; //?
-	//bool pixel_lighting = false; //?
-	//bool wireframe = false;
-	//bool vr = g_has_hmd && g_Config.bEnableVR;
-	//
-	//id0 = stereo & 1;
-	//id0 |= (numTexGens & 15) << 1;
-	//id0 |= (pixel_lighting & 1) << 5;
-	//id0 |= (primitive_type & 3) << 6;
-	//id0 |= (wireframe & 1) << 8;
-	//id0 |= (vr & 1) << 9;
+	bool stereo = false;
+	bool wireframe = g_Config.bWireFrame;
+	bool vr = g_has_hmd && g_Config.bEnableVR;
+	int primitive_type = PrimToPrimitiveType(prim);
 
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
@@ -102,6 +93,12 @@ void ComputeGeometryShaderID(ShaderID *id, int primitive_type) {
 		id0 |= (doTextureProjection & 1) << 3;
 	}
 	id0 |= (doFlatShading & 1) << 4;
+	if (stereo) {
+		id0 |= 1 << 5;
+		id0 |= (vr & 1) << 6;
+	}
+	id0 |= (wireframe & 1) << 7;
+	id0 |= (primitive_type & 3) << 8;
 
 	id->d[0] = id0;
 	id->d[1] = id1;
@@ -120,10 +117,19 @@ void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform) {
 	WRITE(p, "#define mediump\n");
 	WRITE(p, "#define highp\n");
 
+	bool stereo = false;
+	bool wireframe = g_Config.bWireFrame;
+	bool vr = g_has_hmd && g_Config.bEnableVR;
+
 	const unsigned int vertex_in = primitive_type + 1;
 	unsigned int vertex_out = vertex_in;
 	WRITE(p, "layout(%s) in;\n", primitives_ogl[primitive_type]);
-	WRITE(p, "layout(%s, max_vertices = %d) out;\n", primitives_ogl_out[primitive_type], vertex_out);
+	if (wireframe && primitive_type==PRIMITIVE_TRIANGLES) {
+		++vertex_out; // last vertex is the first vertex repeated to close the polygon
+		WRITE(p, "layout(line_strip, max_vertices = %d) out;\n", vertex_out);
+	} else {
+		WRITE(p, "layout(%s, max_vertices = %d) out;\n", primitives_ogl_out[primitive_type], vertex_out);
+	}
 
 	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled() && !gstate.isModeThrough();
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
@@ -138,16 +144,16 @@ void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform) {
 	WRITE(p, "} ps;\n");
 
 	WRITE(p, "void main() {\n");
-	for (unsigned i = 0; i < vertex_in; ++i)
+	for (unsigned i = 0; i < vertex_out; ++i)
 	{
-		WRITE(p, "	gl_Position = gl_in[%d].gl_Position;\n", i);
-		WRITE(p, "	ps.v_color0 = vs[%d].v_color0;\n", i);
+		WRITE(p, "	gl_Position = gl_in[%d].gl_Position;\n", i % vertex_in);
+		WRITE(p, "	ps.v_color0 = vs[%d].v_color0;\n", i % vertex_in);
 		if (lmode)
-			WRITE(p, "	ps.v_color1 = vs[%d].v_color1;\n", i);
+			WRITE(p, "	ps.v_color1 = vs[%d].v_color1;\n", i % vertex_in);
 		if (doTexture)
-			WRITE(p, "	ps.v_texcoord = vs[%d].v_texcoord;\n", i);
+			WRITE(p, "	ps.v_texcoord = vs[%d].v_texcoord;\n", i % vertex_in);
 		if (enableFog)
-			WRITE(p, "	ps.v_fogdepth = vs[%d].v_fogdepth;\n", i);
+			WRITE(p, "	ps.v_fogdepth = vs[%d].v_fogdepth;\n", i % vertex_in);
 		WRITE(p, "	EmitVertex();\n");
 	}
 	WRITE(p, "	EndPrimitive();\n");

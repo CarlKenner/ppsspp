@@ -203,6 +203,7 @@ public:
 	bool bStereoEFBMonoDepth;
 	int iStereoDepthPercentage;
 	int iStereoConvergenceMinimum;
+	bool bWireFrame;
 
 	// VR global
 	float fScale;

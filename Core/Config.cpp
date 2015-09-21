@@ -478,6 +478,8 @@ static ConfigSetting graphicsSettings[] = {
 	ReportedConfigSetting("DisableSlowFramebufEffects", &g_Config.bDisableSlowFramebufEffects, false, true, true),
 	ReportedConfigSetting("FragmentTestCache", &g_Config.bFragmentTestCache, true, true, true),
 
+	ReportedConfigSetting("Wireframe", &g_Config.bWireFrame, false, true, false),
+
 	ConfigSetting(false), 
 };
 

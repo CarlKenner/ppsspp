@@ -14,4 +14,4 @@ enum PrimitiveType {
 	PRIMITIVE_TRIANGLES,
 };
 void ComputeGeometryShaderID(ShaderID *id, int prim);
-void GenerateGeometryShader(int primitive_type, char *buffer, bool useHWTransform);
+void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform);

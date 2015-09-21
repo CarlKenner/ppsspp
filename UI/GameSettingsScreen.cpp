@@ -308,6 +308,9 @@ void GameSettingsScreen::CreateViews() {
 	CheckBox *depthRange = graphicsSettings->Add(new CheckBox(&g_Config.bDepthRangeHack, gr->T("Depth Range Hack (Phantasy Star Portable 2)")));
 	depthRange->SetDisabledPtr(&g_Config.bSoftwareRendering);
 
+	CheckBox *wireframe = graphicsSettings->Add(new CheckBox(&g_Config.bWireFrame, gr->T("Enable Wireframe")));
+	wireframe->SetDisabledPtr(&g_Config.bSoftwareRendering);
+
 	static const char *bloomHackOptions[] = { "Off", "Safe", "Balanced", "Aggressive" };
 	PopupMultiChoice *bloomHack = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iBloomHack, gr->T("Lower resolution for effects (reduces artifacts)"), bloomHackOptions, 0, ARRAY_SIZE(bloomHackOptions), gr, screenManager()));
 	bloomHackEnable_ = !g_Config.bSoftwareRendering && (g_Config.iInternalResolution != 1);
