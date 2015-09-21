@@ -25,5 +25,7 @@ struct ShaderID;
 
 bool CanUseHardwareTransform(int prim);
 
+void GenerateVSOutputMembers(char * &p);
+
 void ComputeVertexShaderID(ShaderID *id, u32 vertexType, bool useHWTransform);
 void GenerateVertexShader(int prim, u32 vertexType, char *buffer, bool useHWTransform);

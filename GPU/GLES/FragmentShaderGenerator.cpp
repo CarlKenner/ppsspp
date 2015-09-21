@@ -33,6 +33,7 @@
 #include "GPU/Common/GPUStateUtils.h"
 #include "GPU/GLES/FragmentShaderGenerator.h"
 #include "GPU/GLES/Framebuffer.h"
+#include "GPU/GLES/VertexShaderGenerator.h"
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
@@ -544,19 +545,13 @@ void GenerateFragmentShader(char *buffer) {
 	if (gstate.isTextureMapEnabled() && gstate.getTextureFunction() == GE_TEXFUNC_BLEND)
 		WRITE(p, "uniform vec3 u_texenv;\n");
 
-	WRITE(p, "%s %s vec4 v_color0;\n", shading, varying);
-	if (lmode)
-		WRITE(p, "%s %s vec3 v_color1;\n", shading, varying);
 	if (enableFog) {
 		WRITE(p, "uniform vec3 u_fogcolor;\n");
-		WRITE(p, "%s %s float v_fogdepth;\n", varying, highpFog ? "highp" : "mediump");
 	}
-	if (doTexture) {
-		if (doTextureProjection)
-			WRITE(p, "%s %s vec3 v_texcoord;\n", varying, highpTexcoord ? "highp" : "mediump");
-		else
-			WRITE(p, "%s %s vec2 v_texcoord;\n", varying, highpTexcoord ? "highp" : "mediump");
-	}
+
+	WRITE(p, "%s VertexData {\n", varying);
+	GenerateVSOutputMembers(p);
+	WRITE(p, "};\n");
 
 	if (!g_Config.bFragmentTestCache) {
 		if (enableAlphaTest && !alphaTestAgainstZero) {

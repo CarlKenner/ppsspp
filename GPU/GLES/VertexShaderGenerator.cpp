@@ -152,6 +152,51 @@ enum DoLightComputation {
 	LIGHT_FULL,
 };
 
+void GenerateVSOutputMembers(char * &p)
+{
+	bool glslES30 = false;
+	bool highpFog = false;
+	bool highpTexcoord = false;
+	if (gl_extensions.IsGLES) {
+		// ES doesn't support dual source alpha :(
+		if (gl_extensions.GLES3) {
+			glslES30 = true;
+		}
+		// PowerVR needs highp to do the fog in MHU correctly.
+		// Others don't, and some can't handle highp in the fragment shader.
+		highpFog = (gl_extensions.bugs & BUG_PVR_SHADER_PRECISION_BAD) ? true : false;
+		highpTexcoord = highpFog;
+	}
+	else {
+		// TODO: Handle this in VersionGEThan?
+#if !defined(FORCE_OPENGL_2_0)
+		if (gl_extensions.VersionGEThan(3, 3, 0)) {
+			glslES30 = true;
+		}
+#endif
+	}
+ 
+	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled() && !gstate.isModeThrough();
+	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
+	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
+	bool doFlatShading = gstate.getShadeMode() == GE_SHADE_FLAT && !gstate.isModeClear();
+	bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough() && !gstate.isModeClear();
+	const char *shading = "";
+	if (glslES30)
+		shading = doFlatShading ? "flat" : "";
+
+	WRITE(p, "%s lowp vec4 v_color0;\n", shading);
+	if (lmode)
+		WRITE(p, "%s lowp vec3 v_color1;\n", shading);
+	if (doTexture) {
+		if (doTextureProjection)
+			WRITE(p, "%s vec3 v_texcoord;\n", highpTexcoord ? "highp" : "mediump");
+		else
+			WRITE(p, "%s vec2 v_texcoord;\n", highpTexcoord ? "highp" : "mediump");
+	}
+	if (enableFog)
+		WRITE(p, "%s float v_fogdepth;\n", highpFog ? "highp" : "mediump");
+}
 
 // Depth range and viewport
 //
@@ -358,26 +403,9 @@ void GenerateVertexShader(int prim, u32 vertType, char *buffer, bool useHWTransf
 		WRITE(p, "uniform highp vec4 u_depthRange;\n");
 	}
 
-	WRITE(p, "%s %s lowp vec4 v_color0;\n", shading, varying);
-	if (lmode) {
-		WRITE(p, "%s %s lowp vec3 v_color1;\n", shading, varying);
-	}
-	if (doTexture) {
-		if (doTextureProjection)
-			WRITE(p, "%s %s vec3 v_texcoord;\n", varying, highpTexcoord ? "highp" : "mediump");
-		else
-			WRITE(p, "%s %s vec2 v_texcoord;\n", varying, highpTexcoord ? "highp" : "mediump");
-	}
-
-
-	if (enableFog) {
-		// See the fragment shader generator
-		if (highpFog) {
-			WRITE(p, "%s highp float v_fogdepth;\n", varying);
-		} else {
-			WRITE(p, "%s mediump float v_fogdepth;\n", varying);
-		}
-	}
+	WRITE(p, "%s VertexData {\n", varying);
+	GenerateVSOutputMembers(p);
+	WRITE(p, "};\n");
 
 	// See comment above this function (GenerateVertexShader).
 	if (!gstate.isModeThrough()) {

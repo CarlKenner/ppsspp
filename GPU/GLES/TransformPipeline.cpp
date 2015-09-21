@@ -772,7 +772,8 @@ rotateVBO:
 		}
 
 		ApplyDrawStateLate();
-		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, prim, lastVType_);
+		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
+		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_);
 		SetupDecFmtForDraw(program, dec_->GetDecVtxFmt(), vbo ? 0 : decoded);
 
 		if (useElements) {
@@ -809,7 +810,8 @@ rotateVBO:
 			maxIndex, framebufferManager_, textureCache_, transformed, transformedExpanded, drawBuffer, numTrans, drawIndexed, &result, 1.0);
 
 		ApplyDrawStateLate();
-		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, prim, lastVType_);
+		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
+		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_);
 
 		if (result.action == SW_DRAW_PRIMITIVES) {
 			if (result.setStencil) {

@@ -23,6 +23,7 @@
 
 #include <map>
 #include "VertexShaderGenerator.h"
+#include "GeometryShaderGenerator.h"
 #include "FragmentShaderGenerator.h"
 
 // Virtual Reality stuff
@@ -84,7 +85,7 @@ enum {
 
 class LinkedShader {
 public:
-	LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous);
+	LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous);
 	~LinkedShader();
 
 	void use(u32 vertType, LinkedShader *previous);
@@ -92,7 +93,7 @@ public:
 	void UpdateUniforms(u32 vertType);
 	Matrix4x4 SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough);
 
-	Shader *vs_;
+	Shader *vs_, *gs_;
 	// Set to false if the VS failed, happens on Mali-400 a lot for complex shaders.
 	bool useHWTransform_;
 
@@ -230,7 +231,8 @@ public:
 	// This is the old ApplyShader split into two parts, because of annoying information dependencies.
 	// If you call ApplyVertexShader, you MUST call ApplyFragmentShader soon afterwards.
 	Shader *ApplyVertexShader(int prim, u32 vertType);
-	LinkedShader *ApplyFragmentShader(Shader *vs, int prim, u32 vertType);
+	Shader *ApplyGeometryShader(int prim, u32 vertType);
+	LinkedShader *ApplyFragmentShader(Shader *vs, Shader *gs, int prim, u32 vertType);
 
 	void DirtyShader();
 	void DirtyUniform(u32 what) {
@@ -239,18 +241,20 @@ public:
 	void DirtyLastShader();  // disables vertex arrays
 
 	int NumVertexShaders() const { return (int)vsCache_.size(); }
+	int NumGeometryShaders() const { return (int)gsCache_.size(); }
 	int NumFragmentShaders() const { return (int)fsCache_.size(); }
 	int NumPrograms() const { return (int)linkedShaderCache_.size(); }
 
 private:
 	void Clear();
-	static bool DebugAreShadersCompatibleForLinking(Shader *vs, Shader *fs);
+	static bool DebugAreShadersCompatibleForLinking(Shader *vs, Shader *gs, Shader *fs);
 
 	struct LinkedShaderCacheEntry {
-		LinkedShaderCacheEntry(Shader *vs_, Shader *fs_, LinkedShader *ls_)
-			: vs(vs_), fs(fs_), ls(ls_) { }
+		LinkedShaderCacheEntry(Shader *vs_, Shader *gs_, Shader *fs_, LinkedShader *ls_)
+			: vs(vs_), gs(gs_), fs(fs_), ls(ls_) { }
 
 		Shader *vs;
+		Shader *gs;
 		Shader *fs;
 		LinkedShader *ls;
 	};
@@ -258,9 +262,10 @@ private:
 
 	LinkedShaderCache linkedShaderCache_;
 
-	bool lastVShaderSame_;
+	bool lastVShaderSame_, lastGShaderSame_;
 
 	ShaderID lastFSID_;
+	ShaderID lastGSID_;
 	ShaderID lastVSID_;
 
 	LinkedShader *lastShader_;
@@ -270,6 +275,9 @@ private:
 
 	typedef std::map<ShaderID, Shader *> FSCache;
 	FSCache fsCache_;
+
+	typedef std::map<ShaderID, Shader *> GSCache;
+	GSCache gsCache_;
 
 	typedef std::map<ShaderID, Shader *> VSCache;
 	VSCache vsCache_;

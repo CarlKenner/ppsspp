@@ -267,13 +267,15 @@ Shader::~Shader() {
 		glDeleteShader(shader);
 }
 
-LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous)
+LinkedShader::LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous)
 		: useHWTransform_(useHWTransform), program(0), dirtyUniforms(0) {
 	PROFILE_THIS_SCOPE("shaderlink");
 
 	program = glCreateProgram();
 	vs_ = vs;
+	gs_ = gs;
 	glAttachShader(program, vs->shader);
+	glAttachShader(program, gs->shader);
 	glAttachShader(program, fs->shader);
 
 	// Bind attribute locations to fixed locations so that they're
@@ -312,11 +314,13 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTrans
 #endif
 			ERROR_LOG(G3D, "Could not link program:\n %s", buf);
 			ERROR_LOG(G3D, "VS:\n%s", vs->source().c_str());
+			ERROR_LOG(G3D, "GS:\n%s", gs->source().c_str());
 			ERROR_LOG(G3D, "FS:\n%s", fs->source().c_str());
-			Reporting::ReportMessage("Error in shader program link: info: %s / fs: %s / vs: %s", buf, fs->source().c_str(), vs->source().c_str());
+			Reporting::ReportMessage("Error in shader program link: info: %s / fs: %s / gs: %s / vs: %s", buf, fs->source().c_str(), gs->source().c_str(), vs->source().c_str());
 #ifdef SHADERLOG
 			OutputDebugStringUTF8(buf);
 			OutputDebugStringUTF8(vs->source().c_str());
+			OutputDebugStringUTF8(gs->source().c_str());
 			OutputDebugStringUTF8(fs->source().c_str());
 #endif
 			delete [] buf;	// we're dead!
@@ -326,7 +330,7 @@ LinkedShader::LinkedShader(Shader *vs, Shader *fs, u32 vertType, bool useHWTrans
 		return;
 	}
 
-	INFO_LOG(G3D, "Linked shader: vs %i fs %i", (int)vs->shader, (int)fs->shader);
+	INFO_LOG(G3D, "Linked shader: vs %i gs %i fs %i", (int)vs->shader, (int)gs->shader, (int)fs->shader);
 
 	u_tex = glGetUniformLocation(program, "tex");
 	u_proj = glGetUniformLocation(program, "u_proj");
@@ -1684,14 +1688,19 @@ void ShaderManager::Clear() {
 	for (auto iter = fsCache_.begin(); iter != fsCache_.end(); ++iter)	{
 		delete iter->second;
 	}
+	for (auto iter = gsCache_.begin(); iter != gsCache_.end(); ++iter)	{
+		delete iter->second;
+	}
 	for (auto iter = vsCache_.begin(); iter != vsCache_.end(); ++iter)	{
 		delete iter->second;
 	}
 	linkedShaderCache_.clear();
 	fsCache_.clear();
+	gsCache_.clear();
 	vsCache_.clear();
 	globalDirty_ = 0xFFFFFFFF;
 	lastFSID_.clear();
+	lastGSID_.clear();
 	lastVSID_.clear();
 	DirtyShader();
 	bFrameChanged = true;
@@ -1704,6 +1713,7 @@ void ShaderManager::ClearCache(bool deleteThem) {
 void ShaderManager::DirtyShader() {
 	// Forget the last shader ID
 	lastFSID_.clear();
+	lastGSID_.clear();
 	lastVSID_.clear();
 	DirtyLastShader();
 	globalDirty_ = 0xFFFFFFFF;
@@ -1715,13 +1725,15 @@ void ShaderManager::DirtyLastShader() { // disables vertex arrays
 		lastShader_->stop();
 	lastShader_ = 0;
 	lastVShaderSame_ = false;
+	lastGShaderSame_ = false;
 }
 
 // This is to be used when debugging why incompatible shaders are being linked, like is
 // happening as I write this in Tactics Ogre
-bool ShaderManager::DebugAreShadersCompatibleForLinking(Shader *vs, Shader *fs) {
+bool ShaderManager::DebugAreShadersCompatibleForLinking(Shader *vs, Shader *gs, Shader *fs) {
 	// Check clear mode flag just for starters.
 	ShaderID vsid = vs->ID();
+	ShaderID gsid = gs->ID();
 	ShaderID fsid = fs->ID();
 
 	// TODO: Make the flag fields more similar?
@@ -1791,10 +1803,57 @@ Shader *ShaderManager::ApplyVertexShader(int prim, u32 vertType) {
 	return vs;
 }
 
-LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, int prim, u32 vertType) {
+Shader *ShaderManager::ApplyGeometryShader(int prim, u32 vertType) {
+	bool useHWTransform = CanUseHardwareTransform(prim);
+
+	ShaderID GSID;
+	ComputeGeometryShaderID(&GSID, prim);
+
+	// Just update uniforms if this is the same shader as last time.
+	if (lastShader_ != 0 && GSID == lastGSID_) {
+		lastGShaderSame_ = true;
+		return lastShader_->gs_;  	// Already all set.
+	}
+	else {
+		lastGShaderSame_ = false;
+	}
+
+	lastGSID_ = GSID;
+
+	GSCache::iterator gsIter = gsCache_.find(GSID);
+	Shader *gs;
+	if (gsIter == gsCache_.end())	{
+		// Geometry shader not in cache. Let's compile it.
+		GenerateGeometryShader(prim, codeBuffer_, useHWTransform);
+		gs = new Shader(codeBuffer_, GL_GEOMETRY_SHADER, useHWTransform, GSID);
+
+		if (gs->Failed()) {
+			I18NCategory *gr = GetI18NCategory("Graphics");
+			ERROR_LOG(G3D, "Geometry Shader compilation failed, falling back to software transform");
+			osm.Show(gr->T("Geometry hardware transform error - falling back to software"), 2.5f, 0xFF3030FF, -1, true);
+			delete gs;
+
+			// TODO: Look for existing shader with the appropriate ID, use that instead of generating a new one - however, need to make sure
+			// that that shader ID is not used when computing the linked shader ID below, because then IDs won't match
+			// next time and we'll do this over and over...
+
+			// Can still work with software transform.
+			GenerateGeometryShader(prim, codeBuffer_, false);
+			gs = new Shader(codeBuffer_, GL_GEOMETRY_SHADER, false, GSID);
+		}
+
+		gsCache_[GSID] = gs;
+	}
+	else {
+		gs = gsIter->second;
+	}
+	return gs;
+}
+
+LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, Shader *gs, int prim, u32 vertType) {
 	ShaderID FSID;
 	ComputeFragmentShaderID(&FSID);
-	if (lastVShaderSame_ && FSID == lastFSID_) {
+	if (lastVShaderSame_ && lastGShaderSame_ && FSID == lastFSID_) {
 		lastShader_->UpdateUniforms(vertType);
 		return lastShader_;
 	}
@@ -1820,7 +1879,7 @@ LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, int prim, u32 vertT
 		// Deferred dirtying! Let's see if we can make this even more clever later.
 		iter->ls->dirtyUniforms |= switchDirty;
 
-		if (iter->vs == vs && iter->fs == fs) {
+		if (iter->vs == vs && iter->gs == gs && iter->fs == fs) {
 			ls = iter->ls;
 		}
 	}
@@ -1833,8 +1892,8 @@ LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, int prim, u32 vertT
 			return NULL;
 		}
 #endif
-		ls = new LinkedShader(vs, fs, vertType, vs->UseHWTransform(), lastShader_);  // This does "use" automatically
-		const LinkedShaderCacheEntry entry(vs, fs, ls);
+		ls = new LinkedShader(vs, gs, fs, vertType, vs->UseHWTransform(), lastShader_);  // This does "use" automatically
+		const LinkedShaderCacheEntry entry(vs, gs, fs, ls);
 		linkedShaderCache_.push_back(entry);
 	} else {
 		ls->use(vertType, lastShader_);

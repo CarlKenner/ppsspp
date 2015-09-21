@@ -248,6 +248,7 @@
     <ClInclude Include="GLES\FragmentShaderGenerator.h" />
     <ClInclude Include="GLES\FragmentTestCache.h" />
     <ClInclude Include="GLES\Framebuffer.h" />
+    <ClInclude Include="GLES\GeometryShaderGenerator.h" />
     <ClInclude Include="GLES\GLES_GPU.h" />
     <ClInclude Include="GLES\GLStateCache.h" />
     <ClInclude Include="GLES\ShaderManager.h" />
@@ -327,6 +328,7 @@
     <ClCompile Include="GLES\FragmentShaderGenerator.cpp" />
     <ClCompile Include="GLES\FragmentTestCache.cpp" />
     <ClCompile Include="GLES\Framebuffer.cpp" />
+    <ClCompile Include="GLES\GeometryShaderGenerator.cpp" />
     <ClCompile Include="GLES\GLES_GPU.cpp" />
     <ClCompile Include="GLES\GLStateCache.cpp" />
     <ClCompile Include="GLES\ShaderManager.cpp" />
