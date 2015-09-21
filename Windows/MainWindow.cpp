@@ -296,6 +296,42 @@ namespace MainWindow
 		}
 	}
 
+	static void HandleSizeChange(int newSizingType) {
+		SavePosition();
+		Core_NotifyWindowHidden(false);
+		if (!g_Config.bPauseWhenMinimized) {
+			NativeMessageReceived("window minimized", "false");
+		}
+
+		int width = 0, height = 0;
+		RECT rc;
+		GetClientRect(hwndMain, &rc);
+		width = rc.right - rc.left;
+		height = rc.bottom - rc.top;
+
+		// Moves the internal display window to match the inner size of the main window.
+		MoveWindow(hwndDisplay, 0, 0, width, height, TRUE);
+
+		// Setting pixelWidth to be too small could have odd consequences.
+		if (width >= 4 && height >= 4) {
+			// The framebuffer manager reads these once per frame, hopefully safe enough.. should really use a mutex or some
+			// much better mechanism.
+			PSP_CoreParameter().pixelWidth = width;
+			PSP_CoreParameter().pixelHeight = height;
+		}
+
+		UpdateRenderResolution();
+
+		if (UpdateScreenScale(width, height, IsWindowSmall())) {
+			NativeMessageReceived("gpu resized", "");
+		}
+
+		// Don't save the window state if fullscreen.
+		if (!g_Config.bFullScreen) {
+			g_WindowState = newSizingType;
+		}
+	}
+
 	void ToggleFullscreen(HWND hWnd, bool goingFullscreen) {
 		// Make sure no rendering is happening during the switch.
 
@@ -351,6 +387,10 @@ namespace MainWindow
 			ShowWindow(hwndMain, SW_MAXIMIZE);
 		} else {
 			ShowWindow(hwndMain, oldWindowState == SIZE_MAXIMIZED ? SW_MAXIMIZE : SW_RESTORE);
+			if (oldWindowState == SIZE_MAXIMIZED) {
+				// WM_SIZE wasn't sent, since the size didn't change (it was full screen before and after.)
+				HandleSizeChange(oldWindowState);
+			}
 		}
 
 		CorrectCursor();
@@ -572,7 +612,7 @@ namespace MainWindow
 				double now = real_time_now();
 				if ((now - lastMouseDown) < 0.001 * GetDoubleClickTime()) {
 					if (!g_Config.bShowTouchControls && GetUIState() == UISTATE_INGAME) {
-						PostMessage(hwndMain, WM_USER_TOGGLE_FULLSCREEN, 0, 0);
+						SendToggleFullscreen(!g_Config.bFullScreen);
 					}
 					lastMouseDown = 0.0;
 				} else {
@@ -709,39 +749,7 @@ namespace MainWindow
 				if (g_IgnoreWM_SIZE) {
 					return DefWindowProc(hWnd, message, wParam, lParam);
 				} else {
-					SavePosition();
-					Core_NotifyWindowHidden(false);
-					if (!g_Config.bPauseWhenMinimized) {
-						NativeMessageReceived("window minimized", "false");
-					}
-
-					int width = 0, height = 0;
-					RECT rc;
-					GetClientRect(hwndMain, &rc);
-					width = rc.right - rc.left;
-					height = rc.bottom - rc.top;
-
-					// Moves the internal display window to match the inner size of the main window.
-					MoveWindow(hwndDisplay, 0, 0, width, height, TRUE);
-
-					// Setting pixelWidth to be too small could have odd consequences.
-					if (width >= 4 && height >= 4) {
-						// The framebuffer manager reads these once per frame, hopefully safe enough.. should really use a mutex or some
-						// much better mechanism.
-						PSP_CoreParameter().pixelWidth = width;
-						PSP_CoreParameter().pixelHeight = height;
-					}
-
-					UpdateRenderResolution();
-
-					if (UpdateScreenScale(width, height, IsWindowSmall())) {
-						NativeMessageReceived("gpu resized", "");
-					}
-
-					// Don't save the window state if fullscreen.
-					if (!g_Config.bFullScreen) {
-						g_WindowState = wParam;
-					}
+					HandleSizeChange(wParam);
 				}
 				break;
 
@@ -800,7 +808,7 @@ namespace MainWindow
 			break;
 
 		case WM_USER_TOGGLE_FULLSCREEN:
-			ToggleFullscreen(hwndMain, !g_Config.bFullScreen);
+			ToggleFullscreen(hwndMain, wParam ? true : false);
 			break;
 
 		case WM_INPUT:
@@ -950,6 +958,10 @@ namespace MainWindow
 			LogManager::GetInstance()->GetConsoleListener()->Show(true);
 			EnableMenuItem(menu, ID_DEBUG_LOG, MF_ENABLED);
 		}
+	}
+
+	void SendToggleFullscreen(bool fullscreen) {
+		PostMessage(hwndMain, WM_USER_TOGGLE_FULLSCREEN, fullscreen, 0);
 	}
 
 }  // namespace
