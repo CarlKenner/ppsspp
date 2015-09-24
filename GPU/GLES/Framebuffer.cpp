@@ -52,13 +52,14 @@
 extern int g_iNumVideos;
 
 static const char tex_fs[] =
+	"#version 150\n"
 #ifdef USING_GLES2
 	"precision mediump float;\n"
 #endif
-	"uniform sampler2D sampler0;\n"
+	"uniform sampler2DArray sampler0;\n"
 	"varying vec2 v_texcoord0;\n"
 	"void main() {\n"
-	"  gl_FragColor = texture2D(sampler0, v_texcoord0);\n"
+	"  gl_FragColor = texture(sampler0, vec3(v_texcoord0, 0));\n"
 	"}\n";
 
 static const char basic_vs[] =
@@ -531,7 +532,7 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 
 	if (texture) {
 		// Previously had NVDrawTexture fallback here but wasn't worth it.
-		glBindTexture(GL_TEXTURE_2D, texture);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture);
 	}
 
 	float pos[12] = {
@@ -556,8 +557,8 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 		program = draw2dprogram_;
 	}
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, g_Config.iBufFilter == SCALE_NEAREST ? GL_NEAREST : GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, g_Config.iBufFilter == SCALE_NEAREST ? GL_NEAREST : GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, g_Config.iBufFilter == SCALE_NEAREST ? GL_NEAREST : GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, g_Config.iBufFilter == SCALE_NEAREST ? GL_NEAREST : GL_LINEAR);
 
 	shaderManager_->DirtyLastShader();  // dirty lastShader_
 

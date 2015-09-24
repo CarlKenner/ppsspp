@@ -551,6 +551,8 @@ void GenerateFragmentShader(char *buffer) {
 
 	WRITE(p, "%s VertexData {\n", varying);
 	GenerateVSOutputMembers(p);
+	//if (stereo)
+	//	WRITE(p, "	flat int eye;\n");
 	WRITE(p, "};\n");
 
 	if (!g_Config.bFragmentTestCache) {
