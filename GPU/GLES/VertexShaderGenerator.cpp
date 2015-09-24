@@ -31,6 +31,7 @@
 #include "GPU/GLES/VertexShaderGenerator.h"
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/Common/VertexDecoderCommon.h"
+#include "GPU/Common/VR.h"
 
 // SDL 1.2 on Apple does not have support for OpenGL 3 and hence needs
 // special treatment in the shader generator.
@@ -411,11 +412,15 @@ void GenerateVertexShader(int prim, u32 vertType, char *buffer, bool useHWTransf
 	if (!gstate.isModeThrough()) {
 		// Apply the projection and viewport to get the Z buffer value, floor to integer, undo the viewport and projection.
 		WRITE(p, "\nvec4 depthRoundZVP(vec4 v) {\n");
-		WRITE(p, "  float z = v.z / v.w;\n");
-		WRITE(p, "  z = z * u_depthRange.x + u_depthRange.y;\n");
-		WRITE(p, "  z = floor(z);\n");
-		WRITE(p, "  z = (z - u_depthRange.z) * u_depthRange.w;\n");
-		WRITE(p, "  return vec4(v.x, v.y, z * v.w, v.w);\n");
+		if (!(g_has_hmd && g_Config.bEnableVR)) {
+			WRITE(p, "  float z = v.z / v.w;\n");
+			WRITE(p, "  z = z * u_depthRange.x + u_depthRange.y;\n");
+			WRITE(p, "  z = floor(z);\n");
+			WRITE(p, "  z = (z - u_depthRange.z) * u_depthRange.w;\n");
+			WRITE(p, "  return vec4(v.x, v.y, z * v.w, v.w);\n");
+		} else {
+			WRITE(p, "  return v;\n");
+		}
 		WRITE(p, "}\n\n");
 	}
 

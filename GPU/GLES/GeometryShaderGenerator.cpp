@@ -80,11 +80,11 @@ void ComputeGeometryShaderID(ShaderID *id, int prim) {
 	bool vr = g_has_hmd && g_Config.bEnableVR;
 	bool stereo = vr;
 
+	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled() && !gstate.isModeThrough();
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
 	bool doFlatShading = gstate.getShadeMode() == GE_SHADE_FLAT && !gstate.isModeClear();
 	bool enableFog = gstate.isFogEnabled() && !gstate.isModeThrough() && !gstate.isModeClear();
-	bool lmode = gstate.isUsingSecondaryColor() && gstate.isLightingEnabled();
 
 	id0 = lmode & 1;
 	id0 |= (enableFog & 1) << 1;
@@ -156,7 +156,7 @@ void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform) {
 		{
 			if (stereo) {
 				WRITE(p, "	gl_Layer = %d;\n", eye);
-				WRITE(p, "  pos = gl_in[%d].gl_Position;\n", i % vertex_in);
+				WRITE(p, "	pos = gl_in[%d].gl_Position;\n", i % vertex_in);
 				if (vr) {
 					WRITE(p, "	pos.x += u_StereoParams[%d] - u_StereoParams[%d] * pos.w;\n", eye, eye + 2);
 				} else {

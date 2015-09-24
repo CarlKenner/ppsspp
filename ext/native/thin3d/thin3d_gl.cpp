@@ -727,7 +727,6 @@ void Thin3DGLContext::SetRenderState(T3DRenderState rs, uint32_t value) {
 		case T3DCullMode::CCW: glEnable(GL_CULL_FACE); glCullFace(GL_CCW); break;   // TODO: Should be GL_FRONT
 		case T3DCullMode::CW: glEnable(GL_CULL_FACE); glCullFace(GL_CW); break;
 		}
-		glDisable(GL_CULL_FACE); // just for testing
 		break;
 	}
 }
