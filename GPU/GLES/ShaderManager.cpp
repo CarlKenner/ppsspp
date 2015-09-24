@@ -335,6 +335,7 @@ LinkedShader::LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, boo
 	u_tex = glGetUniformLocation(program, "tex");
 	u_proj = glGetUniformLocation(program, "u_proj");
 	u_proj_through = glGetUniformLocation(program, "u_proj_through");
+	u_StereoParams = glGetUniformLocation(program, "u_StereoParams");
 	u_texenv = glGetUniformLocation(program, "u_texenv");
 	u_fogcolor = glGetUniformLocation(program, "u_fogcolor");
 	u_fogcoef = glGetUniformLocation(program, "u_fogcoef");
@@ -961,6 +962,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 }
 
 Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough) {
+	float stereoparams[4];
 	char s[1024];
 	Matrix4x4 flippedMatrix;
 	memcpy(&flippedMatrix, input_proj_matrix, 16 * sizeof(float));
@@ -1096,6 +1098,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		// If we are supposed to hide the layer, zero out the projection matrix
 		Matrix4x4 final_matrix;
 		final_matrix.empty();
+		memset(stereoparams, 0, sizeof(stereoparams));
+		glUniform4fv(u_StereoParams, 1, stereoparams);
 		return final_matrix;
 	}
 	// don't do anything fancy for rendering to a texture
@@ -1103,6 +1107,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	else if (g_viewport_type == VIEW_RENDER_TO_TEXTURE)
 	{
 		// we aren't applying viewport correction, because Render To Texture never has a viewport larger than the framebufffer
+		memset(stereoparams, 0, sizeof(stereoparams));
+		glUniform4fv(u_StereoParams, 1, stereoparams);
 		return flippedMatrix;
 	}
 	// This was already copied from the fullscreen EFB.
@@ -1112,6 +1118,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	else if (bFullscreenLayer)
 	{
 		ScaleProjMatrix(flippedMatrix);
+		memset(stereoparams, 0, sizeof(stereoparams));
+		glUniform4fv(u_StereoParams, 1, stereoparams);
 		return flippedMatrix;
 	}
 
@@ -1196,6 +1204,11 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	hmd_right = temp.transpose();
 	proj_left = hmd_left;
 	proj_right = hmd_right;
+	stereoparams[0] = proj_left.xx;
+	stereoparams[1] = proj_right.xx;
+	stereoparams[2] = proj_left.zx;
+	stereoparams[3] = proj_right.zx;
+
 	float hfov2 = 2 * atan(1.0f / hmd_left.data[0 * 4 + 0])*180.0f / 3.1415926535f;
 	float vfov2 = 2 * atan(1.0f / hmd_left.data[1 * 4 + 1])*180.0f / 3.1415926535f;
 	float zfar2 = hmd_left.wz / hmd_left.zz;
@@ -1603,6 +1616,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			posRight[i] *= UnitsPerMetre;
 		}
 	}
+	stereoparams[0] *= posLeft[0];
+	stereoparams[1] *= posRight[0];
 
 	Matrix44 view_matrix_left, view_matrix_right;
 	//if (g_Config.backend_info.bSupportsGeometryShaders)
@@ -1634,19 +1649,19 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		final_matrix_left.data[1] *= -1;
 		final_matrix_left.data[2] *= -1;
 		final_matrix_left.data[3] *= -1;
-		//GeometryShaderManager::constants.stereoparams[2] *= -1;
+		stereoparams[2] *= -1;
 		final_matrix_left.data[4] *= -1;
 		final_matrix_left.data[8] *= -1;
 		final_matrix_left.data[12] *= -1;
 		final_matrix_right.data[1] *= -1;
 		final_matrix_right.data[2] *= -1;
 		final_matrix_right.data[3] *= -1;
-		//GeometryShaderManager::constants.stereoparams[3] *= -1;
+		stereoparams[3] *= -1;
 		final_matrix_right.data[4] *= -1;
 		final_matrix_right.data[8] *= -1;
 		final_matrix_right.data[12] *= -1;
-		//GeometryShaderManager::constants.stereoparams[0] *= -1;
-		//GeometryShaderManager::constants.stereoparams[1] *= -1;
+		stereoparams[0] *= -1;
+		stereoparams[1] *= -1;
 	}
 	if (flipped_y < 0)
 	{
@@ -1669,6 +1684,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	}
 
 	ScaleProjMatrix(final_matrix_left);
+	glUniform4fv(u_StereoParams, 1, stereoparams);
 	return final_matrix_left;
 }
 

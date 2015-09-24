@@ -108,6 +108,7 @@ public:
 	int u_tex;
 	int u_proj;
 	int u_proj_through;
+	int u_StereoParams;
 	int u_texenv;
 	int u_view;
 	int u_texmtx;

@@ -77,8 +77,8 @@ void ComputeGeometryShaderID(ShaderID *id, int prim) {
 
 	int primitive_type = PrimToPrimitiveType(prim);
 	bool wireframe = g_Config.bWireFrame && (primitive_type == PRIMITIVE_TRIANGLES);
-	bool stereo = true;
 	bool vr = g_has_hmd && g_Config.bEnableVR;
+	bool stereo = vr;
 
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
 	bool doTextureProjection = gstate.getUVGenMode() == GE_TEXMAP_TEXTURE_MATRIX;
@@ -117,9 +117,11 @@ void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform) {
 	WRITE(p, "#define mediump\n");
 	WRITE(p, "#define highp\n");
 
-	bool stereo = true;
+	WRITE(p, "uniform vec4 u_StereoParams;\n");
+
 	bool wireframe = g_Config.bWireFrame;
 	bool vr = g_has_hmd && g_Config.bEnableVR;
+	bool stereo = vr;
 	int eyes = stereo ? 2 : 1;
 
 	const unsigned int vertex_in = primitive_type + 1;
@@ -147,13 +149,24 @@ void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform) {
 	WRITE(p, "} ps;\n");
 
 	WRITE(p, "void main() {\n");
+	WRITE(p, "	vec4 pos;\n");
 	for (int eye = 0; eye < eyes; ++eye)
 	{
 		for (unsigned i = 0; i < vertex_out; ++i)
 		{
-			if (stereo)
+			if (stereo) {
 				WRITE(p, "	gl_Layer = %d;\n", eye);
-			WRITE(p, "	gl_Position = gl_in[%d].gl_Position;\n", i % vertex_in);
+				WRITE(p, "  pos = gl_in[%d].gl_Position;\n", i % vertex_in);
+				if (vr) {
+					WRITE(p, "	pos.x += u_StereoParams[%d] - u_StereoParams[%d] * pos.w;\n", eye, eye + 2);
+				} else {
+					WRITE(p, "	pos.x += u_StereoParams[%d] * (pos.w - u_StereoParams[2]);\n", eye);
+				}
+				WRITE(p, "	gl_Position = pos;\n");
+			}
+			else {
+				WRITE(p, "	gl_Position = gl_in[%d].gl_Position;\n", i % vertex_in);
+			}
 			WRITE(p, "	ps.v_color0 = vs[%d].v_color0;\n", i % vertex_in);
 			if (lmode)
 				WRITE(p, "	ps.v_color1 = vs[%d].v_color1;\n", i % vertex_in);
