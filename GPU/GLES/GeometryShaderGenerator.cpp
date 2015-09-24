@@ -77,7 +77,7 @@ void ComputeGeometryShaderID(ShaderID *id, int prim) {
 
 	int primitive_type = PrimToPrimitiveType(prim);
 	bool wireframe = g_Config.bWireFrame && (primitive_type == PRIMITIVE_TRIANGLES);
-	bool stereo = false;
+	bool stereo = true;
 	bool vr = g_has_hmd && g_Config.bEnableVR;
 
 	bool doTexture = gstate.isTextureMapEnabled() && !gstate.isModeClear();
@@ -117,7 +117,7 @@ void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform) {
 	WRITE(p, "#define mediump\n");
 	WRITE(p, "#define highp\n");
 
-	bool stereo = false;
+	bool stereo = true;
 	bool wireframe = g_Config.bWireFrame;
 	bool vr = g_has_hmd && g_Config.bEnableVR;
 	int eyes = stereo ? 2 : 1;
@@ -152,7 +152,7 @@ void GenerateGeometryShader(int prim, char *buffer, bool useHWTransform) {
 		for (unsigned i = 0; i < vertex_out; ++i)
 		{
 			if (stereo)
-				WRITE(p, "	gl_layer = %d;\n", eye);
+				WRITE(p, "	gl_Layer = %d;\n", eye);
 			WRITE(p, "	gl_Position = gl_in[%d].gl_Position;\n", i % vertex_in);
 			WRITE(p, "	ps.v_color0 = vs[%d].v_color0;\n", i % vertex_in);
 			if (lmode)

@@ -36,6 +36,8 @@ struct FBO {
 
 	int width;
 	int height;
+	int m_EFBLayers;
+	GLenum m_textureType;
 	FBOColorDepth colorDepth;
 	bool native_fbo;
 };
@@ -55,38 +57,40 @@ FBO *fbo_ext_create(int width, int height, int num_color_textures, bool z_stenci
 	fbo->width = width;
 	fbo->height = height;
 	fbo->colorDepth = colorDepth;
+	fbo->m_EFBLayers = 1;
+	fbo->m_textureType = GL_TEXTURE_2D;
 
 	// Color texture is same everywhere
 	glGenFramebuffersEXT(1, &fbo->handle);
 	glGenTextures(1, &fbo->color_texture);
 
 	// Create the surfaces.
-	glBindTexture(GL_TEXTURE_2D, fbo->color_texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindTexture(fbo->m_textureType, fbo->color_texture);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	// TODO: We could opt to only create 16-bit render targets on slow devices. For later.
 	switch (colorDepth) {
 	case FBO_8888:
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexImage2D(fbo->m_textureType, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		break;
 	case FBO_4444:
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, NULL);
+		glTexImage2D(fbo->m_textureType, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, NULL);
 		break;
 	case FBO_5551:
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, NULL);
+		glTexImage2D(fbo->m_textureType, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, NULL);
 		break;
 	case FBO_565:
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+		glTexImage2D(fbo->m_textureType, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
 		break;
 	}
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	fbo->stencil_buffer = 0;
 	fbo->z_buffer = 0;
@@ -98,7 +102,7 @@ FBO *fbo_ext_create(int width, int height, int num_color_textures, bool z_stenci
 
 	// Bind it all together
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fbo->handle);
-	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, fbo->color_texture, 0);
+	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, fbo->m_textureType, fbo->color_texture, 0);
 	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, fbo->z_stencil_buffer);
 	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_STENCIL_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, fbo->z_stencil_buffer);
 
@@ -119,7 +123,7 @@ FBO *fbo_ext_create(int width, int height, int num_color_textures, bool z_stenci
 	}
 	// Unbind state we don't need
 	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindTexture(fbo->m_textureType, 0);
 
 	currentDrawHandle_ = fbo->handle;
 	currentReadHandle_ = fbo->handle;
@@ -160,55 +164,54 @@ FBO *fbo_create(int width, int height, int num_color_textures, bool z_stencil, F
 	fbo->width = width;
 	fbo->height = height;
 	fbo->colorDepth = colorDepth;
-
-	int m_EFBLayers = 1;
-	GLenum m_textureType = GL_TEXTURE_2D_ARRAY;
+	fbo->m_EFBLayers = 2;
+	fbo->m_textureType = GL_TEXTURE_2D_ARRAY;
 
 	// Color texture is same everywhere
 	glGenFramebuffers(1, &fbo->handle);
 	glGenTextures(1, &fbo->color_texture);
 
 	// Create the surfaces.
-	glBindTexture(m_textureType, fbo->color_texture);
-	glTexParameteri(m_textureType, GL_TEXTURE_MAX_LEVEL, 0);
-	glTexParameteri(m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindTexture(fbo->m_textureType, fbo->color_texture);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	// TODO: We could opt to only create 16-bit render targets on slow devices. For later.
 	switch (colorDepth) {
 	case FBO_8888:
-		glTexImage3D(m_textureType, 0, GL_RGBA, width, height, m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGBA, width, height, fbo->m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		break;
 	case FBO_4444:
-		glTexImage3D(m_textureType, 0, GL_RGBA, width, height, m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGBA, width, height, fbo->m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, NULL);
 		break;
 	case FBO_5551:
-		glTexImage3D(m_textureType, 0, GL_RGBA, width, height, m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGBA, width, height, fbo->m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, NULL);
 		break;
 	case FBO_565:
-		glTexImage3D(m_textureType, 0, GL_RGB, width, height, m_EFBLayers, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGB, width, height, fbo->m_EFBLayers, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
 		break;
 	}
 
-	glTexParameteri(m_textureType, GL_TEXTURE_MAX_LEVEL, 0);
-	glTexParameteri(m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	fbo->stencil_buffer = 0;
 	fbo->z_buffer = 0;
 	// 24-bit Z, 8-bit stencil
 	glGenTextures(1, &fbo->z_stencil_buffer);
-	glBindTexture(m_textureType, fbo->z_stencil_buffer);
-	glTexParameteri(m_textureType, GL_TEXTURE_MAX_LEVEL, 0);
-	glTexParameteri(m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexImage3D(m_textureType, 0, GL_DEPTH24_STENCIL8, width, height, m_EFBLayers, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
+	glBindTexture(fbo->m_textureType, fbo->z_stencil_buffer);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(fbo->m_textureType, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage3D(fbo->m_textureType, 0, GL_DEPTH24_STENCIL8, width, height, fbo->m_EFBLayers, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
 
 	// Bind it all together
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo->handle);
@@ -253,6 +256,8 @@ FBO *fbo_create_from_native_fbo(GLuint native_fbo, FBO *fbo)
 	fbo->width = 0;
 	fbo->height = 0;
 	fbo->colorDepth = FBO_8888;
+	fbo->m_EFBLayers = 1;
+	fbo->m_textureType = GL_TEXTURE_2D;
 
 	return fbo;
 }
@@ -346,7 +351,7 @@ void fbo_unbind_read() {
 
 void fbo_bind_color_as_texture(FBO *fbo, int color) {
 	if (fbo) {
-		glBindTexture(GL_TEXTURE_2D_ARRAY, fbo->color_texture);
+		glBindTexture(fbo->m_textureType, fbo->color_texture);
 	}
 }
 
