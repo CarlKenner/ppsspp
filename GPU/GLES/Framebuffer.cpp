@@ -57,9 +57,10 @@ static const char tex_fs[] =
 	"precision mediump float;\n"
 #endif
 	"uniform sampler2DArray sampler0;\n"
+	"uniform int eye;\n"
 	"varying vec2 v_texcoord0;\n"
 	"void main() {\n"
-	"  gl_FragColor = texture(sampler0, vec3(v_texcoord0, 0));\n"
+	"  gl_FragColor = texture(sampler0, vec3(v_texcoord0, eye));\n"
 	"}\n";
 
 static const char basic_vs[] =
@@ -157,6 +158,7 @@ void FramebufferManager::CompileDraw2DProgram() {
 			ERROR_LOG_REPORT(G3D, "Failed to compile draw2dprogram! This shouldn't happen.\n%s", errorString.c_str());
 		} else {
 			glsl_bind(draw2dprogram_);
+			eyeLoc_ = glsl_uniform_loc(draw2dprogram_, "eye");
 			glUniform1i(draw2dprogram_->sampler0, 0);
 		}
 
@@ -267,6 +269,7 @@ FramebufferManager::FramebufferManager() :
 	stencilUploadProgram_(nullptr),
 	plainColorLoc_(-1),
 	timeLoc_(-1),
+	eyeLoc_(-1),
 	textureCache_(nullptr),
 	shaderManager_(nullptr),
 	usePostShader_(false),
@@ -500,7 +503,7 @@ void FramebufferManager::DrawPlainColor(u32 color) {
 }
 
 // x, y, w, h are relative coordinates against destW/destH, which is not very intuitive.
-void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip, float u0, float v0, float u1, float v1, GLSLProgram *program, int uvRotation) {
+void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip, float u0, float v0, float u1, float v1, GLSLProgram *program, int uvRotation, int eye) {
 	if (flip) {
 		// We're flipping, so 0 is downward.  Reverse everything from 1.0f.
 		v0 = 1.0f - v0;
@@ -568,6 +571,8 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 		int vCount = __DisplayGetVCount();
 		float time[4] = {time_now(), (vCount % 60) * 1.0f/60.0f, (float)vCount, (float)(flipCount % 60)};
 		glUniform4fv(timeLoc_, 1, time);
+	} else if (program == draw2dprogram_ && eyeLoc_ != -1) {
+		glUniform1i(eyeLoc_, eye);
 	}
 	glstate.arrayBuffer.unbind();
 	glstate.elementArrayBuffer.unbind();
@@ -1109,18 +1114,18 @@ void FramebufferManager::CopyDisplayToOutput() {
 			if (g_has_hmd) {
 				glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
 				// Left Eye Image
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 0);
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
 			} else if (cardboardSettings.enabled) {
 				// Left Eye Image
 				glstate.viewport.set(cardboardSettings.leftEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1, NULL, 1, 0);
 
 				// Right Eye Image
 				glstate.viewport.set(cardboardSettings.rightEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1, NULL, 1, 1);
 			} else {
 				// Fullscreen Image
 				glstate.viewport.set(0, 0, pixelWidth_, pixelHeight_);
@@ -1147,18 +1152,18 @@ void FramebufferManager::CopyDisplayToOutput() {
 			if (g_has_hmd) {
 				glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
 				// Left Eye Image
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 0);
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
 			} else if (g_Config.bEnableCardboard) {
 				// Left Eye Image
 				glstate.viewport.set(cardboardSettings.leftEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1, NULL, 1, 0);
 
 				// Right Eye Image
 				glstate.viewport.set(cardboardSettings.rightEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1, NULL, 1, 1);
 			} else {
 				// Fullscreen Image
 				glstate.viewport.set(0, 0, pixelWidth_, pixelHeight_);
@@ -1174,18 +1179,18 @@ void FramebufferManager::CopyDisplayToOutput() {
 			if (g_has_hmd) {
 				glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
 				// Left Eye Image
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, postShaderProgram_, uvRotation);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, postShaderProgram_, uvRotation, 0);
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, postShaderProgram_, uvRotation);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, postShaderProgram_, uvRotation, 1);
 			} else if (g_Config.bEnableCardboard) {
 				// Left Eye Image
 				glstate.viewport.set(cardboardSettings.leftEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1, NULL, 1, 0);
 
 				// Right Eye Image
 				glstate.viewport.set(cardboardSettings.rightEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1);
+				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1, NULL, 1, 1);
 			} else {
 				// Fullscreen Image
 				glstate.viewport.set(0, 0, pixelWidth_, pixelHeight_);
