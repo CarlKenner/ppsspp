@@ -222,7 +222,7 @@ bool FramebufferManager::NotifyStencilUpload(u32 addr, int size, bool skipZero) 
 
 	if (useBlit) {
 		fbo_bind_as_render_target(dstBuffer->fbo);
-		fbo_bind_for_read(blitFBO);
+		fbo_bind_for_read(blitFBO, 0);
 		if (!useNV) {
 			glBlitFramebuffer(0, 0, w, h, 0, 0, dstBuffer->renderWidth, dstBuffer->renderHeight, GL_STENCIL_BUFFER_BIT, GL_NEAREST);
 		} else {
