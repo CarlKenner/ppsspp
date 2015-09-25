@@ -290,8 +290,8 @@ bool Matrix4x4::getOpenGLProjection(float *l, float *r, float *b, float *t, floa
 		}
 		else {
 			// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=z+%3D+-(f%2Bn)%2F(f-n)%0Aw+%3D+-2*(f*n)%2F(f-n)&v2=f%0An
-			*zNear = wz*(zz - 1);
-			*zFar = wz*(zz + 1);
+			*zNear = wz / (zz - 1);
+			*zFar = wz / (zz + 1);
 		}
 		// glFrustum
 		*r = *zNear*(zx + 1.0f) / xx;
