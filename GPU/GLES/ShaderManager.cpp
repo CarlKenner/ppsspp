@@ -1192,7 +1192,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			znear = -znear;
 		}
 		zNear3D = znear;
-		znear /= 40.0f;
+		//znear /= 40.0f;
 		//if (debug_newScene)
 		//	NOTICE_LOG(VR, "2D: zNear3D = %f, znear = %f, zFar = %f", zNear3D, znear, zfar);
 	}
@@ -1549,14 +1549,13 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		// 2D layer, or 2D viewport (may be part of 2D screen or HUD)
 		else
 		{
-			float left2D = -(flippedMatrix.wx + 1) / flippedMatrix.xx;
-			float right2D = left2D + 2 / flippedMatrix.xx;
-			float bottom2D = -(flippedMatrix.wy + 1) / flippedMatrix.yy;
-			float top2D = bottom2D + 2 / flippedMatrix.yy;
+			float left2D = gameLeft;
+			float right2D = gameRight;
+			float bottom2D = gameBottom;
+			float top2D = gameTop;
 			float zFar2D, zNear2D;
-			//OpenGL: f = (1 - wz) / zz; n = (-1 - wz) / zz
-			zFar2D = (1 - flippedMatrix.wz) / flippedMatrix.zz;
-			zNear2D = (-1 - flippedMatrix.wz) / flippedMatrix.zz;
+			zFar2D = gameZFar;
+			zNear2D = gameZNear;
 
 			// proj_through
 			NOTICE_LOG(VR, "2D: (%g, %g) to (%g, %g), %g to %g", left2D, top2D, right2D, bottom2D, zNear2D, zFar2D);
