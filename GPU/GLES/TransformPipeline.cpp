@@ -808,8 +808,8 @@ rotateVBO:
 			prim, decoded, indexGen.VertexCount(),
 			dec_->VertexType(), inds, GE_VTYPE_IDX_16BIT, dec_->GetDecVtxFmt(),
 			maxIndex, framebufferManager_, textureCache_, transformed, transformedExpanded, drawBuffer, numTrans, drawIndexed, &result, 1.0);
-
 		ApplyDrawStateLate();
+
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
 		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_);
 

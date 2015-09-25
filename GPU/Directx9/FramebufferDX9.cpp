@@ -1115,10 +1115,10 @@ namespace DX9 {
 			int zoom = g_Config.iInternalResolution;
 			if (zoom == 0) { // auto mode
 											 // Use the longest dimension
-				if (g_Config.IsPortrait()) {
-					zoom = (pixelWidth_ + 479) / 480;
+				if (!g_Config.IsPortrait()) {
+					zoom = (PSP_CoreParameter().pixelWidth + 479) / 480;
 				} else {
-					zoom = (pixelHeight_ + 479) / 480;
+					zoom = (PSP_CoreParameter().pixelHeight + 479) / 480;
 				}
 			}
 			if (zoom <= 1)
@@ -1132,13 +1132,13 @@ namespace DX9 {
 				PSP_CoreParameter().renderHeight = 272 * zoom;
 			}
 
+			ShowScreenResolution();
 			resized_ = false;
 		}
 #if 0
 		// We flush to memory last requested framebuffer, if any
 		PackFramebufferAsync_(NULL);
 #endif
-		ShowScreenResolution();
 	}
 
 	void FramebufferManagerDX9::DeviceLost() {
