@@ -37,11 +37,11 @@ void GenerateDepalShader300(char *buffer, GEBufferFormat pixelFormat) {
 	}
 	WRITE(p, "in vec2 v_texcoord0;\n");
 	WRITE(p, "out vec4 fragColor0;\n");
-	WRITE(p, "uniform sampler2D tex;\n");
-	WRITE(p, "uniform sampler2D pal;\n");
+	WRITE(p, "uniform sampler2DArray tex;\n");
+	WRITE(p, "uniform sampler2DArray pal;\n");
 
 	WRITE(p, "void main() {\n");
-	WRITE(p, "  vec4 color = texture(tex, v_texcoord0);\n");
+	WRITE(p, "  vec4 color = texture(tex, vec3(v_texcoord0,0));\n");
 
 	int mask = gstate.getClutIndexMask();
 	int shift = gstate.getClutIndexShift();
@@ -99,7 +99,7 @@ void GenerateDepalShader300(char *buffer, GEBufferFormat pixelFormat) {
 		WRITE(p, ";\n");
 	}
 
-	WRITE(p, "  fragColor0 = texture(pal, vec2((float(index) + 0.5) * (1.0 / %f), 0.0));\n", texturePixels);
+	WRITE(p, "  fragColor0 = texture(pal, vec3((float(index) + 0.5) * (1.0 / %f), 0.0, 0));\n", texturePixels);
 	WRITE(p, "}\n");
 }
 
@@ -226,12 +226,12 @@ void GenerateDepalShaderFloat(char *buffer, GEBufferFormat pixelFormat, ShaderLa
 			WRITE(p, "#version 110\n");
 		}
 		WRITE(p, "varying vec2 v_texcoord0;\n");
-		WRITE(p, "uniform sampler2D tex;\n");
-		WRITE(p, "uniform sampler2D pal;\n");
+		WRITE(p, "uniform sampler2DArray tex;\n");
+		WRITE(p, "uniform sampler2DArray pal;\n");
 		WRITE(p, "void main() {\n");
-		WRITE(p, "  vec4 index = texture2D(tex, v_texcoord0);\n");
+		WRITE(p, "  vec4 index = texture2DArray(tex, vec3(v_texcoord0, 0));\n");
 		WRITE(p, "  float coord = (%s * %f)%s;\n", lookupMethod, index_multiplier, offset);
-		WRITE(p, "  gl_FragColor = texture2D(pal, vec2(coord, 0.0));\n");
+		WRITE(p, "  gl_FragColor = texture2DArray(pal, vec3(coord, 0.0, 0));\n");
 		WRITE(p, "}\n");
 	} else if (lang == HLSL_DX9) {
 		WRITE(p, "sampler tex: register(s0);\n");

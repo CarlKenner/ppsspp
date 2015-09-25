@@ -131,7 +131,7 @@ static u32 EstimateTexMemoryUsage(const TextureCache::TexCacheEntry *entry) {
 }
 
 void TextureCache::Clear(bool delete_them) {
-	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 	lastBoundTexture = -1;
 	if (delete_them) {
 		for (TexCache::iterator iter = cache.begin(); iter != cache.end(); ++iter) {
@@ -179,7 +179,7 @@ void TextureCache::Decimate() {
 	if (cacheSizeEstimate_ >= TEXCACHE_MIN_PRESSURE) {
 		const u32 had = cacheSizeEstimate_;
 
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		lastBoundTexture = -1;
 		int killAge = lowMemoryMode_ ? TEXTURE_KILL_AGE_LOWMEM : TEXTURE_KILL_AGE;
 		for (TexCache::iterator iter = cache.begin(); iter != cache.end(); ) {
@@ -682,7 +682,7 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 				case GE_TEXLEVEL_MODE_CONST:
 					// Sigh, LOD_BIAS is not even in ES 3.0..
 #ifndef USING_GLES2
-					glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, lodBias);
+					glTexParameterf(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_LOD_BIAS, lodBias);
 #endif
 					break;
 				case GE_TEXLEVEL_MODE_SLOPE:
@@ -695,11 +695,11 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 	}
 
 	if (force || entry.minFilt != minFilt) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, MinFiltGL[minFilt]);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, MinFiltGL[minFilt]);
 		entry.minFilt = minFilt;
 	}
 	if (force || entry.magFilt != magFilt) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, MagFiltGL[magFilt]);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, MagFiltGL[magFilt]);
 		entry.magFilt = magFilt;
 	}
 
@@ -708,11 +708,11 @@ void TextureCache::UpdateSamplingParams(TexCacheEntry &entry, bool force) {
 	}
 
 	if (force || entry.sClamp != sClamp) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, sClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
 		entry.sClamp = sClamp;
 	}
 	if (force || entry.tClamp != tClamp) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, tClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, tClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
 		entry.tClamp = tClamp;
 	}
 }
@@ -727,8 +727,8 @@ void TextureCache::SetFramebufferSamplingParams(u16 bufferWidth, u16 bufferHeigh
 
 	minFilt &= 1;  // framebuffers can't mipmap.
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, MinFiltGL[minFilt]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, MagFiltGL[magFilt]);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, MinFiltGL[minFilt]);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, MagFiltGL[magFilt]);
 
 	// Often the framebuffer will not match the texture size.  We'll wrap/clamp in the shader in that case.
 	// This happens whether we have OES_texture_npot or not.
@@ -738,8 +738,8 @@ void TextureCache::SetFramebufferSamplingParams(u16 bufferWidth, u16 bufferHeigh
 		return;
 	}
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, tClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, sClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, tClamp ? GL_CLAMP_TO_EDGE : GL_REPEAT);
 }
 
 static void ConvertColors(void *dstBuf, const void *srcBuf, GLuint dstFmt, int numPixels) {
@@ -918,12 +918,12 @@ bool SetDebugTexture() {
 
 		if (solidTexture == 0) {
 			glGenTextures(1, &solidTexture);
-			glBindTexture(GL_TEXTURE_2D, solidTexture);
+			glBindTexture(GL_TEXTURE_2D_ARRAY, solidTexture);
 			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 			glPixelStorei(GL_PACK_ALIGNMENT, 1);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, solidTextureData);
+			glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, solidTextureData);
 		} else {
-			glBindTexture(GL_TEXTURE_2D, solidTexture);
+			glBindTexture(GL_TEXTURE_2D_ARRAY, solidTexture);
 		}
 		changed = true;
 	}
@@ -978,7 +978,7 @@ void TextureCache::SetTextureFramebuffer(TexCacheEntry *entry, VirtualFramebuffe
 			fbo_destroy(framebuffer->fbo);
 			framebuffer->fbo = 0;
 		}
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		gstate_c.needShaderTexClamp = false;
 	}
 }
@@ -1005,7 +1005,7 @@ void TextureCache::ApplyTexture() {
 			}
 		}
 
-		glBindTexture(GL_TEXTURE_2D, nextTexture_->textureName);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, nextTexture_->textureName);
 		lastBoundTexture = nextTexture_->textureName;
 		UpdateSamplingParams(*nextTexture_, false);
 	}
@@ -1096,12 +1096,12 @@ void TextureCache::ApplyTextureFramebuffer(TexCacheEntry *entry, VirtualFramebuf
 		glEnableVertexAttribArray(depal->a_texcoord0);
 
 		glActiveTexture(GL_TEXTURE3);
-		glBindTexture(GL_TEXTURE_2D, clutTexture);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, clutTexture);
 		glActiveTexture(GL_TEXTURE0);
 
 		framebufferManager_->BindFramebufferColor(GL_TEXTURE0, gstate.getFrameBufRawAddress(), framebuffer, BINDFBCOLOR_SKIP_COPY);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
 		glDisable(GL_BLEND);
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -1183,7 +1183,7 @@ void TextureCache::SetTexture(bool force) {
 	u32 texaddr = gstate.getTextureAddress(0);
 	if (!Memory::IsValidAddress(texaddr)) {
 		// Bind a null texture and return.
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		lastBoundTexture = -1;
 		return;
 	}
@@ -1454,7 +1454,7 @@ void TextureCache::SetTexture(bool force) {
 		entry->lastFrame = gpuStats.numFlips;
 		return;
 	}
-	glBindTexture(GL_TEXTURE_2D, entry->textureName);
+	glBindTexture(GL_TEXTURE_2D_ARRAY, entry->textureName);
 	lastBoundTexture = entry->textureName;
 
 	// Adjust maxLevel to actually present levels..
@@ -1537,7 +1537,7 @@ void TextureCache::SetTexture(bool force) {
 			break;
 		}
 		// TODO: This may cause bugs, since it hard-sets the texture w/h, and we might try to reuse it later with a different size.
-		glTexStorage2D(GL_TEXTURE_2D, maxLevel + 1, storageFmt, w * scaleFactor, h * scaleFactor);
+		glTexStorage3D(GL_TEXTURE_2D_ARRAY, maxLevel + 1, storageFmt, w * scaleFactor, h * scaleFactor, 1);
 		// Make sure we don't use glTexImage2D after glTexStorage2D.
 		replaceImages = true;
 	}
@@ -1555,30 +1555,30 @@ void TextureCache::SetTexture(bool force) {
 		if (gstate_c.Supports(GPU_SUPPORTS_TEXTURE_LOD_CONTROL)) {
 			if (badMipSizes) {
 				// WARN_LOG(G3D, "Bad mipmap for texture sized %dx%dx%d - autogenerating", w, h, (int)format);
-				glGenerateMipmap(GL_TEXTURE_2D);
+				glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 			} else {
 				for (int i = 1; i <= maxLevel; i++) {
 					LoadTextureLevel(*entry, i, replaceImages, scaleFactor, dstFmt);
 				}
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxLevel);
-				glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, (float)maxLevel);
+				glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, maxLevel);
+				glTexParameterf(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LOD, (float)maxLevel);
 			}
 		} else {
 			// Avoid PowerVR driver bug
 			if (w > 1 && h > 1 && !(h > w && (gl_extensions.bugs & BUG_PVR_GENMIPMAP_HEIGHT_GREATER))) {  // Really! only seems to fail if height > width
 				// NOTICE_LOG(G3D, "Generating mipmap for texture sized %dx%d%d", w, h, (int)format);
-				glGenerateMipmap(GL_TEXTURE_2D);
+				glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 			} else {
 				entry->maxLevel = 0;
 			}
 		}
 	} else if (gstate_c.Supports(GPU_SUPPORTS_TEXTURE_LOD_CONTROL)) {
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, 0);
 	}
 
 	int aniso = 1 << g_Config.iAnisotropyLevel;
 	float anisotropyLevel = (float) aniso > maxAnisotropyLevel ? maxAnisotropyLevel : (float) aniso;
-	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropyLevel);
+	glTexParameterf(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropyLevel);
 
 	gstate_c.textureFullAlpha = entry->GetAlphaStatus() == TexCacheEntry::STATUS_ALPHA_FULL;
 	gstate_c.textureSimpleAlpha = entry->GetAlphaStatus() != TexCacheEntry::STATUS_ALPHA_UNKNOWN;
@@ -1943,10 +1943,10 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 
 	if (replaceImages) {
 		PROFILE_THIS_SCOPE("repltex");
-		glTexSubImage2D(GL_TEXTURE_2D, level, 0, 0, w, h, components2, dstFmt, pixelData);
+		glTexSubImage3D(GL_TEXTURE_2D_ARRAY, level, 0, 0, 0, w, h, 1, components2, dstFmt, pixelData);
 	} else {
 		PROFILE_THIS_SCOPE("loadtex");
-		glTexImage2D(GL_TEXTURE_2D, level, components, w, h, 0, components2, dstFmt, pixelData);
+		glTexImage3D(GL_TEXTURE_2D_ARRAY, level, components, w, h, 1, 0, components2, dstFmt, pixelData);
 		if (!lowMemoryMode_) {
 			GLenum err = glGetError();
 			if (err == GL_OUT_OF_MEMORY) {
@@ -1955,7 +1955,7 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 				decimationCounter_ = 0;
 				Decimate();
 				// Try again, now that we've cleared out textures in lowMemoryMode_.
-				glTexImage2D(GL_TEXTURE_2D, level, components, w, h, 0, components2, dstFmt, pixelData);
+				glTexImage3D(GL_TEXTURE_2D_ARRAY, level, components, w, h, 1, 0, components2, dstFmt, pixelData);
 			}
 		}
 	}

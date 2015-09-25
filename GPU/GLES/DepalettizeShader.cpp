@@ -141,7 +141,7 @@ GLuint DepalShaderCache::GetClutTexture(GEPaletteFormat clutFormat, const u32 cl
 
 	DepalTexture *tex = new DepalTexture();
 	glGenTextures(1, &tex->texture);
-	glBindTexture(GL_TEXTURE_2D, tex->texture);
+	glBindTexture(GL_TEXTURE_2D_ARRAY, tex->texture);
 	GLuint components = dstFmt == GL_UNSIGNED_SHORT_5_6_5 ? GL_RGB : GL_RGBA;
 
 	GLuint components2 = components;
@@ -149,12 +149,12 @@ GLuint DepalShaderCache::GetClutTexture(GEPaletteFormat clutFormat, const u32 cl
 		components2 = GL_BGRA_EXT;
 	}
 
-	glTexImage2D(GL_TEXTURE_2D, 0, components, texturePixels, 1, 0, components2, dstFmt, (void *)rawClut);
+	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, components, texturePixels, 1, 1, 0, components2, dstFmt, (void *)rawClut);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	tex->lastFrame = gpuStats.numFlips;
 	texCache_[realClutID] = tex;

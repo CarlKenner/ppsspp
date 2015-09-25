@@ -400,7 +400,7 @@ void GenerateFragmentShader(char *buffer) {
 	bool glslES30 = false;
 	const char *varying = "varying";
 	const char *fragColor0 = "gl_FragColor";
-	const char *texture = "texture2D";
+	const char *texture = "texture";
 	const char *texelFetch = NULL;
 	bool highpFog = false;
 	bool highpTexcoord = false;
@@ -507,13 +507,13 @@ void GenerateFragmentShader(char *buffer) {
 		doTextureAlpha = false;
 
 	if (doTexture)
-		WRITE(p, "uniform sampler2D tex;\n");
+		WRITE(p, "uniform sampler2DArray tex;\n");
 	if (!gstate.isModeClear() && replaceBlend > REPLACE_BLEND_STANDARD) {
 		if (!(gstate_c.featureFlags & GPU_SUPPORTS_ANY_FRAMEBUFFER_FETCH) && replaceBlend == REPLACE_BLEND_COPY_FBO) {
 			if (!texelFetch) {
 				WRITE(p, "uniform vec2 u_fbotexSize;\n");
 			}
-			WRITE(p, "uniform sampler2D fbotex;\n");
+			WRITE(p, "uniform sampler2DArray fbotex;\n");
 		}
 		if (gstate.getBlendFuncA() == GE_SRCBLEND_FIXA) {
 			WRITE(p, "uniform vec3 u_blendFixA;\n");
@@ -531,7 +531,7 @@ void GenerateFragmentShader(char *buffer) {
 
 	if (enableAlphaTest || enableColorTest) {
 		if (g_Config.bFragmentTestCache) {
-			WRITE(p, "uniform sampler2D testtex;\n");
+			WRITE(p, "uniform sampler2DArray testtex;\n");
 		} else {
 			WRITE(p, "uniform vec4 u_alphacolorref;\n");
 			if (bitwiseOps && ((enableColorTest && !colorTestAgainstZero) || (enableAlphaTest && !alphaTestAgainstZero))) {
@@ -654,9 +654,9 @@ void GenerateFragmentShader(char *buffer) {
 			}
 
 			if (doTextureProjection) {
-				WRITE(p, "  vec4 t = %sProj(tex, %s);\n", texture, texcoord);
+				WRITE(p, "  vec4 t = %sProj(tex, vec3(%s, 0));\n", texture, texcoord);
 			} else {
-				WRITE(p, "  vec4 t = %s(tex, %s);\n", texture, texcoord);
+				WRITE(p, "  vec4 t = %s(tex, vec3(%s,0));\n", texture, texcoord);
 			}
 			WRITE(p, "  vec4 p = v_color0;\n");
 
@@ -749,7 +749,7 @@ void GenerateFragmentShader(char *buffer) {
 					WRITE(p, "  discard;\n");
 				}
 			} else if (g_Config.bFragmentTestCache) {
-				WRITE(p, "  float aResult = %s(testtex, vec2(%s, 0)).a;\n", texture, alphaTestXCoord.c_str());
+				WRITE(p, "  float aResult = %s(testtex, vec3(%s, 0, 0)).a;\n", texture, alphaTestXCoord.c_str());
 				WRITE(p, "  if (aResult < 0.5) discard;\n");
 			} else {
 				GEComparison alphaTestFunc = gstate.getAlphaTestFunction();
@@ -788,9 +788,9 @@ void GenerateFragmentShader(char *buffer) {
 					WRITE(p, "  discard;\n");
 				}
 			} else if (g_Config.bFragmentTestCache) {
-				WRITE(p, "  float rResult = %s(testtex, vec2(vScale256.r, 0)).r;\n", texture);
-				WRITE(p, "  float gResult = %s(testtex, vec2(vScale256.g, 0)).g;\n", texture);
-				WRITE(p, "  float bResult = %s(testtex, vec2(vScale256.b, 0)).b;\n", texture);
+				WRITE(p, "  float rResult = %s(testtex, vec3(vScale256.r, 0, 0)).r;\n", texture);
+				WRITE(p, "  float gResult = %s(testtex, vec3(vScale256.g, 0, 0)).g;\n", texture);
+				WRITE(p, "  float bResult = %s(testtex, vec3(vScale256.b, 0, 0)).b;\n", texture);
 				GEComparison colorTestFunc = gstate.getColorTestFunction();
 				if (colorTestFunc == GE_COMP_EQUAL) {
 					// Equal means all parts must be equal.
@@ -859,9 +859,9 @@ void GenerateFragmentShader(char *buffer) {
 			if (gstate_c.featureFlags & GPU_SUPPORTS_ANY_FRAMEBUFFER_FETCH) {
 				WRITE(p, "  lowp vec4 destColor = %s;\n", lastFragData);
 			} else if (!texelFetch) {
-				WRITE(p, "  lowp vec4 destColor = %s(fbotex, gl_FragCoord.xy * u_fbotexSize.xy);\n", texture);
+				WRITE(p, "  lowp vec4 destColor = %s(fbotex, vec3(gl_FragCoord.xy * u_fbotexSize.xy, 0));\n", texture);
 			} else {
-				WRITE(p, "  lowp vec4 destColor = %s(fbotex, ivec2(gl_FragCoord.x, gl_FragCoord.y), 0);\n", texelFetch);
+				WRITE(p, "  lowp vec4 destColor = %s(fbotex, ivec3(gl_FragCoord.x, gl_FragCoord.y, 0), 0);\n", texelFetch);
 			}
 
 			GEBlendSrcFactor funcA = gstate.getBlendFuncA();
@@ -994,7 +994,7 @@ void GenerateFragmentShader(char *buffer) {
 
 #ifdef DEBUG_SHADER
 	if (doTexture) {
-		WRITE(p, "  %s = texture2D(tex, v_texcoord.xy);\n", fragColor0);
+		WRITE(p, "  %s = texture(tex, vec3(v_texcoord.xy, 0));\n", fragColor0);
 		WRITE(p, "  %s += vec4(0.3,0,0.3,0.3);\n", fragColor0);
 	} else {
 		WRITE(p, "  %s = vec4(1,0,1,1);\n", fragColor0);

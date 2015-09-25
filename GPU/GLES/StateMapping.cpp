@@ -200,7 +200,7 @@ inline void TransformDrawEngine::ResetShaderBlending() {
 	// Wait - what does this have to do with FBOs?
 	if (fboTexBound_) {
 		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		glActiveTexture(GL_TEXTURE0);
 		fboTexBound_ = false;
 	}
@@ -909,8 +909,8 @@ void TransformDrawEngine::ApplyDrawStateLate() {
 
 			glActiveTexture(GL_TEXTURE1);
 			// If we are rendering at a higher resolution, linear is probably best for the dest color.
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glActiveTexture(GL_TEXTURE0);
 			fboTexBound_ = true;
 			fboTexNeedBind_ = false;

@@ -60,7 +60,7 @@ FBO *fbo_ext_create(int width, int height, int num_color_textures, bool z_stenci
 	fbo->height = height;
 	fbo->colorDepth = colorDepth;
 	fbo->m_EFBLayers = 1;
-	fbo->m_textureType = GL_TEXTURE_2D;
+	fbo->m_textureType = GL_TEXTURE_2D_ARRAY;
 
 	// Color texture is same everywhere
 	glGenFramebuffersEXT(fbo->m_EFBLayers, fbo->handle);
@@ -78,16 +78,16 @@ FBO *fbo_ext_create(int width, int height, int num_color_textures, bool z_stenci
 	// TODO: We could opt to only create 16-bit render targets on slow devices. For later.
 	switch (colorDepth) {
 	case FBO_8888:
-		glTexImage2D(fbo->m_textureType, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGBA, width, height, fbo->m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		break;
 	case FBO_4444:
-		glTexImage2D(fbo->m_textureType, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGBA, width, height, fbo->m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, NULL);
 		break;
 	case FBO_5551:
-		glTexImage2D(fbo->m_textureType, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGBA, width, height, fbo->m_EFBLayers, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, NULL);
 		break;
 	case FBO_565:
-		glTexImage2D(fbo->m_textureType, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+		glTexImage3D(fbo->m_textureType, 0, GL_RGB, width, height, fbo->m_EFBLayers, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
 		break;
 	}
 	GL_CHECK();
@@ -389,7 +389,7 @@ void fbo_destroy(FBO *fbo) {
 #ifndef USING_GLES2
 		for (int i = 0; i < fbo->m_EFBLayers; ++i) {
 			glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fbo->handle[i]);
-			glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+			glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_ARRAY, 0, 0);
 			glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER_EXT, 0);
 		}
 		GL_CHECK();

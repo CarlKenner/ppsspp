@@ -2379,8 +2379,8 @@ bool GLES_GPU::GetCurrentTexture(GPUDebugBuffer &buffer, int level) {
 	textureCache_.SetTexture(true);
 	int w = gstate.getTextureWidth(level);
 	int h = gstate.getTextureHeight(level);
-	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w);
-	glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &h);
+	glGetTexLevelParameteriv(GL_TEXTURE_2D_ARRAY, 0, GL_TEXTURE_WIDTH, &w);
+	glGetTexLevelParameteriv(GL_TEXTURE_2D_ARRAY, 0, GL_TEXTURE_HEIGHT, &h);
 
 	if (level != 0) {
 		gstate = saved;
@@ -2388,7 +2388,7 @@ bool GLES_GPU::GetCurrentTexture(GPUDebugBuffer &buffer, int level) {
 
 	buffer.Allocate(w, h, GE_FORMAT_8888, gstate_c.flipTexture);
 	glPixelStorei(GL_PACK_ALIGNMENT, 4);
-	glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.GetData());
+	glGetTexImage(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.GetData());
 
 	return true;
 #else

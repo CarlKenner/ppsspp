@@ -55,7 +55,7 @@ void FragmentTestCache::BindTestTexture(GLenum unit) {
 			return;
 		}
 		glActiveTexture(unit);
-		glBindTexture(GL_TEXTURE_2D, tex);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
 		// Always return to the default.
 		glActiveTexture(GL_TEXTURE0);
 		lastTexture_ = tex;
@@ -143,13 +143,13 @@ GLuint FragmentTestCache::CreateTestTexture(const GEComparison funcs[4], const u
 	}
 
 	GLuint tex = textureCache_->AllocTextureName();
-	glBindTexture(GL_TEXTURE_2D, tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, scratchpad_);
+	glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
+	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, 256, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, scratchpad_);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	return tex;
 }
