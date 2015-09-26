@@ -1582,6 +1582,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			}
 			else {
 				scale[2] = HudThickness / (zFar2D - zNear2D); // Scale 2D z values into 3D game units so it is the right thickness
+				if (isThrough)
+					scale[2] = -scale[2];
 			}
 			position[0] = scale[0] * (-(right2D + left2D) / 2.0f) + viewport_offset[0] * HudWidth; // shift it right into the centre of the view
 			position[1] = scale[1] * (-(top2D + bottom2D) / 2.0f) + viewport_offset[1] * HudHeight + HudUp; // shift it up into the centre of the view;
@@ -1682,7 +1684,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		INFO_LOG(VR, "final: %s", s);
 	}
 
-	ScaleProjMatrix(final_matrix_left);
+	if (!isThrough)
+		ScaleProjMatrix(final_matrix_left);
 	glUniform4fv(u_StereoParams, 1, stereoparams);
 	return final_matrix_left;
 }
