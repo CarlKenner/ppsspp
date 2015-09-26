@@ -1906,7 +1906,7 @@ LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, Shader *gs, int pri
 	if (ls == NULL) {
 		// Check if we can link these.
 #ifdef _DEBUG
-		if (!DebugAreShadersCompatibleForLinking(vs, fs)) {
+		if (!DebugAreShadersCompatibleForLinking(vs, gs, fs)) {
 			return NULL;
 		}
 #endif
