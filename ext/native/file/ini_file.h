@@ -122,10 +122,10 @@ public:
 		std::string comment;
 	};
 
-	bool Load(const char* filename);
-	bool Load(const std::string &filename) { return Load(filename.c_str()); }
-	bool Load(std::istream &istream);
-	bool LoadFromVFS(const std::string &filename);
+	bool Load(const char* filename, bool keep_current_data = false);
+	bool Load(const std::string &filename, bool keep_current_data = false) { return Load(filename.c_str(), keep_current_data); }
+	bool Load(std::istream &istream, bool keep_current_data = false);
+	bool LoadFromVFS(const std::string &filename, bool keep_current_data = false);
 
 	bool Save(const char* filename);
 	bool Save(const std::string &filename) { return Save(filename.c_str()); }

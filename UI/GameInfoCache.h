@@ -96,7 +96,7 @@ class GameInfo {
 public:
 	GameInfo()
 		: disc_total(0), disc_number(0), region(-1), fileType(FILETYPE_UNKNOWN), paramSFOLoaded(false),
-			hasConfig(false), iconTexture(nullptr), pic0Texture(nullptr), pic1Texture(nullptr), wantFlags(0),
+			hasConfig(false), stars(0), iconTexture(nullptr), pic0Texture(nullptr), pic1Texture(nullptr), wantFlags(0),
 		  lastAccessedTime(0.0), timeIconWasLoaded(0.0), timePic0WasLoaded(0.0), timePic1WasLoaded(0.0),
 		  gameSize(0), saveDataSize(0), installDataSize(0), fileLoader(nullptr) {}
 	~GameInfo();
@@ -127,9 +127,11 @@ public:
 	std::string title;  // for easy access, also available in paramSFO.
 	std::string id;
 	std::string id_version;
+	std::string VRIssues;
 	int disc_total;
 	int disc_number;
 	int region;
+	int stars;
 	IdentifiedFileType fileType;
 	ParamSFOData paramSFO;
 	bool paramSFOLoaded;

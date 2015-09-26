@@ -495,9 +495,10 @@ void IniFile::SortSections()
 	std::sort(sections.begin(), sections.end());
 }
 
-bool IniFile::Load(const char* filename)
+bool IniFile::Load(const char* filename, bool keep_current_data)
 {
-	sections.clear();
+	if (!keep_current_data)
+		sections.clear();
 	sections.push_back(Section(""));
 	// first section consists of the comments before the first real section
 
@@ -510,12 +511,12 @@ bool IniFile::Load(const char* filename)
 #endif
 	if (in.fail()) return false;
 
-	bool success = Load(in);
+	bool success = Load(in, true);
 	in.close();
 	return success;
 }
 
-bool IniFile::LoadFromVFS(const std::string &filename) {
+bool IniFile::LoadFromVFS(const std::string &filename, bool keep_current_data) {
 	size_t size;
 	uint8_t *data = VFSReadFile(filename.c_str(), &size);
 	if (!data)
@@ -524,10 +525,10 @@ bool IniFile::LoadFromVFS(const std::string &filename) {
 	delete [] data;
 
 	std::stringstream sstream(str);
-	return Load(sstream);
+	return Load(sstream, keep_current_data);
 }
 
-bool IniFile::Load(std::istream &in) {
+bool IniFile::Load(std::istream &in, bool keep_current_data) {
 	// Maximum number of letters in a line
 	static const int MAX_BYTES = 1024*32;
 

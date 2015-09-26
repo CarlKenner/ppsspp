@@ -24,6 +24,7 @@ Source: "assets\Roboto-Condensed.ttf"; DestDir: "{app}\assets"
 Source: "assets\shaders\*.*"; DestDir: "{app}\assets\shaders"
 Source: "lang\*.ini"; DestDir: "{app}\lang"
 Source: "flash0\font\*.*"; DestDir: "{app}\flash0\font"
+Source: "Sys\GameSettings\*.*"; DestDir: "{app}\Sys\GameSettings"
 Source: "redist/vcredist_x86.exe"; DestDir: {tmp}
 
 [Run]

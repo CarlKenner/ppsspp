@@ -196,6 +196,7 @@ Section "Base" SEC01
   File /r /x .git "${BASE_DIR}\lang"
   File /r /x .git "${BASE_DIR}\flash0"
   File /r /x unix-icons /x *.icns /x .git /x android /x ios "${BASE_DIR}\assets"
+  File /nonfatal /r /x .git "${BASE_DIR}\Sys"
   
   ; This needs to be done after PPSSPPWindows64.exe is copied
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
@@ -240,6 +241,7 @@ Section Uninstall
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
 
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
+  RMDir /r "$INSTDIR\Sys"
   RMDir /r "$INSTDIR\assets"
   RMDir /r "$INSTDIR\lang"
   RMDir /r "$INSTDIR\flash0"

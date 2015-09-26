@@ -175,6 +175,13 @@ struct ConfigSetting {
 		}
 	}
 
+	bool GetIfExists(IniFile::Section *section) {
+		if (section->Exists(ini_))
+			return Get(section);
+		else
+			return false;
+	}
+
 	void Set(IniFile::Section *section) {
 		if (!save_)
 			return;
@@ -188,6 +195,53 @@ struct ConfigSetting {
 			return section->Set(ini_, *ptr_.f);
 		case TYPE_STRING:
 			return section->Set(ini_, *ptr_.s);
+		default:
+			_dbg_assert_msg_(LOADER, false, "Unexpected ini setting type");
+			return;
+		}
+	}
+
+	void SetIfNotDefault(IniFile::Section *section, IniFile::Section *default) {
+		if (!save_)
+			return;
+		if (!default || !default->Exists(ini_)) {
+			Set(section);
+			return;
+		}
+			
+		switch (type_) {
+		case TYPE_BOOL:
+		{
+			bool b;
+			default->Get(ini_, &b);
+			if (b!=*ptr_.b)
+				section->Set(ini_, *ptr_.b);
+			break;
+		}
+		case TYPE_INT:
+		{
+			int i;
+			default->Get(ini_, &i);
+			if (i != *ptr_.i)
+				section->Set(ini_, *ptr_.i);
+			break;
+		}
+		case TYPE_FLOAT:
+		{
+			float f;
+			default->Get(ini_, &f);
+			if (f != *ptr_.f)
+				section->Set(ini_, *ptr_.f);
+			break;
+		}
+		case TYPE_STRING:
+		{
+			std::string s;
+			default->Get(ini_, &s, "");
+			if (s != *ptr_.s)
+				section->Set(ini_, *ptr_.s);
+			break;
+		}
 		default:
 			_dbg_assert_msg_(LOADER, false, "Unexpected ini setting type");
 			return;
@@ -810,7 +864,7 @@ static ConfigSectionSettings sections[] = {
 	{"Upgrade", upgradeSettings},
 };
 
-Config::Config() : bGameSpecific(false) { }
+Config::Config() : bGameSpecific(false), bGameDefaults(false) { }
 Config::~Config() { }
 
 std::map<std::string, std::pair<std::string, int>> GetLangValuesMapping() {
@@ -982,7 +1036,7 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	//so this is all the way down here to overwrite the controller settings
 	//sadly it won't benefit from all the "version conversion" going on up-above
 	//but these configs shouldn't contain older versions anyhow
-	if (bGameSpecific)
+	if (!gameId_.empty())
 	{
 		loadGameConfig(gameId_);
 	}
@@ -1008,19 +1062,22 @@ void Config::Save() {
 		saveGameConfig(gameId_);
 
 		CleanRecent();
-		IniFile iniFile;
+		IniFile iniFile, defaults;
 		if (!iniFile.Load(iniFilename_.c_str())) {
 			ERROR_LOG(LOADER, "Error saving config - can't read ini %s", iniFilename_.c_str());
 		}
+		if (bGameDefaults && !gameId_.empty())
+			defaults.Load(getGameDefaultConfigFile(gameId_));
 
 		// Need to do this somewhere...
 		bFirstRun = false;
 
 		for (size_t i = 0; i < ARRAY_SIZE(sections); ++i) {
 			IniFile::Section *section = iniFile.GetOrCreateSection(sections[i].section);
+			IniFile::Section *DefaultSection = defaults.GetOrCreateSection(sections[i].section);
 			for (auto setting = sections[i].settings; setting->HasMore(); ++setting) {
-				if (!bGameSpecific || !setting->perGame_){
-					setting->Set(section);
+				if (!bGameSpecific || !setting->perGame_) {
+					setting->SetIfNotDefault(section, DefaultSection);
 				}
 			}
 		}
@@ -1204,6 +1261,32 @@ const std::string Config::FindConfigFile(const std::string &baseFilename) {
 	return filename;
 }
 
+const std::string Config::FindDefaultConfigFile(const std::string &baseFilename) {
+	// Don't search for an absolute path.
+	if (baseFilename.size() > 1 && baseFilename[0] == '/') {
+		return baseFilename;
+	}
+#ifdef _WIN32
+	if (baseFilename.size() > 3 && baseFilename[1] == ':' && (baseFilename[2] == '/' || baseFilename[2] == '\\')) {
+		return baseFilename;
+	}
+#endif
+
+	const std::string filename = "Sys/GameSettings/" + baseFilename;
+	if (File::Exists(filename)) {
+		return filename;
+	}
+
+	if (!File::Exists(filename)) {
+		std::string path;
+		SplitPath(filename, &path, NULL, NULL);
+		if (createdPath_ != path) {
+			File::CreateFullPath(path);
+		}
+	}
+	return filename;
+}
+
 void Config::RestoreDefaults() {
 	if (bGameSpecific)
 	{
@@ -1220,17 +1303,37 @@ void Config::RestoreDefaults() {
 	Load();
 }
 
+bool Config::getVRInfo(const std::string &pGameId, int &stars, std::string &issues)
+{
+	stars = 0;
+	issues = "";
+	std::string fullIniFilePath = getGameDefaultConfigFile(pGameId);
+	if (File::Exists(fullIniFilePath))
+	{
+		IniFile iniFile;
+		if (!iniFile.Load(fullIniFilePath.c_str()))
+			return false;
+		IniFile::Section *section = iniFile.GetOrCreateSection("VR");
+		section->Get("VRStateId", &stars, 0);
+		section->Get("VRIssues", &issues, "");
+		return true;
+	} 
+	else
+	{
+		return false;
+	}
+}
+
 bool Config::hasGameConfig(const std::string &pGameId)
 {
 	std::string fullIniFilePath = getGameConfigFile(pGameId);
 	return File::Exists(fullIniFilePath);
 }
 
-void Config::changeGameSpecific(const std::string &pGameId)
+void Config::changeGameSpecific(bool isSpecific)
 {
 	Save();
-	gameId_ = pGameId;
-	bGameSpecific = !pGameId.empty();
+	bGameSpecific = isSpecific && gameId_.empty();
 }
 
 bool Config::createGameConfig(const std::string &pGameId)
@@ -1263,9 +1366,17 @@ std::string Config::getGameConfigFile(const std::string &pGameId)
 	return iniFileNameFull;
 }
 
+std::string Config::getGameDefaultConfigFile(const std::string &pGameId)
+{
+	std::string iniFileName = pGameId + ".ini";
+	std::string iniFileNameFull = FindDefaultConfigFile(iniFileName);
+
+	return iniFileNameFull;
+}
+
 bool Config::saveGameConfig(const std::string &pGameId)
 {
-	if (pGameId.empty())
+	if (pGameId.empty() || !bGameSpecific)
 	{
 		return false;
 	}
@@ -1291,37 +1402,56 @@ bool Config::saveGameConfig(const std::string &pGameId)
 
 bool Config::loadGameConfig(const std::string &pGameId)
 {
-	std::string iniFileNameFull = getGameConfigFile(pGameId);
-
-	if (!hasGameConfig(pGameId))
-	{
-		INFO_LOG(LOADER, "Failed to read %s. No game-specific settings found, using global defaults.", iniFileNameFull.c_str());
+	if (pGameId.empty())
 		return false;
+	gameId_ = pGameId;
+
+	std::string iniFileNameFull = getGameConfigFile(pGameId);
+	std::string iniDefaultFileNameFull = getGameDefaultConfigFile(pGameId);
+
+	IniFile iniFile;
+
+	if (File::Exists(iniDefaultFileNameFull))
+	{
+		bGameDefaults = iniFile.Load(iniDefaultFileNameFull, true);
+	}
+	else
+	{
+		bGameDefaults = false;
+		INFO_LOG(LOADER, "Failed to read %s. No game-specific default settings found.", iniDefaultFileNameFull.c_str());
 	}
 
-	changeGameSpecific(pGameId);
-	IniFile iniFile;
-	iniFile.Load(iniFileNameFull);
-
+	if (File::Exists(iniFileNameFull))
+	{
+		iniFile.Load(iniFileNameFull, true);
+		changeGameSpecific(true);
+	}
+	else
+	{
+		INFO_LOG(LOADER, "Failed to read %s. No game-specific settings found, using global defaults.", iniFileNameFull.c_str());
+	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(sections); ++i) {
 		IniFile::Section *section = iniFile.GetOrCreateSection(sections[i].section);
 		for (auto setting = sections[i].settings; setting->HasMore(); ++setting) {
 			if (setting->perGame_){
-				setting->Get(section);
+				setting->GetIfExists(section);
 			}
 		}
 	}
-	KeyMap::LoadFromIni(iniFile);
+	if (bGameSpecific)
+		KeyMap::LoadFromIni(iniFile);
 	return true;
 }
 
 
-void Config::unloadGameConfig()
+void Config::unloadGameConfig(bool ClearGameId)
 {
-	if (bGameSpecific)
+	if (bGameSpecific || bGameDefaults)
 	{
-		changeGameSpecific();
+		changeGameSpecific(false);
+		if (ClearGameId)
+			gameId_ = "";
 		Load(iniFilename_.c_str(), controllerIniFilename_.c_str());
 	}
 }

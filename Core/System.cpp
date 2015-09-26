@@ -448,7 +448,7 @@ void PSP_Shutdown() {
 	pspIsInited = false;
 	pspIsIniting = false;
 	pspIsQuiting = false;
-	g_Config.unloadGameConfig();
+	g_Config.unloadGameConfig(true);
 }
 
 void PSP_RunLoopUntil(u64 globalticks) {

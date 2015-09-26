@@ -407,7 +407,7 @@ void GamePauseScreen::CallbackDeleteConfig(bool yes)
 {
 	if (yes) {
 		GameInfo *info = g_gameInfoCache.GetInfo(NULL, gamePath_, 0);
-		g_Config.unloadGameConfig();
+		g_Config.unloadGameConfig(false);
 		g_Config.deleteGameConfig(info->id);
 		info->hasConfig = false;
 		screenManager()->RecreateAllViews();
@@ -418,7 +418,7 @@ UI::EventReturn GamePauseScreen::OnCreateConfig(UI::EventParams &e)
 {
 	std::string gameId = g_paramSFO.GetValueString("DISC_ID");
 	g_Config.createGameConfig(gameId);
-	g_Config.changeGameSpecific(gameId);
+	g_Config.changeGameSpecific(true);
 	g_Config.saveGameConfig(gameId);
 	GameInfo *info = g_gameInfoCache.GetInfo(NULL, gamePath_, 0);
 	if (info) {

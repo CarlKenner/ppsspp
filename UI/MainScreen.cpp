@@ -310,6 +310,12 @@ void GameButton::Draw(UIContext &dc) {
 	} else {
 		dc.Draw()->Flush();
 	}
+	// game rating
+	if (ginfo->stars)
+	{
+		for (int i = 1; i <= ginfo->stars; ++i)
+			dc.Draw()->DrawImage(I_ICONGOLD, x + w - i * ui_images[I_ICONGOLD].w / 4, y + h - ui_images[I_ICONGOLD].h / 4, 1.0f / 4);
+	}
 	if (!ginfo->id.empty() && ginfo->hasConfig)
 	{
 		dc.Draw()->DrawImage(I_GEAR, x, y + h - ui_images[I_GEAR].h, 1.0f);

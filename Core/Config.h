@@ -79,6 +79,7 @@ public:
 	bool bSaveSettings;
 	bool bFirstRun;
 	bool bGameSpecific;
+	bool bGameDefaults;
 
 	int iRunCount; // To be used to for example check for updates every 10 runs and things like that.
 
@@ -499,20 +500,23 @@ public:
 	void RestoreDefaults();
 	
 	//per game config managment, should maybe be in it's own class
-	void changeGameSpecific(const std::string &gameId = "");
+	void changeGameSpecific(bool isSpecific = false);
 	bool createGameConfig(const std::string &game_id);
 	bool deleteGameConfig(const std::string& pGameId);
 	bool loadGameConfig(const std::string &game_id);
 	bool saveGameConfig(const std::string &pGameId);
-	void unloadGameConfig();
+	void unloadGameConfig(bool ClearGameID);
 	std::string getGameConfigFile(const std::string &gameId);
+	std::string getGameDefaultConfigFile(const std::string &gameId);
 	bool hasGameConfig(const std::string &game_id);
+	bool getVRInfo(const std::string &game_id, int &stars, std::string &issues);
 
 	// Used when the file is not found in the search path.  Trailing slash.
 	void SetDefaultPath(const std::string &defaultPath);
 	// Use a trailing slash.
 	void AddSearchPath(const std::string &path);
 	const std::string FindConfigFile(const std::string &baseFilename);
+	const std::string FindDefaultConfigFile(const std::string &baseFilename);
 
 	// Utility functions for "recent" management
 	void AddRecent(const std::string &file);

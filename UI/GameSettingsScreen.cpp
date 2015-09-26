@@ -902,7 +902,7 @@ void GameSettingsScreen::onFinish(DialogResult result) {
 	g_Config.Save();
 	if (bEditThenRestore)
 	{
-		g_Config.unloadGameConfig();
+		g_Config.unloadGameConfig(false);
 	}
 
 	host->UpdateUI();
