@@ -75,8 +75,10 @@ void GameScreen::CreateViews() {
 		tvSaveDataSize_->SetShadow(true);
 		tvInstallDataSize_ = leftColumn->Add(new TextView("", ALIGN_LEFT, true, new AnchorLayoutParams(10, 350, NONE, NONE)));
 		tvInstallDataSize_->SetShadow(true);
-		tvRegion_ = leftColumn->Add(new TextView("", ALIGN_LEFT, true, new AnchorLayoutParams(10, 380, NONE, NONE)));
+		tvRegion_ = leftColumn->Add(new TextView("", ALIGN_LEFT, true, new AnchorLayoutParams(10, 370, NONE, NONE)));
 		tvRegion_->SetShadow(true);
+		tvVR_ = leftColumn->Add(new TextView("", ALIGN_LEFT, true, new AnchorLayoutParams(2, 390, NONE, NONE)));
+		tvVR_->SetShadow(true);
 	}
 
 	ViewGroup *rightColumn = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(300, FILL_PARENT, actionMenuMargins));
@@ -112,6 +114,12 @@ void GameScreen::CreateViews() {
 	}
 #ifdef _WIN32
 	rightColumnItems->Add(new Choice(ga->T("Show In Folder")))->OnClick.Handle(this, &GameScreen::OnShowInFolder);
+	if (info->hasConfig)
+		rightColumnItems->Add(new Choice(ga->T("Edit Config")))->OnClick.Handle(this, &GameScreen::OnEditConfig);
+	if (info->hasDefaults)
+		rightColumnItems->Add(new Choice(ga->T("Show Defaults")))->OnClick.Handle(this, &GameScreen::OnShowDefaults);
+	else
+		rightColumnItems->Add(new Choice(ga->T("Create Defaults")))->OnClick.Handle(this, &GameScreen::OnShowDefaults);
 #endif
 }
 
@@ -194,11 +202,48 @@ void GameScreen::update(InputState &input) {
 		};
 		tvRegion_->SetText(ga->T(regionNames[info->region]));
 	}
+
+	if (info->stars!=0 || !info->VRIssues.empty()) {
+		static const char *starNames[6] = {
+			"?",
+			"Unplayable",
+			"Bad",
+			"Playable",
+			"Good",
+			"Perfect"
+		};
+		char s[2048];
+		sprintf(s, "VR state: %s\n%s", ga->T(starNames[info->stars]), info->VRIssues.c_str());
+		tvVR_->SetText(s);
+	}
+
 }
 
 UI::EventReturn GameScreen::OnShowInFolder(UI::EventParams &e) {
 #ifdef _WIN32
 	std::string str = std::string("explorer.exe /select,\"") + ReplaceAll(gamePath_, "/", "\\") + "\"";
+	_wsystem(ConvertUTF8ToWString(str).c_str());
+#endif
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GameScreen::OnEditConfig(UI::EventParams &e) {
+#ifdef _WIN32
+	GameInfo *info = g_gameInfoCache.GetInfo(NULL, gamePath_, GAMEINFO_WANTBG | GAMEINFO_WANTSIZE);
+	std::string filename = ReplaceAll(g_Config.getGameConfigFile(info->id), "/", "\\");
+	std::string str = std::string("start \"\" \"") + filename + "\"";
+	_wsystem(ConvertUTF8ToWString(str).c_str());
+#endif
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GameScreen::OnShowDefaults(UI::EventParams &e) {
+#ifdef _WIN32
+	GameInfo *info = g_gameInfoCache.GetInfo(NULL, gamePath_, GAMEINFO_WANTBG | GAMEINFO_WANTSIZE);
+	g_Config.createGameDefaultConfig(info->id);
+	info->hasDefaults = true;
+	std::string filename = ReplaceAll(g_Config.getGameDefaultConfigFile(info->id), "/", "\\");
+	std::string str = std::string("start \"\" \"") + filename + "\"";
 	_wsystem(ConvertUTF8ToWString(str).c_str());
 #endif
 	return UI::EVENT_DONE;

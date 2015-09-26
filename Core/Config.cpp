@@ -1350,6 +1350,15 @@ bool Config::createGameConfig(const std::string &pGameId)
 	return true;
 }
 
+bool Config::createGameDefaultConfig(const std::string &pGameId)
+{
+	std::string fullIniFilePath = getGameDefaultConfigFile(pGameId);
+	if (File::Exists(fullIniFilePath))
+		return false;
+	File::CreateEmptyFile(fullIniFilePath);
+	return true;
+}
+
 bool Config::deleteGameConfig(const std::string& pGameId)
 {
 	std::string fullIniFilePath = getGameConfigFile(pGameId);

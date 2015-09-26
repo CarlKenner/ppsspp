@@ -502,6 +502,7 @@ public:
 	//per game config managment, should maybe be in it's own class
 	void changeGameSpecific(bool isSpecific = false);
 	bool createGameConfig(const std::string &game_id);
+	bool createGameDefaultConfig(const std::string &game_id);
 	bool deleteGameConfig(const std::string& pGameId);
 	bool loadGameConfig(const std::string &game_id);
 	bool saveGameConfig(const std::string &pGameId);

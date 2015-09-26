@@ -557,7 +557,7 @@ handleELF:
 		}
 
 		info_->hasConfig = g_Config.hasGameConfig(info_->id);
-		g_Config.getVRInfo(info_->id, info_->stars, info_->VRIssues);
+		info_->hasDefaults = g_Config.getVRInfo(info_->id, info_->stars, info_->VRIssues);
 
 		if (info_->wantFlags & GAMEINFO_WANTSIZE) {
 			info_->gameSize = info_->GetGameSizeInBytes();
