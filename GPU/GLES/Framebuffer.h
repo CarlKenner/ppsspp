@@ -82,6 +82,7 @@ public:
 	// If texture != 0, will bind it.
 	// x,y,w,h are relative to destW, destH which fill out the target completely.
 	void DrawActiveTexture(GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip = false, float u0 = 0.0f, float v0 = 0.0f, float u1 = 1.0f, float v1 = 1.0f, GLSLProgram *program = 0, int uvRotation = ROTATION_LOCKED_HORIZONTAL, int eye = 0);
+	void DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip = false, float u0 = 0.0f, float v0 = 0.0f, float u1 = 1.0f, float v1 = 1.0f, int eye = 0);
 
 	void DrawPlainColor(u32 color);
 
@@ -156,6 +157,7 @@ private:
 	u8 *convBuf_;
 	u32 convBufSize_;
 	GLSLProgram *draw2dprogram_;
+	GLSLProgram *draw3dprogram_;
 	GLSLProgram *plainColorProgram_;
 	GLSLProgram *postShaderProgram_;
 	GLSLProgram *stencilUploadProgram_;

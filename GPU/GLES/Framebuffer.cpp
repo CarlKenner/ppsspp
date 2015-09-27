@@ -72,6 +72,66 @@ static const char basic_vs[] =
 	"  gl_Position = a_position;\n"
 	"}\n";
 
+static const char geometry_vs[] =
+"attribute vec4 a_position;\n"
+"attribute vec2 a_texcoord0;\n"
+"out vec2 g_texcoord0;\n"
+"void main() {\n"
+"  g_texcoord0 = a_texcoord0;\n"
+"  gl_Position = a_position;\n"
+"}\n";
+
+static const char basic_gs[] =
+	"#version 150\n"
+	"layout(triangles) in;\n"
+	"layout(triangle_strip, max_vertices = 6) out;\n"
+	"uniform vec4 u_StereoParams;\n"
+	"in vec2 g_texcoord0[];\n"
+	"out vec2 v_texcoord0;\n"
+	"void main() {\n"
+	"  vec4 pos;\n"
+	"  gl_Layer = 0;\n"
+
+	"  v_texcoord0 = g_texcoord0[0];\n"
+	"  pos = gl_in[0].gl_Position;\n"
+	//"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
+	"  gl_Position = pos;\n"
+	"  EmitVertex();\n"
+	"  v_texcoord0 = g_texcoord0[1];\n"
+	"  pos = gl_in[1].gl_Position;\n"
+	//"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
+	"  gl_Position = pos;\n"
+	"  EmitVertex();\n"
+	"  v_texcoord0 = g_texcoord0[2];\n"
+	"  pos = gl_in[2].gl_Position;\n"
+	//"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
+	"  gl_Position = pos;\n"
+	"  EmitVertex();\n"
+
+	"  EndPrimitive();\n"
+	"  gl_Layer = 1;\n"
+
+	"  v_texcoord0 = g_texcoord0[0];\n"
+	"  pos = gl_in[0].gl_Position;\n"
+	//"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
+	"  gl_Position = pos;\n"
+	"  EmitVertex();\n"
+	"  v_texcoord0 = g_texcoord0[1];\n"
+	"  pos = gl_in[1].gl_Position;\n"
+	//"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
+	"  gl_Position = pos;\n"
+	"  EmitVertex();\n"
+	"  v_texcoord0 = g_texcoord0[2];\n"
+	"  pos = gl_in[2].gl_Position;\n"
+	//"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
+	"  gl_Position = pos;\n"
+	"  EmitVertex();\n"
+
+	"  EndPrimitive();\n"
+	"}\n";
+
+
+
 static const char color_fs[] =
 #ifdef USING_GLES2
 	"precision mediump float;\n"
@@ -162,6 +222,17 @@ void FramebufferManager::CompileDraw2DProgram() {
 			glUniform1i(draw2dprogram_->sampler0, 0);
 		}
 
+		draw3dprogram_ = glsl_create_source(geometry_vs, basic_gs, tex_fs, &errorString);
+		if (!draw3dprogram_) {
+			ERROR_LOG_REPORT(G3D, "Failed to compile draw3dprogram! This shouldn't happen.\n%s", errorString.c_str());
+			FLOG("Failed to compile draw3dprogram! This shouldn't happen.\n%s", errorString.c_str());
+		}
+		else {
+			glsl_bind(draw3dprogram_);
+			eyeLoc_ = glsl_uniform_loc(draw3dprogram_, "eye");
+			glUniform1i(draw3dprogram_->sampler0, 0);
+		}
+
 		plainColorProgram_ = glsl_create_source(color_vs, color_fs, &errorString);
 		if (!plainColorProgram_) {
 			ERROR_LOG_REPORT(G3D, "Failed to compile plainColorProgram! This shouldn't happen.\n%s", errorString.c_str());
@@ -250,6 +321,10 @@ void FramebufferManager::DestroyDraw2DProgram() {
 		glsl_destroy(draw2dprogram_);
 		draw2dprogram_ = nullptr;
 	}
+	if (draw3dprogram_) {
+		glsl_destroy(draw3dprogram_);
+		draw3dprogram_ = nullptr;
+	}
 	if (plainColorProgram_) {
 		glsl_destroy(plainColorProgram_);
 		plainColorProgram_ = nullptr;
@@ -265,6 +340,7 @@ FramebufferManager::FramebufferManager() :
 	drawPixelsTexFormat_(GE_FORMAT_INVALID),
 	convBuf_(nullptr),
 	draw2dprogram_(nullptr),
+	draw3dprogram_(nullptr),
 	postShaderProgram_(nullptr),
 	stencilUploadProgram_(nullptr),
 	plainColorLoc_(-1),
@@ -399,7 +475,14 @@ void FramebufferManager::DrawPixels(VirtualFramebuffer *vfb, int dstX, int dstY,
 	glViewport(0, 0, vfb->renderWidth, vfb->renderHeight);
 	MakePixelTexture(srcPixels, srcPixelFormat, srcStride, width, height);
 	DisableState();
-	DrawActiveTexture(0, dstX, dstY, width, height, vfb->bufferWidth, vfb->bufferHeight, false, 0.0f, 0.0f, 1.0f, 1.0f);
+	if (g_has_hmd && g_Config.bEnableVR)
+	{
+		// we should be drawing this texture to the virtual screen
+		DrawVirtualScreen(vfb, 0, dstX, dstY, width, height, vfb->bufferWidth, vfb->bufferHeight, false, 0.0f, 0.0f, 1.0f, 1.0f);
+	} else {
+		// Note: This is drawing to the framebuffer, not the backbuffer, unlike most DrawActiveTexture calls.
+		DrawActiveTexture(0, dstX, dstY, width, height, vfb->bufferWidth, vfb->bufferHeight, false, 0.0f, 0.0f, 1.0f, 1.0f);
+	}
 	textureCache_->ForgetLastTexture();
 }
 
@@ -586,6 +669,82 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 
 	glsl_unbind();
 }
+
+// Draw a texture to the framebuffer as a 2D virtual screen.
+void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip, float u0, float v0, float u1, float v1, int eye)
+{
+	// destW and destH are the width and height of the virtual framebuffer, generally 480x272 or less
+	// w, y, w, and h are the dimensions 
+
+	ELOG("DrawVirtualScreen(x=%g, y=%g, w=%g, h=%g, destW=%g, destH=%g)", x, y, w, h, destW, destH);
+	if (flip) {
+		// We're flipping, so 0 is downward.  Reverse everything from 1.0f.
+		v0 = 1.0f - v0;
+		v1 = 1.0f - v1;
+	}
+
+	float texCoords[8] = {
+		u0, v0,
+		u1, v0,
+		u1, v1,
+		u0, v1
+	};
+
+	static const GLushort indices[4] = { 0, 1, 3, 2 };
+
+	if (texture) {
+		// Previously had NVDrawTexture fallback here but wasn't worth it.
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture);
+	}
+
+	float pos[12] = {
+		x, y, 0,
+		x + w, y, 0,
+		x + w, y + h, 0,
+		x, y + h, 0
+	};
+
+	float invDestW = 1.0f / (destW * 0.5f);
+	float invDestH = 1.0f / (destH * 0.5f);
+	for (int i = 0; i < 4; i++) {
+		pos[i * 3] = pos[i * 3] * invDestW - 1.0f;
+		pos[i * 3 + 1] = -(pos[i * 3 + 1] * invDestH - 1.0f);
+	}
+
+	if (!draw3dprogram_) {
+		CompileDraw2DProgram();
+	}
+	GLSLProgram *program = draw3dprogram_;
+
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, g_Config.iBufFilter == SCALE_NEAREST ? GL_NEAREST : GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, g_Config.iBufFilter == SCALE_NEAREST ? GL_NEAREST : GL_LINEAR);
+
+	shaderManager_->DirtyLastShader();  // dirty lastShader_
+
+	glsl_bind(program);
+	if (program == postShaderProgram_ && timeLoc_ != -1) {
+		int flipCount = __DisplayGetFlipCount();
+		int vCount = __DisplayGetVCount();
+		float time[4] = { time_now(), (vCount % 60) * 1.0f / 60.0f, (float)vCount, (float)(flipCount % 60) };
+		glUniform4fv(timeLoc_, 1, time);
+	}
+	else if (program == draw3dprogram_ && eyeLoc_ != -1) {
+		glUniform1i(eyeLoc_, eye);
+	}
+	glstate.arrayBuffer.unbind();
+	glstate.elementArrayBuffer.unbind();
+	glEnableVertexAttribArray(program->a_position);
+	glEnableVertexAttribArray(program->a_texcoord0);
+	glVertexAttribPointer(program->a_position, 3, GL_FLOAT, GL_FALSE, 12, pos);
+	glVertexAttribPointer(program->a_texcoord0, 2, GL_FLOAT, GL_FALSE, 8, texCoords);
+	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_SHORT, indices);
+	glDisableVertexAttribArray(program->a_position);
+	glDisableVertexAttribArray(program->a_texcoord0);
+
+	glsl_unbind();
+
+}
+
 
 void FramebufferManager::DestroyFramebuf(VirtualFramebuffer *v) {
 	textureCache_->NotifyFramebuffer(v->fb_address, v, NOTIFY_FB_DESTROYED);

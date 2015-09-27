@@ -18,8 +18,10 @@ struct GLSLProgram : public GfxResourceHolder {
 	char vshader_filename[256];
 	char fshader_filename[256];
 	const char *vshader_source;
+	const char *gshader_source;
 	const char *fshader_source;
 	time_t vshader_mtime;
+	time_t gshader_mtime;
 	time_t fshader_mtime;
 
 	// Locations to some common uniforms. Hardcoded for speed.
@@ -40,6 +42,7 @@ struct GLSLProgram : public GfxResourceHolder {
 
 	// Private to the implementation, do not touch
 	GLuint vsh_;
+	GLuint gsh_;
 	GLuint fsh_;
 	GLuint program_;
 
@@ -52,6 +55,7 @@ struct GLSLProgram : public GfxResourceHolder {
 GLSLProgram *glsl_create(const char *vshader_file, const char *fshader_file, std::string *error_message = 0);
 // Directly from source code
 GLSLProgram *glsl_create_source(const char *vshader_src, const char *fshader_src, std::string *error_message = 0);
+GLSLProgram *glsl_create_source(const char *vshader_src, const char *gshader_src, const char *fshader_src, std::string *error_message = 0);
 void glsl_destroy(GLSLProgram *program);
 
 // If recompilation of the program fails, the program is untouched and error messages

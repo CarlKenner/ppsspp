@@ -36,8 +36,10 @@ GLSLProgram *glsl_create(const char *vshader, const char *fshader, std::string *
 	GLSLProgram *program = new GLSLProgram();
 	program->program_ = 0;
 	program->vsh_ = 0;
+	program->gsh_ = 0;
 	program->fsh_ = 0;
 	program->vshader_source = 0;
+	program->gshader_source = 0;
 	program->fshader_source = 0;
 	strcpy(program->name, vshader + strlen(vshader) - 15);
 	strcpy(program->vshader_filename, vshader);
@@ -45,7 +47,31 @@ GLSLProgram *glsl_create(const char *vshader, const char *fshader, std::string *
 	if (glsl_recompile(program, error_message)) {
 		active_programs.insert(program);
 	} else {
-		ELOG("Failed compiling GLSL program: %s %s", vshader, fshader);
+		ELOG("Failed compiling GLSL program: %s %s %s", vshader, "", fshader);
+		delete program;
+		return 0;
+	}
+	register_gl_resource_holder(program);
+	return program;
+}
+
+GLSLProgram *glsl_create_source(const char *vshader_src, const char *gshader_src, const char *fshader_src, std::string *error_message) {
+	GLSLProgram *program = new GLSLProgram();
+	program->program_ = 0;
+	program->vsh_ = 0;
+	program->gsh_ = 0;
+	program->fsh_ = 0;
+	program->vshader_source = vshader_src;
+	program->gshader_source = gshader_src;
+	program->fshader_source = fshader_src;
+	strcpy(program->name, "[srcshader]");
+	strcpy(program->vshader_filename, "");
+	strcpy(program->fshader_filename, "");
+	if (glsl_recompile(program, error_message)) {
+		active_programs.insert(program);
+	}
+	else {
+		ELOG("Failed compiling GLSL program from source strings");
 		delete program;
 		return 0;
 	}
@@ -54,24 +80,7 @@ GLSLProgram *glsl_create(const char *vshader, const char *fshader, std::string *
 }
 
 GLSLProgram *glsl_create_source(const char *vshader_src, const char *fshader_src, std::string *error_message) {
-	GLSLProgram *program = new GLSLProgram();
-	program->program_ = 0;
-	program->vsh_ = 0;
-	program->fsh_ = 0;
-	program->vshader_source = vshader_src;
-	program->fshader_source = fshader_src;
-	strcpy(program->name, "[srcshader]");
-	strcpy(program->vshader_filename, "");
-	strcpy(program->fshader_filename, "");
-	if (glsl_recompile(program, error_message)) {
-		active_programs.insert(program);
-	} else {
-		ELOG("Failed compiling GLSL program from source strings");
-		delete program;
-		return 0;
-	}
-	register_gl_resource_holder(program);
-	return program;
+	return glsl_create_source(vshader_src, NULL, fshader_src, error_message);
 }
 
 // Not wanting to change ReadLocalFile semantics.
@@ -150,15 +159,28 @@ bool glsl_recompile(GLSLProgram *program, std::string *error_message) {
 		return false;
 	}
 
+	GLuint gsh = 0;
+	if (program->gshader_source) {
+		gsh = glCreateShader(GL_GEOMETRY_SHADER);
+		const GLchar *gsh_str = program->gshader_source;
+		if (!CompileShader(gsh_str, gsh, "", error_message)) {
+			glDeleteShader(vsh);
+			return false;
+		}
+	}
+
 	const GLchar *fsh_str = program->fshader_source ? program->fshader_source : (const GLchar *)(fsh_src);
 	GLuint fsh = glCreateShader(GL_FRAGMENT_SHADER);
 	if (!CompileShader(fsh_str, fsh, program->fshader_filename, error_message)) {
+		glDeleteShader(gsh);
 		glDeleteShader(vsh);
 		return false;
 	}
 
 	GLuint prog = glCreateProgram();
 	glAttachShader(prog, vsh);
+	if (gsh)
+		glAttachShader(prog, gsh);
 	glAttachShader(prog, fsh);
 
 	glLinkProgram(prog);
@@ -171,20 +193,21 @@ bool glsl_recompile(GLSLProgram *program, std::string *error_message) {
 		if (bufLength) {
 			char* buf = new char[bufLength + 1];  // safety
 			glGetProgramInfoLog(prog, bufLength, NULL, buf);
-			ILOG("vsh: %i   fsh: %i", vsh, fsh);
+			ILOG("vsh: %i   gsh: %i   fsh: %i", vsh, gsh, fsh);
 			ELOG("Could not link shader program (linkstatus=%i):\n %s  \n", linkStatus, buf);
 			if (error_message) {
 				*error_message = buf;
 			}
 			delete [] buf;
 		} else {
-			ILOG("vsh: %i   fsh: %i", vsh, fsh);
+			ILOG("vsh: %i   gsh: %i   fsh: %i", vsh, gsh, fsh);
 			ELOG("Could not link shader program (linkstatus=%i). No OpenGL error log was available.", linkStatus);
 			if (error_message) {
 				*error_message = "(no error message available)";
 			}
 		}
 		glDeleteShader(vsh);
+		glDeleteShader(gsh);
 		glDeleteShader(fsh);
 		return false;
 	}
@@ -196,6 +219,7 @@ bool glsl_recompile(GLSLProgram *program, std::string *error_message) {
 
 	program->program_ = prog;
 	program->vsh_ = vsh;
+	program->gsh_ = gsh;
 	program->fsh_ = fsh;
 
 	program->sampler0 = glGetUniformLocation(program->program_, "sampler0");
@@ -214,8 +238,9 @@ bool glsl_recompile(GLSLProgram *program, std::string *error_message) {
 	program->u_sundir = glGetUniformLocation(program->program_, "u_sundir");
 	program->u_camerapos = glGetUniformLocation(program->program_, "u_camerapos");
 
-	//ILOG("Shader compilation success: %s %s",
+	//ILOG("Shader compilation success: %s %s %s",
 	//		 program->vshader_filename,
+	//		 "",
 	//		 program->fshader_filename);
 	return true;
 }
@@ -233,6 +258,7 @@ void GLSLProgram::GLLost() {
 		strlen(this->fshader_filename) > 0 ? this->fshader_filename : "(mem)");
 	this->program_ = 0;
 	this->vsh_ = 0;
+	this->gsh_ = 0;
 	this->fsh_ = 0;
 	glsl_recompile(this);
 	// Note that uniforms are still lost, hopefully the client sets them every frame at a minimum...
@@ -251,6 +277,7 @@ void glsl_destroy(GLSLProgram *program) {
 	if (program) {
 		unregister_gl_resource_holder(program);
 		glDeleteShader(program->vsh_);
+		glDeleteShader(program->gsh_);
 		glDeleteShader(program->fsh_);
 		glDeleteProgram(program->program_);
 		active_programs.erase(program);
