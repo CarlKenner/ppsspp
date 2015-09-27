@@ -400,7 +400,7 @@ void GenerateVertexShader(int prim, u32 vertType, char *buffer, bool useHWTransf
 		WRITE(p, "uniform highp vec2 u_fogcoef;\n");
 	}
 
-	if (!gstate.isModeThrough()) {
+	if (!gstate.isModeThrough() && gstate_c.Supports(GPU_ROUND_DEPTH_TO_16BIT)) {
 		WRITE(p, "uniform highp vec4 u_depthRange;\n");
 	}
 
@@ -409,7 +409,7 @@ void GenerateVertexShader(int prim, u32 vertType, char *buffer, bool useHWTransf
 	WRITE(p, "};\n");
 
 	// See comment above this function (GenerateVertexShader).
-	if (!gstate.isModeThrough()) {
+	if (!gstate.isModeThrough() && gstate_c.Supports(GPU_ROUND_DEPTH_TO_16BIT)) {
 		// Apply the projection and viewport to get the Z buffer value, floor to integer, undo the viewport and projection.
 		WRITE(p, "\nvec4 depthRoundZVP(vec4 v) {\n");
 		if (!(g_has_hmd && g_Config.bEnableVR)) {
@@ -451,7 +451,11 @@ void GenerateVertexShader(int prim, u32 vertType, char *buffer, bool useHWTransf
 			WRITE(p, "  gl_Position = u_proj_through * vec4(position.xyz, 1.0);\n");
 		} else {
 			// The viewport is used in this case, so need to compensate for that.
-			WRITE(p, "  gl_Position = depthRoundZVP(u_proj * vec4(position.xyz, 1.0));\n");
+			if (gstate_c.Supports(GPU_ROUND_DEPTH_TO_16BIT)) {
+				WRITE(p, "  gl_Position = depthRoundZVP(u_proj * vec4(position.xyz, 1.0));\n");
+			} else {
+				WRITE(p, "  gl_Position = u_proj * vec4(position.xyz, 1.0);\n");
+			}
 		}
 	} else {
 		// Step 1: World Transform / Skinning
@@ -544,7 +548,11 @@ void GenerateVertexShader(int prim, u32 vertType, char *buffer, bool useHWTransf
 		WRITE(p, "  vec4 viewPos = u_view * vec4(worldpos, 1.0);\n");
 
 		// Final view and projection transforms.
-		WRITE(p, "  gl_Position = depthRoundZVP(u_proj * viewPos);\n");
+		if (gstate_c.Supports(GPU_ROUND_DEPTH_TO_16BIT)) {
+			WRITE(p, "  gl_Position = depthRoundZVP(u_proj * viewPos);\n");
+		} else {
+			WRITE(p, "  gl_Position = u_proj * viewPos;\n");
+		}
 
 		// TODO: Declare variables for dots for shade mapping if needed.
 
