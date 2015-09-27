@@ -73,12 +73,13 @@ static const char basic_vs[] =
 	"}\n";
 
 static const char geometry_vs[] =
+"uniform mat4 u_viewproj;\n"
 "attribute vec4 a_position;\n"
 "attribute vec2 a_texcoord0;\n"
 "out vec2 g_texcoord0;\n"
 "void main() {\n"
 "  g_texcoord0 = a_texcoord0;\n"
-"  gl_Position = a_position;\n"
+"  gl_Position = u_viewproj * vec4(a_position.xyz, 1.0);\n"
 "}\n";
 
 static const char basic_gs[] =
@@ -94,17 +95,17 @@ static const char basic_gs[] =
 
 	"  v_texcoord0 = g_texcoord0[0];\n"
 	"  pos = gl_in[0].gl_Position;\n"
-	//"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
+	"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
 	"  gl_Position = pos;\n"
 	"  EmitVertex();\n"
 	"  v_texcoord0 = g_texcoord0[1];\n"
 	"  pos = gl_in[1].gl_Position;\n"
-	//"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
+	"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
 	"  gl_Position = pos;\n"
 	"  EmitVertex();\n"
 	"  v_texcoord0 = g_texcoord0[2];\n"
 	"  pos = gl_in[2].gl_Position;\n"
-	//"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
+	"  pos.x += u_StereoParams[0] - u_StereoParams[2] * pos.w;\n"
 	"  gl_Position = pos;\n"
 	"  EmitVertex();\n"
 
@@ -113,17 +114,17 @@ static const char basic_gs[] =
 
 	"  v_texcoord0 = g_texcoord0[0];\n"
 	"  pos = gl_in[0].gl_Position;\n"
-	//"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
+	"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
 	"  gl_Position = pos;\n"
 	"  EmitVertex();\n"
 	"  v_texcoord0 = g_texcoord0[1];\n"
 	"  pos = gl_in[1].gl_Position;\n"
-	//"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
+	"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
 	"  gl_Position = pos;\n"
 	"  EmitVertex();\n"
 	"  v_texcoord0 = g_texcoord0[2];\n"
 	"  pos = gl_in[2].gl_Position;\n"
-	//"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
+	"  pos.x += u_StereoParams[1] - u_StereoParams[3] * pos.w;\n"
 	"  gl_Position = pos;\n"
 	"  EmitVertex();\n"
 
@@ -676,7 +677,11 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	// destW and destH are the width and height of the virtual framebuffer, generally 480x272 or less
 	// w, y, w, and h are the dimensions 
 
-	ELOG("DrawVirtualScreen(x=%g, y=%g, w=%g, h=%g, destW=%g, destH=%g)", x, y, w, h, destW, destH);
+	// if it was supposed to be fullscreen, we have to clear the whole screen first.
+	if (w>=destW && h>=destH)
+		ClearBuffer();
+
+	//ELOG("DrawVirtualScreen(x=%g, y=%g, w=%g, h=%g, destW=%g, destH=%g)", x, y, w, h, destW, destH);
 	if (flip) {
 		// We're flipping, so 0 is downward.  Reverse everything from 1.0f.
 		v0 = 1.0f - v0;
@@ -698,10 +703,10 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	}
 
 	float pos[12] = {
-		x, y, 0,
-		x + w, y, 0,
-		x + w, y + h, 0,
-		x, y + h, 0
+		x, y, 1,
+		x + w, y, 1,
+		x + w, y + h, 1,
+		x, y + h, 1
 	};
 
 	float invDestW = 1.0f / (destW * 0.5f);
@@ -722,17 +727,168 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	shaderManager_->DirtyLastShader();  // dirty lastShader_
 
 	glsl_bind(program);
-	if (program == postShaderProgram_ && timeLoc_ != -1) {
-		int flipCount = __DisplayGetFlipCount();
-		int vCount = __DisplayGetVCount();
-		float time[4] = { time_now(), (vCount % 60) * 1.0f / 60.0f, (float)vCount, (float)(flipCount % 60) };
-		glUniform4fv(timeLoc_, 1, time);
-	}
-	else if (program == draw3dprogram_ && eyeLoc_ != -1) {
+	if (program == draw3dprogram_ && eyeLoc_ != -1) {
 		glUniform1i(eyeLoc_, eye);
 	}
+
+	float UnitsPerMetre = g_Config.fUnitsPerMetre / g_Config.fScale;
+	float znear = 0.2f*UnitsPerMetre; // 20 cm
+	float zfar = 40 * UnitsPerMetre; // 40m
+	float stereoparams[4];
+	Matrix44 proj_left, proj_right, hmd_left, hmd_right, temp;
+	VR_GetProjectionMatrices(temp, hmd_right, znear, zfar, true);
+	hmd_left = temp.transpose();
+	temp = hmd_right;
+	hmd_right = temp.transpose();
+	proj_left = hmd_left;
+	proj_right = hmd_right;
+	stereoparams[0] = proj_left.xx;
+	stereoparams[1] = proj_right.xx;
+	stereoparams[2] = proj_left.zx;
+	stereoparams[3] = proj_right.zx;
+	proj_left.zx = 0;
+	Matrix44 rotation_matrix;
+	Matrix44 lean_back_matrix;
+	Matrix44 camera_pitch_matrix;
+	// head tracking
+	if (g_Config.bOrientationTracking)
+	{
+		UpdateHeadTrackingIfNeeded();
+		rotation_matrix = g_head_tracking_matrix.transpose();
+	}
+	else
+	{
+		rotation_matrix.setIdentity();
+	}
+	// leaning back
+	const bool g_is_skybox = false;
+	float extra_pitch = -g_Config.fLeanBackAngle;
+	lean_back_matrix.setRotationX(-DEGREES_TO_RADIANS(extra_pitch));
+	// camera pitch
+	if ((g_Config.bStabilizePitch || g_Config.bStabilizeRoll || g_Config.bStabilizeYaw) && g_Config.bCanReadCameraAngles && (g_Config.iMotionSicknessSkybox != 2 || !g_is_skybox))
+	{
+		if (!g_Config.bStabilizePitch)
+		{
+			Matrix44 user_pitch44;
+			Matrix44 roll_and_yaw_matrix;
+
+			extra_pitch = g_Config.fScreenPitch;
+			user_pitch44.setRotationX(-DEGREES_TO_RADIANS(extra_pitch));
+			Matrix44::Set(roll_and_yaw_matrix, g_game_camera_rotmat.data);
+			camera_pitch_matrix = roll_and_yaw_matrix * user_pitch44; // or vice versa?
+		}
+		else
+		{
+			Matrix44::Set(camera_pitch_matrix, g_game_camera_rotmat.data);
+		}
+	}
+	else
+	{
+		extra_pitch = g_Config.fScreenPitch;
+		camera_pitch_matrix.setRotationX(-DEGREES_TO_RADIANS(extra_pitch));
+	}
+	// Position matrices
+	Matrix44 head_position_matrix, free_look_matrix, camera_forward_matrix, camera_position_matrix;
+	Vec3 hpos;
+	// head tracking
+	if (g_Config.bPositionTracking)
+	{
+		for (int i = 0; i < 3; ++i)
+			hpos[i] = g_head_tracking_position[i] * UnitsPerMetre;
+		head_position_matrix.setTranslation(hpos);
+	}
+	else
+	{
+		head_position_matrix.setIdentity();
+	}
+	// freelook camera position
+	for (int i = 0; i < 3; ++i)
+		hpos[i] = s_fViewTranslationVector[i] * UnitsPerMetre;
+	free_look_matrix.setTranslation(hpos);
+	// camera position stabilisation
+	if (g_Config.bStabilizeX || g_Config.bStabilizeY || g_Config.bStabilizeZ)
+	{
+		for (int i = 0; i < 3; ++i)
+			hpos[i] = -g_game_camera_pos[i] * UnitsPerMetre;
+		camera_position_matrix.setTranslation(hpos);
+	}
+	else
+	{
+		camera_position_matrix.setIdentity();
+	}
+	Matrix44 look_matrix;
+	float HudWidth, HudHeight, HudThickness, HudDistance, HudUp, CameraForward, AimDistance;
+	// 2D Screen
+	HudThickness = g_Config.fScreenThickness * UnitsPerMetre;
+	HudDistance = g_Config.fScreenDistance * UnitsPerMetre;
+	HudHeight = g_Config.fScreenHeight * UnitsPerMetre;
+	HudHeight = g_Config.fScreenHeight * UnitsPerMetre;
+	HudWidth = HudHeight * (float)16 / 9;
+	CameraForward = 0;
+	HudUp = g_Config.fScreenUp * UnitsPerMetre;
+	AimDistance = HudDistance;
+
+	Vec3 scale; // width, height, and depth of box in game units divided by 2D width, height, and depth 
+	Vec3 position; // position of front of box relative to the camera, in game units 
+
+	float viewport_scale[2];
+	float viewport_offset[2]; // offset as a fraction of the viewport's width
+	{
+		viewport_scale[0] = 1.0f;
+		viewport_scale[1] = 1.0f;
+		viewport_offset[0] = 0.0f;
+		viewport_offset[1] = 0.0f;
+	}
+	// 2D layer, or 2D viewport (may be part of 2D screen or HUD)
+	float left2D = -1;
+	float right2D = 1;
+	float bottom2D = -1;
+	float top2D = 1;
+	float zFar2D, zNear2D;
+	zFar2D = 1;
+	zNear2D = 0;
+	scale[0] = viewport_scale[0] * HudWidth / (right2D - left2D);
+	scale[1] = viewport_scale[1] * HudHeight / (top2D - bottom2D); // note that positive means up in 3D
+	scale[2] = HudThickness / (zFar2D - zNear2D); // Scale 2D z values into 3D game units so it is the right thickness
+	position[0] = scale[0] * (-(right2D + left2D) / 2.0f) + viewport_offset[0] * HudWidth; // shift it right into the centre of the view
+	position[1] = scale[1] * (-(top2D + bottom2D) / 2.0f) + viewport_offset[1] * HudHeight + HudUp; // shift it up into the centre of the view;
+	// Shift it from the zero plane to the HUD distance, and shift the camera forward
+	position[2] = -HudDistance;
+
+	Matrix44 scale_matrix, position_matrix;
+	scale_matrix.setScaling(scale);
+	position_matrix.setTranslation(position);
+
+	look_matrix = scale_matrix * position_matrix * camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
+
+	Matrix44 eye_pos_matrix_left, eye_pos_matrix_right;
+	float posLeft[3] = { 0, 0, 0 };
+	float posRight[3] = { 0, 0, 0 };
+	if (!g_is_skybox)
+	{
+		VR_GetEyePos(posLeft, posRight);
+		for (int i = 0; i < 3; ++i)
+		{
+			posLeft[i] *= UnitsPerMetre;
+			posRight[i] *= UnitsPerMetre;
+		}
+	}
+	stereoparams[0] *= posLeft[0];
+	stereoparams[1] *= posRight[0];
+
+	Matrix44 view_matrix_left, view_matrix_right;
+	//if (g_Config.backend_info.bSupportsGeometryShaders)
+	{
+		Matrix44::Set(view_matrix_left, look_matrix.data);
+		Matrix44::Set(view_matrix_right, view_matrix_left.data);
+	}
+	Matrix44 final_matrix_left, final_matrix_right;
+	final_matrix_left = view_matrix_left * proj_left;
+	glstate.depthWrite.set(GL_FALSE);
+
 	glstate.arrayBuffer.unbind();
 	glstate.elementArrayBuffer.unbind();
+	glUniformMatrix4fv(draw3dprogram_->u_viewproj, 1, GL_FALSE, final_matrix_left.getReadPtr());
 	glEnableVertexAttribArray(program->a_position);
 	glEnableVertexAttribArray(program->a_texcoord0);
 	glVertexAttribPointer(program->a_position, 3, GL_FLOAT, GL_FALSE, 12, pos);

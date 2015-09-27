@@ -1426,11 +1426,6 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 
 		float HudWidth, HudHeight, HudThickness, HudDistance, HudUp, CameraForward, AimDistance;
 
-		proj_left[15] = 0.0f;
-		proj_right[15] = 0.0f;
-
-		proj_left = hmd_left;
-
 		// 2D Screen
 		if (vr_widest_3d_HFOV <= 0)
 		{
