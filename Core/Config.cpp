@@ -1356,13 +1356,61 @@ bool Config::createGameConfig(const std::string &pGameId)
 	return true;
 }
 
-bool Config::createGameDefaultConfig(const std::string &pGameId)
+bool Config::createGameDefaultConfig(const std::string &pGameId, const std::string &title)
 {
-	std::string fullIniFilePath = getGameDefaultConfigFile(pGameId);
-	if (File::Exists(fullIniFilePath))
+	std::string defaultIniPath = getGameDefaultConfigFile(pGameId);
+	std::string specificIniPath = getGameConfigFile(pGameId);
+	std::string globalIniPath = FindConfigFile("ppsspp.ini");
+	
+	IniFile ini, orig;
+
+	if (File::Exists(defaultIniPath))
 		return false;
-	File::CreateEmptyFile(fullIniFilePath);
-	return true;
+	File::CreateEmptyFile(defaultIniPath);
+
+	IniFile::Section *section = ini.GetOrCreateSection("");
+	char s[1024];
+	sprintf(s, "%s - %s", pGameId.c_str(), title.c_str());
+	section->AddComment(s);
+
+	// We are playing this game, so use current settings from memory
+	if (gameId_ == pGameId) {
+		// add per-game VR settings from g_Config to our ini file.
+		section = ini.GetOrCreateSection("VR");
+		for (ConfigSetting* setting = vrGameSettings; setting->HasMore(); ++setting) {
+			if (setting->perGame_) {
+				setting->Set(section);
+			}
+		}
+	}
+	else {
+		orig.Load(globalIniPath, true);
+		orig.Load(specificIniPath, true);
+		IniFile::Section* origSection = orig.GetOrCreateSection("VR");
+		section = ini.GetOrCreateSection("VR");
+		std::string value, comment;
+		for (ConfigSetting* setting = vrGameSettings; setting->HasMore(); ++setting) {
+			if (setting->perGame_) {
+				if (origSection->GetLine(setting->ini_, &value, &comment))
+					section->Set(setting->ini_, value, comment);
+				else 
+					setting->Set(section);
+			}
+		}
+
+
+		// remove all sections except VR
+		//size_t i = 0;
+		//while (i < ini.Sections().size()) {
+		//	section = &ini.Sections()[i];
+		//	if (!section->name().empty() && strcasecmp(section->name().c_str(), "VR")!=0)
+		//		ini.DeleteSection(section->name().c_str());
+		//	else
+		//		i++;
+		//}
+		
+	}
+	return ini.Save(defaultIniPath);
 }
 
 bool Config::deleteGameConfig(const std::string& pGameId)

@@ -29,6 +29,7 @@ public:
 		std::map<std::string, std::string> ToMap() const;
 
 		std::string* GetLine(const char* key, std::string* valueOut, std::string* commentOut);
+		void AddComment(const char* comment);
 		void Set(const char* key, const char* newValue);
 		void Set(const char* key, const std::string& newValue, const std::string& defaultValue);
 

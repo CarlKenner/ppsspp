@@ -165,6 +165,12 @@ std::string* IniFile::Section::GetLine(const char* key, std::string* valueOut, s
 	return 0;
 }
 
+void IniFile::Section::AddComment(const char* comment)
+{
+	lines.insert(lines.begin(), std::string("# ") + comment);
+}
+
+
 void IniFile::Section::Set(const char* key, const char* newValue)
 {
 	std::string value, commented;
@@ -532,6 +538,7 @@ bool IniFile::Load(std::istream &in, bool keep_current_data) {
 	// Maximum number of letters in a line
 	static const int MAX_BYTES = 1024*32;
 
+	Section* current_section = nullptr;
 	while (!in.eof())
 	{
 		char templine[MAX_BYTES];
@@ -560,18 +567,28 @@ bool IniFile::Load(std::istream &in, bool keep_current_data) {
 				{
 					// New section!
 					std::string sub = line.substr(1, endpos - 1);
-					sections.push_back(Section(sub));
-
-					if (endpos + 1 < line.size())
-					{
-						sections[sections.size() - 1].comment = line.substr(endpos + 1);
-					}
+					current_section = GetOrCreateSection(sub.c_str());
 				}
 			}
 			else
 			{
-				if (sections.size() > 0)
-					sections[sections.size() - 1].lines.push_back(line);
+				if (current_section)
+				{
+					std::string key, value, comment;
+					ParseLine(line, &key, &value, &comment);
+
+					// Lines starting with '$', '*' or '+' are kept verbatim.
+					// Kind of a hack, but the support for raw lines inside an
+					// INI is a hack anyway.
+					if ((key == "" && value == "") ||
+						(line.size() >= 1 &&
+						(line[0] == '$' ||
+						line[0] == '+' ||
+						line[0] == '*')))
+						current_section->lines.push_back(line);
+					else
+						current_section->Set(key, value);
+				}
 			}
 		}
 	}

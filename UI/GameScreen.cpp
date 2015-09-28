@@ -240,7 +240,7 @@ UI::EventReturn GameScreen::OnEditConfig(UI::EventParams &e) {
 UI::EventReturn GameScreen::OnShowDefaults(UI::EventParams &e) {
 #ifdef _WIN32
 	GameInfo *info = g_gameInfoCache.GetInfo(NULL, gamePath_, GAMEINFO_WANTBG | GAMEINFO_WANTSIZE);
-	g_Config.createGameDefaultConfig(info->id);
+	g_Config.createGameDefaultConfig(info->id, info->title);
 	info->hasDefaults = true;
 	std::string filename = ReplaceAll(g_Config.getGameDefaultConfigFile(info->id), "/", "\\");
 	std::string str = std::string("start \"\" \"") + filename + "\"";
