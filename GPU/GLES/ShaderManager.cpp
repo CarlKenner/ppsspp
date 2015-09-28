@@ -962,9 +962,10 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 }
 
 
-// The PSP only has a 16 bit z buffer, but we have a 24 bit z buffer, meaning znear can be almost 256 times closer with no loss of precision.
-// We might need more precision than a PSP though, so better make it only 80 times closer. But we never need closer than 2 cm (unless the game renders that close).
-#define GetBetterZNear(znear) fmin(znear, fmax(znear / 80.0f, 0.02f * UnitsPerMetre))
+// The PSP only has a 16 bit z buffer, but we have a 24 bit z buffer, meaning znear can sometimes be almost 256 times closer with no loss of precision.
+// Unfortunately, dividing by 80 breaks Armored Core 3, so lets just divide by 20. We should probably check zfar too.
+// We might need more precision than a PSP. But we never need closer than 2 cm (unless the game renders that close).
+#define GetBetterZNear(znear) fmax(znear / 20.0f, 0.02f * UnitsPerMetre)
 
 Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough) {
 	float stereoparams[4];
