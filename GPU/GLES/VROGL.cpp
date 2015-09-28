@@ -602,8 +602,6 @@ void VR_StopFramebuffer()
 		glDeleteFramebuffers(1, &mirrorFBO);
 		ovrHmd_DestroyMirrorTexture(hmd, (ovrTexture*)mirrorTexture);
 		mirrorTexture = nullptr;
-		ovrHmd_DestroySwapTextureSet(hmd, eyeRenderTexture[0]->TextureSet);
-		ovrHmd_DestroySwapTextureSet(hmd, eyeRenderTexture[1]->TextureSet);
 
 		// On Oculus SDK 0.6.0 and above, we need to destroy the eye textures Oculus created for us.
 		for (int eye = 0; eye < 2; eye++)
