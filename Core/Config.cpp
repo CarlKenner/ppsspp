@@ -626,6 +626,11 @@ static ConfigSetting vrGameSettings[] = {
 	ReportedConfigSetting("HudFullscreen", &g_Config.bHudFullscreen, false, true, true),
 	ReportedConfigSetting("TelescopeEye", &g_Config.iTelescopeEye, 0, true, true),
 	ReportedConfigSetting("MetroidPrime", &g_Config.iMetroidPrime, 0, true, true),
+	ReportedConfigSetting("HudOnTop", &g_Config.bHudOnTop, false, true, true),
+	ReportedConfigSetting("DontClearScreen", &g_Config.bDontClearScreen, false, true, true),
+	ReportedConfigSetting("CanReadCameraAngles", &g_Config.bCanReadCameraAngles, false, true, true),
+	ReportedConfigSetting("DetectSkybox", &g_Config.bDetectSkybox, false, true, true),
+	ConfigSetting("HudFullscreen", &g_Config.bHudFullscreen, false),
 	ConfigSetting("SelectedLayer", &g_Config.iSelectedLayer, -1),
 	ConfigSetting("FlashState", &g_Config.iFlashState, 0),
 	
