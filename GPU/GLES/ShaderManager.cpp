@@ -961,6 +961,11 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 	}
 }
 
+
+// The PSP only has a 16 bit z buffer, but we have a 24 bit z buffer, meaning znear can be almost 256 times closer with no loss of precision.
+// We might need more precision than a PSP though, so better make it only 80 times closer. But we never need closer than 2 cm (unless the game renders that close).
+#define GetBetterZNear(znear) fmin(znear, fmax(znear / 80.0f, 0.02f * UnitsPerMetre))
+
 Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough) {
 	float stereoparams[4];
 	char s[1024];
@@ -1126,7 +1131,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	// VR HMD 3D projection matrix, needs to include head-tracking
 
 	// near clipping plane in game units
-	float zfar, znear, zNear3D, hfov, vfov;
+	float zfar, znear, zNearBetter, hfov, vfov;
 
 	// if the camera is zoomed in so much that the action only fills a tiny part of your FOV,
 	// we need to move the camera forwards until objects at AimDistance fill the minimum FOV.
@@ -1141,10 +1146,11 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	if (isPerspective && g_viewport_type != VIEW_HUD_ELEMENT && g_viewport_type != VIEW_OFFSCREEN)
 	{
 		znear = gameZNear;
-		zNear3D = znear;
 		zfar = gameZFar;
 		hfov = gameHFOV;
 		vfov = gameVFOV;
+
+		zNearBetter = GetBetterZNear(znear);
 
 		// Find the game's camera angle and position by looking at the view/model matrix of the first real 3D object drawn.
 		// This won't work for all games.
@@ -1174,14 +1180,16 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			}
 			if (debug_newScene)
 				NOTICE_LOG(VR, "2D to fit 3D world: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, znear, zfar);
+			zNearBetter = GetBetterZNear(znear);
 		}
 		else
 		{
 			// default, if no 3D in scene
-			znear = 0.2f*UnitsPerMetre; // 50cm
-			zfar = 40 * UnitsPerMetre; // 40m
+			znear = 0.02f * UnitsPerMetre; // 2 cm
+			zfar = 500 * UnitsPerMetre; // 500 m
 			hfov = 70; // 70 degrees
 			vfov = 180.0f / 3.14159f * 2 * atanf(tanf((hfov*3.14159f / 180.0f) / 2)* 9.0f / 16.0f); // 2D screen is always meant to be 16:9 aspect ratio
+			zNearBetter = znear;
 			// TODO: fix aspect ratio in portrait mode
 			//if (debug_newScene)
 			//	NOTICE_LOG(VR, "Only 2D Projecting: %g x %g, n=%fm f=%fm", hfov, vfov, znear, zfar);
@@ -1190,15 +1198,14 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		if (zfar < 0 && znear <= 0) {
 			zfar = -zfar;
 			znear = -znear;
+			zNearBetter = -zNearBetter;
 		}
-		zNear3D = znear;
-		//znear /= 40.0f;
 		//if (debug_newScene)
 		//	NOTICE_LOG(VR, "2D: zNear3D = %f, znear = %f, zFar = %f", zNear3D, znear, zfar);
 	}
 
 	Matrix44 proj_left, proj_right, hmd_left, hmd_right, temp;
-	VR_GetProjectionMatrices(temp, hmd_right, zNear3D, zfar, true);
+	VR_GetProjectionMatrices(temp, hmd_right, zNearBetter, zfar, true);
 	hmd_left = temp.transpose();
 	temp = hmd_right;
 	hmd_right = temp.transpose();

@@ -732,8 +732,8 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	}
 
 	float UnitsPerMetre = g_Config.fUnitsPerMetre / g_Config.fScale;
-	float znear = 0.2f*UnitsPerMetre; // 20 cm
-	float zfar = 40 * UnitsPerMetre; // 40m
+	float znear = 0.02f*UnitsPerMetre; // 2 cm
+	float zfar = 500 * UnitsPerMetre;  // 500 m
 	float stereoparams[4];
 	Matrix44 proj_left, proj_right, hmd_left, hmd_right, temp;
 	VR_GetProjectionMatrices(temp, hmd_right, znear, zfar, true);
