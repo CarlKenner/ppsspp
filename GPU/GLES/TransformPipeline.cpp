@@ -775,7 +775,8 @@ rotateVBO:
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
 		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_);
 		SetupDecFmtForDraw(program, dec_->GetDecVtxFmt(), vbo ? 0 : decoded);
-
+		if (g_Config.bHudOnTop)
+			ApplyDepthState(m_layer_on_top);
 		if (useElements) {
 			glDrawElements(glprim[prim], vertexCount, GL_UNSIGNED_SHORT, ebo ? 0 : (GLvoid*)decIndex);
 		} else {
@@ -827,6 +828,8 @@ rotateVBO:
 			if (attrMask & (1 << ATTR_TEXCOORD)) glVertexAttribPointer(ATTR_TEXCOORD, doTextureProjection ? 3 : 2, GL_FLOAT, GL_FALSE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, u));
 			if (attrMask & (1 << ATTR_COLOR0)) glVertexAttribPointer(ATTR_COLOR0, 4, GL_UNSIGNED_BYTE, GL_TRUE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, color0));
 			if (attrMask & (1 << ATTR_COLOR1)) glVertexAttribPointer(ATTR_COLOR1, 3, GL_UNSIGNED_BYTE, GL_TRUE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, color1));
+			if (g_Config.bHudOnTop)
+				ApplyDepthState(m_layer_on_top);
 			if (drawIndexed) {
 				glDrawElements(glprim[prim], numTrans, GL_UNSIGNED_SHORT, inds);
 			} else {

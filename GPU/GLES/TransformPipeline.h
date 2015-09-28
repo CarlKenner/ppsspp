@@ -193,6 +193,7 @@ private:
 	void DoFlush();
 	void ApplyDrawState(int prim);
 	void ApplyDrawStateLate();
+	void ApplyDepthState(bool on_top);
 	void ApplyBlendState();
 	void ApplyStencilReplaceAndLogicOp(ReplaceAlphaType replaceAlphaWithStencil);
 	bool ApplyShaderBlending();

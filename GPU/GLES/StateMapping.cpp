@@ -570,6 +570,15 @@ void TransformDrawEngine::ApplyBlendState() {
 	}
 }
 
+void TransformDrawEngine::ApplyDepthState(bool on_top) {
+	if (gstate.isDepthTestEnabled()) {
+		if (on_top)
+			glstate.depthFunc.set(GL_ALWAYS);
+		else
+			glstate.depthFunc.set(ztests[gstate.getDepthTestFunction()]);
+	}
+}
+
 void TransformDrawEngine::ApplyDrawState(int prim) {
 
 	// TODO: All this setup is soon so expensive that we'll need dirty flags, or simply do it in the command writes where we detect dirty by xoring. Silly to do all this work on every drawcall.
