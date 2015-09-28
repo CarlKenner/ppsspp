@@ -349,6 +349,8 @@ void GameSettingsScreen::CreateViews() {
 
 	vrSettings->Add(new ItemHeader(gr->T("All games")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gr->T("Scale"), 0.01f, screenManager(), "x lifesize"));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fFreeLookSensitivity, 0.001f, 100.0f, gr->T("FreeLook Sensitivity"), 0.01f, screenManager(), "x normal"));
+	vrSettings->Add(new CheckBox(&g_Config.bScaleFreeLook, gr->T("Scale FreeLook Speed")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fLeanBackAngle, -180.0f, 180.0f, gr->T("Lean back angle"), 1.0f, screenManager(), "degrees"));
 	vrSettings->Add(new CheckBox(&g_Config.bStabilizePitch, gr->T("Stabilize Pitch")));
 	vrSettings->Add(new CheckBox(&g_Config.bStabilizeRoll, gr->T("Stabilize Roll")));

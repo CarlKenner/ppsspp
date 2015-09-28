@@ -247,6 +247,7 @@ public:
 	bool bOverdrive;
 	bool bHqDistortion;
 	bool bDisableNearClipping;
+	bool bScaleFreeLook;
 	bool bShowHands;
 	bool bShowFeet;
 	bool bShowController;

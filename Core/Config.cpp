@@ -541,6 +541,7 @@ static ConfigSetting vrSettings[] = {
 	ConfigSetting("ForceVR", &g_Config.bForceVR, false),
 	ReportedConfigSetting("Scale", &g_Config.fScale, 1.0f),
 	ReportedConfigSetting("FreeLookSensitivity", &g_Config.fFreeLookSensitivity, DEFAULT_VR_FREE_LOOK_SENSITIVITY),
+	ReportedConfigSetting("ScaleFreeLook", &g_Config.bScaleFreeLook, true),
 	ReportedConfigSetting("LeanBackAngle", &g_Config.fLeanBackAngle, 0),
 	ReportedConfigSetting("EnableVR", &g_Config.bEnableVR, true),
 	ReportedConfigSetting("LowPersistence", &g_Config.bLowPersistence, true),

@@ -81,7 +81,14 @@ float vr_widest_3d_zFar = 0;
 float g_game_camera_pos[3];
 Matrix44 g_game_camera_rotmat;
 bool debug_newScene = true, debug_nextScene = false;
-float s_fViewTranslationVector[3] = { 0, 0, 0 }; // freelook
+
+// freelook
+Matrix3x3 s_viewRotationMatrix;
+Matrix3x3 s_viewInvRotationMatrix;
+float s_fViewTranslationVector[3] = { 0, 0, 0 };
+float s_fViewRotation[2] = { 0, 0 };
+bool bProjectionChanged = false;
+bool bFreeLookChanged = false;
 
 ControllerStyle vr_left_controller = CS_HYDRA_LEFT, vr_right_controller = CS_HYDRA_RIGHT;
 
@@ -881,3 +888,80 @@ ControllerStyle VR_GetHydraStyle(int hand)
 	else
 		return vr_left_controller;
 }
+
+void ScaleView(float scale)
+{
+	// keep the camera in the same virtual world location when scaling the virtual world
+	for (int i = 0; i < 3; i++)
+		s_fViewTranslationVector[i] *= scale;
+
+	if (s_fViewTranslationVector[0] || s_fViewTranslationVector[1] || s_fViewTranslationVector[2])
+		bFreeLookChanged = true;
+	else
+		bFreeLookChanged = false;
+
+	bProjectionChanged = true;
+}
+
+// Moves the freelook camera a number of scaled metres relative to the current freelook camera direction
+void TranslateView(float left_metres, float forward_metres, float down_metres)
+{
+	float result[3];
+	float vector[3] = { left_metres, down_metres, forward_metres };
+
+	// use scaled metres in VR, or real metres otherwise
+	if (g_has_hmd && g_Config.bScaleFreeLook)
+		for (int i = 0; i < 3; ++i)
+			vector[i] *= g_Config.fScale;
+
+	Matrix33::Multiply(s_viewInvRotationMatrix, vector, result);
+
+	for (int i = 0; i < 3; i++)
+	{
+		s_fViewTranslationVector[i] += result[i];
+		vr_freelook_speed += result[i];
+	}
+
+	if (s_fViewTranslationVector[0] || s_fViewTranslationVector[1] || s_fViewTranslationVector[2])
+		bFreeLookChanged = true;
+	else
+		bFreeLookChanged = false;
+
+	bProjectionChanged = true;
+}
+
+void RotateView(float x, float y)
+{
+	s_fViewRotation[0] += x;
+	s_fViewRotation[1] += y;
+
+	Matrix33 mx;
+	Matrix33 my;
+	Matrix33::RotateX(mx, s_fViewRotation[1]);
+	Matrix33::RotateY(my, s_fViewRotation[0]);
+	Matrix33::Multiply(mx, my, s_viewRotationMatrix);
+
+	// reverse rotation
+	Matrix33::RotateX(mx, -s_fViewRotation[1]);
+	Matrix33::RotateY(my, -s_fViewRotation[0]);
+	Matrix33::Multiply(my, mx, s_viewInvRotationMatrix);
+
+	if (s_fViewRotation[0] || s_fViewRotation[1])
+		bFreeLookChanged = true;
+	else
+		bFreeLookChanged = false;
+
+	bProjectionChanged = true;
+}
+
+void ResetView()
+{
+	memset(s_fViewTranslationVector, 0, sizeof(s_fViewTranslationVector));
+	Matrix33::LoadIdentity(s_viewRotationMatrix);
+	Matrix33::LoadIdentity(s_viewInvRotationMatrix);
+	s_fViewRotation[0] = s_fViewRotation[1] = 0.0f;
+
+	bFreeLookChanged = false;
+	bProjectionChanged = true;
+}
+

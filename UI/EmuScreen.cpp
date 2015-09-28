@@ -381,16 +381,44 @@ void EmuScreen::onVKeyDown(int virtualKeyCode) {
 	case VIRTKEY_TOGGLE_FULLSCREEN:
 		System_SendMessage("toggle_fullscreen", "");
 		break;
+	case VIRTKEY_FREELOOK_DECREASE_SPEED:
+		g_Config.fFreeLookSensitivity /= 2.0f;
+		break;
+	case VIRTKEY_FREELOOK_INCREASE_SPEED:
+		g_Config.fFreeLookSensitivity *= 2.0f;
+		break;
+	case VIRTKEY_FREELOOK_RESET_SPEED:
+		g_Config.fFreeLookSensitivity = 1.0f;
+		break;
+	case VIRTKEY_FREELOOK_UP:
+		TranslateView(0.0f, 0.0f, -freeLookSpeed / 2);
+		break;
+	case VIRTKEY_FREELOOK_DOWN:
+		TranslateView(0.0f, 0.0f, freeLookSpeed / 2);
+		break;
+	case VIRTKEY_FREELOOK_LEFT:
+		TranslateView(freeLookSpeed, 0.0f);
+		break;
+	case VIRTKEY_FREELOOK_RIGHT:
+		TranslateView(-freeLookSpeed, 0.0f);
+		break;
+	case VIRTKEY_FREELOOK_ZOOM_IN:
+		TranslateView(0.0f, freeLookSpeed);
+		break;
+	case VIRTKEY_FREELOOK_ZOOM_OUT:
+		TranslateView(0.0f, -freeLookSpeed);
+		break;
 	case VIRTKEY_FREELOOK_RESET:
 		NOTICE_LOG(VR, "Recenter");
 		VR_RecenterHMD();
+		ResetView();
 		break;
 	case VIRTKEY_LARGER_SCALE:
 		if (g_has_hmd)
 		{
 			// Make everything 10% bigger (and further)
 			g_Config.fUnitsPerMetre /= 1.10f;
-			//VertexShaderManager::ScaleView(1.10f);
+			ScaleView(1.10f);
 			NOTICE_LOG(VR, "%f units per metre (each unit is %f cm)", g_Config.fUnitsPerMetre, 100.0f / g_Config.fUnitsPerMetre);
 		}
 		break;
@@ -399,7 +427,7 @@ void EmuScreen::onVKeyDown(int virtualKeyCode) {
 		{
 			// Make everything 10% smaller (and closer)
 			g_Config.fUnitsPerMetre *= 1.10f;
-			//VertexShaderManager::ScaleView(1.0f / 1.10f);
+			ScaleView(1.0f / 1.10f);
 			NOTICE_LOG(VR, "%f units per metre (each unit is %f cm)", g_Config.fUnitsPerMetre, 100.0f / g_Config.fUnitsPerMetre);
 		}
 		break;
@@ -409,7 +437,7 @@ void EmuScreen::onVKeyDown(int virtualKeyCode) {
 			// Make everything 10% bigger (and further)
 			g_Config.fScale *= 1.10f;
 			//SConfig::GetInstance().SaveSingleSetting("VR", "Scale", g_Config.fScale);
-			//VertexShaderManager::ScaleView(1.10f);
+			ScaleView(1.10f);
 		}
 		break;
 	case VIRTKEY_GLOBAL_SMALLER_SCALE:
@@ -418,7 +446,7 @@ void EmuScreen::onVKeyDown(int virtualKeyCode) {
 			// Make everything 10% smaller (and closer)
 			g_Config.fScale /= 1.10f;
 			//SConfig::GetInstance().SaveSingleSetting("VR", "Scale", g_Config.fScale);
-			//VertexShaderManager::ScaleView(1.0f / 1.10f);
+			ScaleView(1.0f / 1.10f);
 		}
 		break;
 	case VIRTKEY_PERMANENT_CAMERA_FORWARD:

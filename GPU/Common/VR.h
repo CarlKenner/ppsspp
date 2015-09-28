@@ -178,6 +178,11 @@ ControllerStyle VR_GetHydraStyle(int hand);
 void OpcodeReplayBuffer();
 void OpcodeReplayBufferInline();
 
+void TranslateView(float left_metres, float forward_metres, float down_metres = 0.0f);
+void RotateView(float x, float y);
+void ScaleView(float scale);
+void ResetView();
+
 extern bool g_force_vr, g_prefer_steamvr;
 extern bool g_has_hmd, g_has_rift, g_has_vr920, g_has_steamvr, g_is_direct_mode;
 extern bool g_new_tracking_frame;
