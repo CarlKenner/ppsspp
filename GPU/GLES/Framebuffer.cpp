@@ -1515,6 +1515,10 @@ void FramebufferManager::CopyDisplayToOutput() {
 
 		OGL::VR_PresentHMDFrame();
 		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+		if (g_has_hmd && g_Config.bEnableVR && !g_Config.bDontClearScreen) {
+			fbo_bind_as_render_target(vfb->fbo);
+			ClearBuffer();
+		}
 	}
 }
 
