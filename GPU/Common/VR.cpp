@@ -108,7 +108,7 @@ void VR_NewVRFrame()
 {
 	INFO_LOG(VR, "-- NewVRFrame --");
 	g_new_tracking_frame = true;
-	//ClearDebugProj();
+	ClearDebugProj();
 }
 
 #ifdef HAVE_OPENVR
