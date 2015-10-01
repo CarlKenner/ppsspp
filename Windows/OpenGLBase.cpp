@@ -307,6 +307,9 @@ bool GL_Init(HWND window, std::string *error_message) {
 
 	hRC = m_hrc;
 
+	if (OGL::g_hOffscreenRC && hRC)
+		wglShareLists(hRC, OGL::g_hOffscreenRC);
+
 	GL_SwapInterval(0);
 
 	if (enableGLDebug && glewIsSupported("GL_ARB_debug_output")) {

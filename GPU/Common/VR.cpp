@@ -89,6 +89,8 @@ float s_fViewTranslationVector[3] = { 0, 0, 0 };
 float s_fViewRotation[2] = { 0, 0 };
 bool bProjectionChanged = false;
 bool bFreeLookChanged = false;
+bool g_can_async_timewarp = false;
+volatile bool g_asyc_timewarp_active = false;
 
 ControllerStyle vr_left_controller = CS_HYDRA_LEFT, vr_right_controller = CS_HYDRA_RIGHT;
 
@@ -107,7 +109,7 @@ static char hmd_device_name[MAX_PATH] = "";
 void VR_NewVRFrame()
 {
 	INFO_LOG(VR, "-- NewVRFrame --");
-	g_new_tracking_frame = true;
+	//g_new_tracking_frame = true;
 	ClearDebugProj();
 }
 
@@ -216,6 +218,8 @@ bool InitSteamVR()
 				g_has_steamvr = false;
 			}
 		}
+		if (g_has_steamvr)
+			g_can_async_timewarp = false;
 		return g_has_steamvr;
 	}
 #endif
@@ -234,6 +238,9 @@ bool InitOculusDebugVR()
 #else
 		hmd = ovrHmd_CreateDebug(ovrHmd_DK2);
 #endif
+		if (hmd != nullptr)
+			g_can_async_timewarp = false;
+
 		return (hmd != nullptr);
 	}
 #endif
@@ -324,6 +331,8 @@ bool InitOculusVR()
 	ovr_Initialize(nullptr);
 	if (ovrHmd_Create(0, &hmd) != ovrSuccess)
 		hmd = nullptr;
+	if (hmd != nullptr)
+		g_can_async_timewarp = true;
 #else
 	ovr_Initialize();
 	hmd = ovrHmd_Create(0);
@@ -348,6 +357,7 @@ bool InitVR920VR()
 		// Todo: find vr920
 		g_hmd_window_x = 0;
 		g_hmd_window_y = 0;
+		g_can_async_timewarp = false;
 		return true;
 	}
 #endif
@@ -361,6 +371,8 @@ void InitVR()
 	g_is_direct_mode = false;
 	g_hmd_device_name = nullptr;
 	g_has_steamvr = false;
+	g_can_async_timewarp = false;
+	g_asyc_timewarp_active = false;
 #ifdef _WIN32
 	g_hmd_luid = nullptr;
 #endif
@@ -419,6 +431,7 @@ void VR_StopRendering()
 
 void ShutdownVR()
 {
+	g_can_async_timewarp = false;
 #ifdef HAVE_OPENVR
 	if (g_has_steamvr && m_pHMD)
 	{

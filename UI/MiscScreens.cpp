@@ -41,6 +41,7 @@
 #include "Common/CPUDetect.h"
 #include "Common/FileUtil.h"
 #include "GPU/GPUState.h"
+#include "GPU/Common/VR.h"
 
 #include "ui_atlas.h"
 
@@ -91,7 +92,10 @@ void DrawBackground(UIContext &dc, float alpha = 1.0f) {
 #ifdef GOLD
 	img = I_BG_GOLD;
 #endif
-	ui_draw2d.DrawImageStretch(img, dc.GetBounds());
+	if (g_has_hmd && g_Config.bEnableVR && GetUIState() == UISTATE_PAUSEMENU)
+		ui_draw2d.Rect(dc.GetBounds().x, dc.GetBounds().y, dc.GetBounds().w, dc.GetBounds().h, 0x00000000, 0);
+	else
+		ui_draw2d.DrawImageStretch(img, dc.GetBounds());
 	float t = time_now();
 	for (int i = 0; i < 100; i++) {
 		float x = xbase[i] + dc.GetBounds().x;

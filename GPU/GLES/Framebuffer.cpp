@@ -545,7 +545,7 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 			DrawActiveTexture(0, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
 		}
 	}
-	OGL::VR_PresentHMDFrame();
+	OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
 }
 
 void FramebufferManager::DrawPlainColor(u32 color) {
@@ -1281,23 +1281,25 @@ struct CardboardSettings * FramebufferManager::GetCardboardSettings(struct Cardb
 }
 
 void FramebufferManager::CopyDisplayToOutput() {
+	GL_CHECK();
 	fbo_unbind();
+	GL_CHECK();
 	if (g_has_hmd)
 	{
 		if (g_first_rift_frame && g_has_hmd)
 		{
-			if (!g_Config.bAsynchronousTimewarp)
-			{
-				OGL::VR_BeginFrame();
-				VR_GetEyePoses();
-			}
 			g_first_rift_frame = false;
 
 			VR_ConfigureHMDPrediction();
 			VR_ConfigureHMDTracking();
 		}
+		OGL::VR_BeginFrame();
 		OGL::VR_RenderToEyebuffer(0);
+		GL_CHECK();
+		glClear(GL_COLOR_BUFFER_BIT);
+		GL_CHECK();
 		glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
+		GL_CHECK();
 	}
 	else
 	{
@@ -1378,7 +1380,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
 				ClearBuffer();
-				OGL::VR_PresentHMDFrame();
+				OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
 			}
 			return;
 		}
@@ -1427,13 +1429,21 @@ void FramebufferManager::CopyDisplayToOutput() {
 
 		if (!usePostShader_) {
 			if (g_has_hmd) {
+				GL_CHECK();
 				glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
+				GL_CHECK();
 				// Left Eye Image
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 0);
+				GLenum err = glGetError();
+				OGL::vr_frame_valid = (err == GL_NO_ERROR);
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
-			} else if (cardboardSettings.enabled) {
+				err = glGetError();
+				OGL::vr_frame_valid = OGL::vr_frame_valid && (err == GL_NO_ERROR);
+				GL_CHECK();
+			}
+			else if (cardboardSettings.enabled) {
 				// Left Eye Image
 				glstate.viewport.set(cardboardSettings.leftEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, true, u0, v0, u1, v1, NULL, 1, 0);
@@ -1513,7 +1523,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 			}
 		}
 
-		OGL::VR_PresentHMDFrame();
+		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		if (g_has_hmd && g_Config.bEnableVR && !g_Config.bDontClearScreen) {
 			fbo_bind_as_render_target(vfb->fbo);
@@ -2127,7 +2137,6 @@ void FramebufferManager::EndFrame() {
 		fbo_unbind();
 	}
 	VR_NewVRFrame();
-	OGL::VR_BeginFrame();
 }
 
 void FramebufferManager::DeviceLost() {

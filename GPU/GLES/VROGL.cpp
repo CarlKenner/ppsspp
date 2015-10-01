@@ -10,6 +10,24 @@
 #include "gfx_es2/glsl_program.h"
 #include "math/lin/matrix4x4.h"
 #include "profiler/profiler.h"
+#include "base/NativeApp.h"
+#include "base/mutex.h"
+#include "i18n/i18n.h"
+#include "util/text/utf8.h"
+#include "Common/StringUtils.h"
+#include "../Globals.h"
+#include "Windows/W32Util/Misc.h"
+#include "Windows/MainWindow.h"
+#include "Windows/resource.h"
+#include "Core/Core.h"
+#include "thread/thread.h"
+#include "thread/threadutil.h"
+#include "gfx/gl_debug_log.h"
+
+#include <tchar.h>
+#include <process.h>
+#include <intrin.h>
+#pragma intrinsic(_InterlockedExchange)
 
 #ifdef _WIN32
 #ifndef _XBOX
@@ -49,6 +67,18 @@ ovrGLTexture g_eye_texture[2];
 
 namespace OGL
 {
+
+recursive_mutex vrThreadLock;
+recursive_mutex AsyncTimewarpLock;
+volatile long vrThreadReady;
+static std::thread *vrThread;
+volatile long s_stop_vr_thread = false;
+static bool s_vr_thread_failure = false;
+HANDLE start_vr_thread_event = NULL;
+bool vr_gui_valid = true;
+bool vr_frame_valid = true;
+bool vr_drew_frame = false; // we are just drawing the GUI if false
+
 // Front buffers for Asynchronous Timewarp, to be swapped with either m_efbColor or m_resolvedColorTexture
 // at the end of a frame. The back buffer is rendered to while the front buffer is displayed, then they are flipped.
 GLuint m_eyeFramebuffer[2];
@@ -62,11 +92,12 @@ struct TextureBuffer
 {
 	ovrSwapTextureSet* TextureSet;
 	GLuint        texId;
-	GLuint        fboId;
+	GLuint        fboId[8];
 	ovrSizei          texSize;
 
 	TextureBuffer(ovrHmd hmd, bool rendertarget, bool displayableOnHmd, OVR::Sizei size, int mipLevels, unsigned char * data, int sampleCount)
 	{
+		GL_CHECK();
 		//OVR_ASSERT(sampleCount <= 1); // The code doesn't currently handle MSAA textures.
 
 		texSize = size;
@@ -78,58 +109,89 @@ struct TextureBuffer
 
 #if OVR_MAJOR_VERSION >= 7
 			ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, size.w, size.h, &TextureSet);
+			GL_CHECK();
 #else
 			ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, size.w, size.h, &TextureSet);
+			GL_CHECK();
 #endif
 			for (int i = 0; i < TextureSet->TextureCount; ++i)
 			{
 				ovrGLTexture* tex = (ovrGLTexture*)&TextureSet->Textures[i];
+				GL_CHECK();
 				glBindTexture(GL_TEXTURE_2D, tex->OGL.TexId);
+				GL_CHECK();
 
 				if (rendertarget)
 				{
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+					GL_CHECK();
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+					GL_CHECK();
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+					GL_CHECK();
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+					GL_CHECK();
 				}
 				else
 				{
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+					GL_CHECK();
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+					GL_CHECK();
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+					GL_CHECK();
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+					GL_CHECK();
 				}
 			}
-}
+		}
 		else {
 			glGenTextures(1, &texId);
+			GL_CHECK();
 			glBindTexture(GL_TEXTURE_2D, texId);
+			GL_CHECK();
 
 			if (rendertarget)
 			{
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+				GL_CHECK();
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				GL_CHECK();
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+				GL_CHECK();
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+				GL_CHECK();
 			}
 			else
 			{
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+				GL_CHECK();
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				GL_CHECK();
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+				GL_CHECK();
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+				GL_CHECK();
 			}
 
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texSize.w, texSize.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+			GL_CHECK();
 		}
 
 		if (mipLevels > 1)
 		{
 			glGenerateMipmap(GL_TEXTURE_2D);
+			GL_CHECK();
 		}
 
-		glGenFramebuffers(1, &fboId);
+		GL_CHECK();
+		glGenFramebuffers(TextureSet->TextureCount, fboId);
+		for (int i = 0; i < TextureSet->TextureCount; ++i)
+		{
+			glBindFramebuffer(GL_FRAMEBUFFER, fboId[i]);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ((ovrGLTexture*)&TextureSet->Textures[i])->OGL.TexId, 0);
+		}
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 
 	ovrSizei GetSize(void) const
@@ -139,26 +201,42 @@ struct TextureBuffer
 
 	void SetAndClearRenderSurface()
 	{
-		ovrGLTexture* tex = (ovrGLTexture*)&TextureSet->Textures[TextureSet->CurrentIndex];
-
-		glBindFramebuffer(GL_FRAMEBUFFER, fboId);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->OGL.TexId, 0);
-
+		int WriteIndex;
+		if (g_asyc_timewarp_active)
+			WriteIndex = (TextureSet->CurrentIndex + 1) % TextureSet->TextureCount;
+		else
+			WriteIndex = TextureSet->CurrentIndex;
+		GL_CHECK();
+		ovrGLTexture* tex = (ovrGLTexture*)&TextureSet->Textures[WriteIndex];
+		GL_CHECK();
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboId[WriteIndex]);
+		GL_CHECK();
 		glViewport(0, 0, texSize.w, texSize.h);
+		GL_CHECK();
+		//glFlush();
+		GL_CHECK();
+		//glFinish();
+		GL_CHECK();
+
 		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
 
 	void UnsetRenderSurface()
 	{
-		glBindFramebuffer(GL_FRAMEBUFFER, fboId);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+		GL_CHECK();
+		//glBindFramebuffer(GL_FRAMEBUFFER, fboId);
+		//GL_CHECK();
+		//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+		//GL_CHECK();
+		//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+		//GL_CHECK();
 	}
 };
 
 TextureBuffer * eyeRenderTexture[2];
-ovrSwapTextureSet * pTextureSet = 0;
+TextureBuffer * guiRenderTexture;
 ovrRecti eyeRenderViewport[2];
+ovrRecti guiRenderViewport;
 ovrGLTexture * mirrorTexture;
 int mirror_width = 0, mirror_height = 0;
 GLuint mirrorFBO = 0;
@@ -338,37 +416,60 @@ void SetupDistortion()
 	m_uiIndexSize = (unsigned int)vIndices.size();
 
 	glGenVertexArrays(1, &m_unLensVAO);
+	GL_CHECK();
 	glBindVertexArray(m_unLensVAO);
+	GL_CHECK();
 
 	glGenBuffers(1, &m_glIDVertBuffer);
+	GL_CHECK();
 	glBindBuffer(GL_ARRAY_BUFFER, m_glIDVertBuffer);
+	GL_CHECK();
 	glBufferData(GL_ARRAY_BUFFER, vVerts.size()*sizeof(VertexDataLens), &vVerts[0], GL_STATIC_DRAW);
+	GL_CHECK();
 
 	glGenBuffers(1, &m_glIDIndexBuffer);
+	GL_CHECK();
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_glIDIndexBuffer);
+	GL_CHECK();
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vIndices.size()*sizeof(GLushort), &vIndices[0], GL_STATIC_DRAW);
+	GL_CHECK();
 
 	glEnableVertexAttribArray(0);
+	GL_CHECK();
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(VertexDataLens), (void *)offsetof(VertexDataLens, position));
+	GL_CHECK();
 
 	glEnableVertexAttribArray(1);
+	GL_CHECK();
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(VertexDataLens), (void *)offsetof(VertexDataLens, texCoordRed));
+	GL_CHECK();
 
 	glEnableVertexAttribArray(2);
+	GL_CHECK();
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexDataLens), (void *)offsetof(VertexDataLens, texCoordGreen));
+	GL_CHECK();
 
 	glEnableVertexAttribArray(3);
+	GL_CHECK();
 	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(VertexDataLens), (void *)offsetof(VertexDataLens, texCoordBlue));
+	GL_CHECK();
 
 	glBindVertexArray(0);
+	GL_CHECK();
 
 	glDisableVertexAttribArray(0);
+	GL_CHECK();
 	glDisableVertexAttribArray(1);
+	GL_CHECK();
 	glDisableVertexAttribArray(2);
+	GL_CHECK();
 	glDisableVertexAttribArray(3);
+	GL_CHECK();
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	GL_CHECK();
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	GL_CHECK();
 }
 
 //-----------------------------------------------------------------------------
@@ -400,6 +501,7 @@ void RenderDistortion()
 
 void VR_ConfigureHMD()
 {
+	GL_CHECK();
 #ifdef HAVE_OPENVR
 	if (g_has_steamvr && m_pCompositor)
 	{
@@ -429,6 +531,7 @@ void VR_ConfigureHMD()
 		if (g_is_direct_mode) //If in Direct Mode
 		{
 			ovrHmd_AttachToWindow(hmd, cfg.OGL.Window, nullptr, nullptr); //Attach to Direct Mode.
+			GL_CHECK();
 		}
 #endif
 #endif
@@ -462,13 +565,16 @@ void VR_ConfigureHMD()
 			caps |= ovrDistortionCap_HqDistortion;
 		ovrHmd_ConfigureRendering(hmd, &cfg.Config, caps,
 			g_eye_fov, g_eye_render_desc);
+		GL_CHECK();
 #if OVR_MAJOR_VERSION <= 4
 		ovrhmd_EnableHSWDisplaySDKRender(hmd, false); //Disable Health and Safety Warning.
+		GL_CHECK();
 #endif
 
 #else
 		for (int i = 0; i < ovrEye_Count; ++i)
 			g_eye_render_desc[i] = ovrHmd_GetRenderDesc(hmd, (ovrEyeType)i, g_eye_fov[i]);
+		GL_CHECK();
 #endif
 	}
 #endif
@@ -477,6 +583,7 @@ void VR_ConfigureHMD()
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 void RecreateMirrorTextureIfNeeded()
 {
+	GL_CHECK();
 	int w = PSP_CoreParameter().pixelWidth;  //Renderer::GetBackbufferWidth();
 	int h = PSP_CoreParameter().pixelHeight; //Renderer::GetBackbufferHeight();
 	if (w != mirror_width || h != mirror_height || ((mirrorTexture == nullptr)!=g_Config.bNoMirrorToWindow))
@@ -484,7 +591,9 @@ void RecreateMirrorTextureIfNeeded()
 		if (mirrorTexture)
 		{
 			glDeleteFramebuffers(1, &mirrorFBO);
+			GL_CHECK();
 			ovrHmd_DestroyMirrorTexture(hmd, (ovrTexture*)mirrorTexture);
+			GL_CHECK();
 			mirrorTexture = nullptr;
 		}
 		if (!g_Config.bNoMirrorToWindow)
@@ -494,22 +603,66 @@ void RecreateMirrorTextureIfNeeded()
 			mirror_height = h;
 #if OVR_MAJOR_VERSION >= 7
 			ovr_CreateMirrorTextureGL(hmd, GL_SRGB8_ALPHA8, mirror_width, mirror_height, (ovrTexture**)&mirrorTexture);
+			GL_CHECK();
 #else
 			ovrHmd_CreateMirrorTextureGL(hmd, GL_RGBA, mirror_width, mirror_height, (ovrTexture**)&mirrorTexture);
+			GL_CHECK();
 #endif
 			// Configure the mirror read buffer
 			glGenFramebuffers(1, &mirrorFBO);
+			GL_CHECK();
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorFBO);
+			GL_CHECK();
 			glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mirrorTexture->OGL.TexId, 0);
+			GL_CHECK();
 			glFramebufferRenderbuffer(GL_READ_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+			GL_CHECK();
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+			GL_CHECK();
 		}
 	}
 }
 #endif
 
+void VR_StartGUI(int target_width, int target_height)
+{
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
+	if (g_has_rift)
+	{
+		GL_SwapInterval(0);
+		GL_CHECK();
+
+		ovrSizei target_size;
+		target_size.w = target_width;
+		target_size.h = target_height;
+		guiRenderTexture = new TextureBuffer(hmd, true, true, target_size, 1, nullptr, 1);
+		guiRenderViewport.Pos.x = 0;
+		guiRenderViewport.Pos.y = 0;
+		guiRenderViewport.Size = target_size;
+	}
+#endif
+}
+
+void VR_StopGUI()
+{
+	GL_CHECK();
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
+	if (g_has_rift)
+	{
+		if (guiRenderTexture)
+		{
+			ovrHmd_DestroySwapTextureSet(hmd, guiRenderTexture->TextureSet);
+			GL_CHECK();
+			delete guiRenderTexture;
+			guiRenderTexture = nullptr;
+		}
+	}
+#endif
+}
+
 void VR_StartFramebuffer(int target_width, int target_height)
 {
+	GL_CHECK();
 	m_eyeFramebuffer[0] = 0;
 	m_eyeFramebuffer[1] = 0;
 	m_frontBuffer[0] = 0;
@@ -519,6 +672,7 @@ void VR_StartFramebuffer(int target_width, int target_height)
 	if (g_has_rift)
 	{
 		GL_SwapInterval(0);
+		GL_CHECK();
 
 		for (int eye = 0; eye<2; ++eye)
 		{
@@ -532,6 +686,7 @@ void VR_StartFramebuffer(int target_width, int target_height)
 		}
 
 		RecreateMirrorTextureIfNeeded();
+		GL_CHECK();
 	}
 	else
 #endif
@@ -549,18 +704,26 @@ void VR_StartFramebuffer(int target_width, int target_height)
 		for (int eye = 0; eye < 2; ++eye)
 		{
 			glBindTexture(GL_TEXTURE_2D, m_frontBuffer[eye]);
+			GL_CHECK();
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+			GL_CHECK();
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			GL_CHECK();
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			GL_CHECK();
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, target_width, target_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			GL_CHECK();
 		}
 
 		// create the eye framebuffers
 		glGenFramebuffers(2, m_eyeFramebuffer);
+		GL_CHECK();
 		for (int eye = 0; eye < 2; ++eye)
 		{
 			glBindFramebuffer(GL_FRAMEBUFFER, m_eyeFramebuffer[eye]);
+			GL_CHECK();
 			glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_frontBuffer[eye], 0);
+			GL_CHECK();
 		}
 
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 5
@@ -600,7 +763,9 @@ void VR_StopFramebuffer()
 	if (g_has_rift)
 	{
 		glDeleteFramebuffers(1, &mirrorFBO);
+		GL_CHECK();
 		ovrHmd_DestroyMirrorTexture(hmd, (ovrTexture*)mirrorTexture);
+		GL_CHECK();
 		mirrorTexture = nullptr;
 
 		// On Oculus SDK 0.6.0 and above, we need to destroy the eye textures Oculus created for us.
@@ -609,6 +774,7 @@ void VR_StopFramebuffer()
 			if (eyeRenderTexture[eye])
 			{
 				ovrHmd_DestroySwapTextureSet(hmd, eyeRenderTexture[eye]->TextureSet);
+				GL_CHECK();
 				delete eyeRenderTexture[eye];
 				eyeRenderTexture[eye] = nullptr;
 			}
@@ -643,10 +809,16 @@ void VR_StopFramebuffer()
 
 void VR_BeginFrame()
 {
+	GL_CHECK();
+	//glFlush();
+	//GL_CHECK();
+	//glFinish();
+	//GL_CHECK();
 	if (g_Config.bDisableNearClipping)
 		glEnable(GL_DEPTH_CLAMP);
 	else
 		glDisable(GL_DEPTH_CLAMP);
+	GL_CHECK();
 
 	// At the start of a frame, we get the frame timing and begin the frame.
 #ifdef OVR_MAJOR_VERSION
@@ -656,47 +828,203 @@ void VR_BeginFrame()
 		++g_ovr_frameindex;
 		// On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture 
 		g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
-		for (int eye = 0; eye < 2; eye++)
-		{
-			// Increment to use next texture, just before writing
-			eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
+		if (!g_asyc_timewarp_active) {
+			lock_guard guard(AsyncTimewarpLock);
+			for (int eye = 0; eye < 2; eye++)
+			{
+				// Increment to use next texture, just before writing
+				eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
+			}
 		}
 #else
 		ovrHmd_DismissHSWDisplay(hmd);
+		GL_CHECK();
 		g_rift_frame_timing = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
 #endif
-}
+	}
 #endif
+}
+
+static bool began_gui = false, has_gui = false;
+
+void VR_BeginGUI()
+{
+	began_gui = true;
+	GL_CHECK();
+#ifdef OVR_MAJOR_VERSION
+#if OVR_MAJOR_VERSION >= 6
+	if (g_has_rift)
+	{
+		if (!g_asyc_timewarp_active) {
+			guiRenderTexture->TextureSet->CurrentIndex = (guiRenderTexture->TextureSet->CurrentIndex + 1) % guiRenderTexture->TextureSet->TextureCount;
+		}
+		g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
+		lock_guard guard(AsyncTimewarpLock);
+		GL_CHECK();
+		// Switch to eye render target
+		VR_RenderToGUI();
+		GL_CHECK();
+		glClearColor(0, 0, 0, 0);
+		glClear(GL_COLOR_BUFFER_BIT);
+		GLenum err = glGetError();
+		vr_gui_valid = (err == GL_NO_ERROR);
+	}
+#endif
+#endif
+}
+
+void VR_EndGUI()
+{
+	if (!began_gui)
+		return;
+	began_gui = false;
+	GL_CHECK();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	GL_CHECK();
+	if (g_has_rift)
+	{
+		lock_guard guard(AsyncTimewarpLock);
+		if (g_asyc_timewarp_active) {
+			glFlush();
+			glFinish();
+			guiRenderTexture->TextureSet->CurrentIndex = (guiRenderTexture->TextureSet->CurrentIndex + 1) % guiRenderTexture->TextureSet->TextureCount;
+		}
+		if (!vr_drew_frame) {
+			VR_PresentHMDFrame(true);
+		}
+		vr_drew_frame = false;
+	}
+	has_gui = true;
+}
+
+void VR_RenderToGUI()
+{
+	GL_CHECK();
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
+	if (g_has_rift)
+	{
+		guiRenderTexture->SetAndClearRenderSurface();
+	}
+	else
+#endif
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
 }
 
 void VR_RenderToEyebuffer(int eye)
 {
+	GL_CHECK();
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
 		eyeRenderTexture[eye]->UnsetRenderSurface();
+		GL_CHECK();
 		// Switch to eye render target
 		eyeRenderTexture[eye]->SetAndClearRenderSurface();
+		GL_CHECK();
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		GL_CHECK();
 	}
 #endif
 #if (defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 5)
 	if (g_has_rift)
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_eyeFramebuffer[eye]);
+	GL_CHECK();
 #endif
 #if defined(HAVE_OPENVR)
 	if (g_has_steamvr)
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_eyeFramebuffer[eye]);
+	GL_CHECK();
 #endif
 }
 
-void VR_PresentHMDFrame()
+void PresentFrameSDK6()
 {
+	GL_CHECK();
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
+	if (g_has_rift)
+	{
+		int count = 0;
+		ovrLayerHeader* LayerList[2] = { nullptr, nullptr };
+		ovrLayerEyeFov ld;
+		ld.Header.Flags = (g_Config.bFlipVertical ? 0 : ovrLayerFlag_TextureOriginAtBottomLeft) | (g_Config.bHqDistortion ? ovrLayerFlag_HighQuality : 0);
+		{
+			lock_guard guard(AsyncTimewarpLock);
+			if (eyeRenderTexture[0] && eyeRenderTexture[1] && eyeRenderTexture[0]->TextureSet) {
+				++count;
+				ld.Header.Type = ovrLayerType_EyeFov;
+				for (int eye = 0; eye < 2; eye++)
+				{
+					ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureSet;
+					ld.Viewport[eye] = eyeRenderViewport[eye];
+					ld.Fov[eye] = g_eye_fov[eye];
+					ld.RenderPose[eye] = g_front_eye_poses[eye];
+				}
+				LayerList[count-1] = &ld.Header;
+			}
+			ovrLayerQuad lg;
+			if (guiRenderTexture && has_gui) {
+				++count;
+				lg.Header.Type = ovrLayerType_QuadInWorld;
+				lg.Header.Flags = ld.Header.Flags;
+				lg.ColorTexture = guiRenderTexture->TextureSet;
+				lg.Viewport = guiRenderViewport;
+				lg.QuadSize.x = 1.6f / 2.0f; // metres
+				lg.QuadSize.y = 0.9f / 2.0f; // metres
+				lg.QuadPoseCenter.Position.x = 0; // metres
+				lg.QuadPoseCenter.Position.y = 0; // metres
+				lg.QuadPoseCenter.Position.z = -0.7; // metres (negative means in front of us)
+				lg.QuadPoseCenter.Orientation.w = 1;
+				lg.QuadPoseCenter.Orientation.x = 0;
+				lg.QuadPoseCenter.Orientation.y = 0;
+				lg.QuadPoseCenter.Orientation.z = 0;
+				LayerList[count-1] = &lg.Header;
+			}
+			ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, LayerList, count);
+			GL_CHECK();
+		}
+	}
+#endif 
+}
+
+void VR_PresentHMDFrame(bool valid)
+{
+	GL_CHECK();
+
+	if (valid)
+	{
+		vr_drew_frame = true;
+		lock_guard guard(AsyncTimewarpLock);
+		glFinish();
+		g_front_eye_poses[0] = g_eye_poses[0];
+		g_front_eye_poses[1] = g_eye_poses[1];
+		g_new_tracking_frame = true;
+		if (g_asyc_timewarp_active) {
+			for (int eye = 0; eye < 2; eye++)
+			{
+				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet)
+					eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
+			}
+			has_gui = false;
+			return;
+		}
+	}
+	else
+	{
+		g_new_tracking_frame = true;
+	}
+
+	GL_CHECK();
 #ifdef HAVE_OPENVR
 	if (m_pCompositor)
 	{
 		m_pCompositor->Submit(vr::Eye_Left, vr::API_OpenGL, (void*)(size_t)m_left_texture, nullptr);
+		GL_CHECK();
 		m_pCompositor->Submit(vr::Eye_Right, vr::API_OpenGL, (void*)(size_t)m_right_texture, nullptr);
+		GL_CHECK();
 		m_pCompositor->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+		GL_CHECK();
 		uint32_t unSize = m_pCompositor->GetLastError(NULL, 0);
 		if (unSize > 1)
 		{
@@ -708,15 +1036,20 @@ void VR_PresentHMDFrame()
 		if (!g_Config.bNoMirrorToWindow)
 		{
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+			GL_CHECK();
 			// Blit mirror texture to back buffer
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, m_eyeFramebuffer[0]);
+			GL_CHECK();
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+			GL_CHECK();
 			GLint w = PSP_CoreParameter().renderWidth;  //Renderer::GetTargetWidth();
 			GLint h = PSP_CoreParameter().renderHeight; //Renderer::GetTargetHeight();
 			glBlitFramebuffer(0, 0, w, h,
 				0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight,
 				GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			GL_CHECK();
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+			GL_CHECK();
 			//GL_SwapBuffers();
 		}
 	}
@@ -729,48 +1062,48 @@ void VR_PresentHMDFrame()
 #if OVR_MAJOR_VERSION <= 5
 		// Let OVR do distortion rendering, Present and flush/sync.
 		ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+		GL_CHECK();
 #else
 		RecreateMirrorTextureIfNeeded();
-		ovrLayerEyeFov ld;
-		ld.Header.Type = ovrLayerType_EyeFov;
-		ld.Header.Flags = (g_Config.bFlipVertical?0:ovrLayerFlag_TextureOriginAtBottomLeft) | (g_Config.bHqDistortion?ovrLayerFlag_HighQuality:0);
-		for (int eye = 0; eye < 2; eye++)
-		{
-			ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureSet;
-			ld.Viewport[eye] = eyeRenderViewport[eye];
-			ld.Fov[eye] = g_eye_fov[eye];
-			ld.RenderPose[eye] = g_eye_poses[eye];
-		}
-		ovrLayerHeader* layers = &ld.Header;
-		ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
-
-		if (!g_Config.bNoMirrorToWindow)
+		GL_CHECK();
+		PresentFrameSDK6();
+		GL_CHECK();
+		if (!g_Config.bNoMirrorToWindow && mirrorTexture)
 		{
 			// Blit mirror texture to back buffer
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorFBO);
+			GL_CHECK();
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+			GL_CHECK();
 			GLint w = mirrorTexture->OGL.Header.TextureSize.w;
 			GLint h = mirrorTexture->OGL.Header.TextureSize.h;
 			glBlitFramebuffer(0, h, w, 0,
 				0, 0, w, h,
 				GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			GL_CHECK();
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+			GL_CHECK();
 			//GL_SwapBuffers();
 		}
 #endif
 	}
 #endif
+	has_gui = false;
 }
 
 void VR_DrawTimewarpFrame()
 {
+	GL_CHECK();
 	// As far as I know, OpenVR doesn't support Timewarp yet
 #if 0 && defined(HAVE_OPENVR)
 	if (g_has_steamvr && m_pCompositor)
 	{
 		m_pCompositor->Submit(vr::Eye_Left, vr::API_OpenGL, (void*)m_left_texture, nullptr);
+		GL_CHECK();
 		m_pCompositor->Submit(vr::Eye_Right, vr::API_OpenGL, (void*)m_right_texture, nullptr);
+		GL_CHECK();
 		m_pCompositor->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
+		GL_CHECK();
 		uint32_t unSize = m_pCompositor->GetLastError(NULL, 0);
 		if (unSize > 1)
 		{
@@ -787,10 +1120,12 @@ void VR_DrawTimewarpFrame()
 		ovrFrameTiming frameTime;
 #if OVR_MAJOR_VERSION <= 5
 		frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
+		GL_CHECK();
 
 		ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
 
 		ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+		GL_CHECK();
 #else
 		++g_ovr_frameindex;
 		// On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture 
@@ -807,10 +1142,11 @@ void VR_DrawTimewarpFrame()
 			ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureSet;
 			ld.Viewport[eye] = eyeRenderViewport[eye];
 			ld.Fov[eye] = g_eye_fov[eye];
-			ld.RenderPose[eye] = g_eye_poses[eye];
+			ld.RenderPose[eye] = g_front_eye_poses[eye];
 		}
 		ovrLayerHeader* layers = &ld.Header;
 		ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
+		GL_CHECK();
 #endif
 	}
 #endif
@@ -818,37 +1154,227 @@ void VR_DrawTimewarpFrame()
 
 void VR_DrawAsyncTimewarpFrame()
 {
-#ifdef OVR_MAJOR_VERSION
-#if OVR_MAJOR_VERSION <= 5
-	if (g_has_rift)
+	GL_CHECK();
+	PresentFrameSDK6();
+	Sleep(8);
+}
+
+enum VRThreadStatus : long
+{
+	THREAD_NONE = 0,
+	THREAD_INIT,
+	THREAD_WAITING,
+	THREAD_INIT2,
+	THREAD_CORE_LOOP,
+	THREAD_SHUTDOWN,
+	THREAD_END,
+};
+
+HANDLE vrThread_GetThreadHandle()
+{
+	lock_guard guard(vrThreadLock);
+	return vrThread;
+}
+
+void VRThread();
+
+void VRThread_Start()
+{
+	lock_guard guard(vrThreadLock);
+	if (!vrThread && g_can_async_timewarp)
 	{
-		auto frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
-		g_vr_lock.unlock();
-
-		if (0 == frameTime.TimewarpPointSeconds) {
-			ovr_WaitTillTime(frameTime.TimewarpPointSeconds - 0.002);
-		}
-		else {
-			ovr_WaitTillTime(frameTime.NextFrameSeconds - 0.008);
-		}
-
-		g_vr_lock.lock();
-		// Grab the most recent textures
-		for (int eye = 0; eye < 2; eye++)
-		{
-			((ovrGLTexture&)(g_eye_texture[eye])).OGL.TexId = m_frontBuffer[eye];
-		}
-#ifdef _WIN32
-		//HANDLE thread_handle = g_video_backend->m_video_thread->native_handle();
-		//SuspendThread(thread_handle);
-#endif
-		ovrHmd_EndFrame(hmd, g_front_eye_poses, &g_eye_texture[0].Texture);
-#ifdef _WIN32
-		//ResumeThread(thread_handle);
-#endif
+		vrThread = new std::thread(VRThread);
+		start_vr_thread_event = CreateEvent(NULL, FALSE, FALSE, NULL);
 	}
-#endif
-#endif
+}
+
+void VRThread_StartLoop()
+{
+	lock_guard guard(vrThreadLock);
+	if (vrThread)
+	{
+		SetEvent(start_vr_thread_event);
+	}
+}
+
+void VRThread_Stop()
+{
+	// Already stopped?
+	{
+		lock_guard guard(vrThreadLock);
+		if (vrThread == NULL || vrThreadReady == THREAD_END)
+			return;
+	}
+
+	{
+		lock_guard guard(vrThreadLock);
+		s_stop_vr_thread = true;
+		SetEvent(start_vr_thread_event);
+		vrThread->join();
+		delete vrThread;
+		vrThread = NULL;
+		vrThreadReady = THREAD_NONE;
+		CloseHandle(start_vr_thread_event);
+	}
+
+	// finished()
+}
+
+bool VRThread_Ready()
+{
+	return vrThreadReady == THREAD_CORE_LOOP;
+}
+
+HWND m_offscreen_window_handle = NULL; // should be INVALID_WINDOW_HANDLE
+static HDC hOffscreenDC = NULL;       // Private GDI Device Context
+HGLRC g_hOffscreenRC = NULL;     // Permanent Rendering Context
+
+// Create offscreen rendering window and its secondary OpenGL context
+// This is used for the normal rendering thread with asynchronous timewarp
+bool CreateOffscreen()
+{
+	if (m_offscreen_window_handle != nullptr)
+		return false;
+
+	// Create offscreen window here!
+	int width = 640;
+	int height = 480;
+
+	WNDCLASSEX wndClass;
+	wndClass.cbSize = sizeof(WNDCLASSEX);
+	wndClass.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC | CS_DBLCLKS;
+	wndClass.lpfnWndProc = DefWindowProc;
+	wndClass.cbClsExtra = 0;
+	wndClass.cbWndExtra = 0;
+	wndClass.hInstance = 0;
+	wndClass.hIcon = 0;
+	wndClass.hCursor = LoadCursor(0, IDC_ARROW);
+	wndClass.hbrBackground = 0;
+	wndClass.lpszMenuName = 0;
+	wndClass.lpszClassName = _T("DolphinOffscreenOpenGL");
+	wndClass.hIconSm = 0;
+	RegisterClassEx(&wndClass);
+
+	// Create the window. Position and size it.
+	HWND wnd = CreateWindowEx(0,
+		_T("DolphinOffscreenOpenGL"),
+		_T("Dolphin offscreen OpenGL"),
+		WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP,
+		CW_USEDEFAULT, CW_USEDEFAULT, width, height,
+		0, 0, 0, 0);
+	m_offscreen_window_handle = wnd;
+
+	PIXELFORMATDESCRIPTOR pfd =         // pfd Tells Windows How We Want Things To Be
+	{
+		sizeof(PIXELFORMATDESCRIPTOR),							// Size Of This Pixel Format Descriptor
+		1,														// Version Number
+		PFD_DRAW_TO_WINDOW |									// Format Must Support Window
+		PFD_SUPPORT_OPENGL |									// Format Must Support OpenGL
+		PFD_DOUBLEBUFFER,										// Must Support Double Buffering
+		PFD_TYPE_RGBA,											// Request An RGBA Format
+		24,														// Select Our Color Depth
+		0, 0, 0, 0, 0, 0,										// Color Bits Ignored
+		8,														// No Alpha Buffer
+		0,														// Shift Bit Ignored
+		0,														// No Accumulation Buffer
+		0, 0, 0, 0,										// Accumulation Bits Ignored
+		16,														// At least a 16Bit Z-Buffer (Depth Buffer)  
+		8,														// 8-bit Stencil Buffer
+		0,														// No Auxiliary Buffer
+		PFD_MAIN_PLANE,								// Main Drawing Layer
+		0,														// Reserved
+		0, 0, 0												// Layer Masks Ignored
+};
+
+	int      PixelFormat;               // Holds The Results After Searching For A Match
+
+	if (!(hOffscreenDC = GetDC(m_offscreen_window_handle)))
+	{
+		PanicAlert("(1) Can't create an OpenGL Device context. Fail.");
+		return false;
+	}
+
+	if (!(PixelFormat = ChoosePixelFormat(hOffscreenDC, &pfd)))
+	{
+		PanicAlert("(2) Can't find a suitable PixelFormat.");
+		return false;
+	}
+
+	if (!SetPixelFormat(hOffscreenDC, PixelFormat, &pfd))
+	{
+		PanicAlert("(3) Can't set the PixelFormat.");
+		return false;
+	}
+
+	if (!(g_hOffscreenRC = wglCreateContext(hOffscreenDC)))
+	{
+		PanicAlert("(4) Can't create an OpenGL rendering context.");
+		return false;
+	}
+
+	return true;
+}
+
+// VR Asynchronous Timewarp Thread
+void VRThread()
+{
+	_InterlockedExchange(&vrThreadReady, THREAD_INIT);
+
+	setCurrentThreadName("VR Thread");
+
+	NOTICE_LOG(VR, "[VR Thread] Starting VR Thread");
+
+	// Create our OpenGL context
+	CreateOffscreen();
+
+	_InterlockedExchange(&vrThreadReady, THREAD_WAITING);
+	DWORD result = WaitForSingleObject(start_vr_thread_event, INFINITE);
+	_InterlockedExchange(&vrThreadReady, THREAD_INIT2);
+	if (result == WAIT_TIMEOUT) {
+		ERROR_LOG(VR, "Wait for resume timed out. Resuming rendering");
+	}
+	
+	NOTICE_LOG(VR, "[VR Thread] g_video_backend->Video_Prepare()");
+	wglMakeCurrent(hOffscreenDC, g_hOffscreenRC);
+
+	NOTICE_LOG(VR, "[VR Thread] Main VR loop");
+	_InterlockedExchange(&vrThreadReady, THREAD_CORE_LOOP);
+	while (!s_stop_vr_thread)
+	{
+		g_asyc_timewarp_active = g_Config.bAsynchronousTimewarp && g_can_async_timewarp;
+		if (g_asyc_timewarp_active)
+			VR_DrawAsyncTimewarpFrame();
+		else
+			Sleep(1000);
+	}
+	g_asyc_timewarp_active = false;
+	_InterlockedExchange(&vrThreadReady, THREAD_SHUTDOWN);
+
+	// cleanup
+	if (g_hOffscreenRC)
+	{
+		if (!wglMakeCurrent(NULL, NULL))
+			NOTICE_LOG(VR, "Could not release drawing context.");
+		GL_CHECK();
+
+		if (!wglDeleteContext(g_hOffscreenRC))
+			ERROR_LOG(VR, "Attempt to release rendering context failed.");
+		GL_CHECK();
+
+		g_hOffscreenRC = NULL;
+	}
+
+	if (hOffscreenDC && !ReleaseDC(m_offscreen_window_handle, hOffscreenDC))
+	{
+		ERROR_LOG(VR, "Attempt to release device context failed.");
+		hOffscreenDC = NULL;
+	}
+
+	NOTICE_LOG(VR, "[VR Thread] g_video_backend->Shutdown()");
+	
+	NOTICE_LOG(VR, "[VR Thread] Stopping VR Thread");
+
+	_InterlockedExchange(&vrThreadReady, THREAD_END);
 }
 
 }

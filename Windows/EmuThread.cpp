@@ -19,6 +19,7 @@
 #include "Core/System.h"
 #include "Core/Config.h"
 #include "thread/threadutil.h"
+#include "GPU/GLES/VROGL.h"
 
 #include <tchar.h>
 #include <process.h>
@@ -117,6 +118,8 @@ unsigned int WINAPI TheThread(void *)
 
 	host->UpdateUI();
 
+	OGL::VRThread_Start();
+
 	std::string error_string;
 	if (!host->InitGraphics(&error_string)) {
 		I18NCategory *err = GetI18NCategory("Error");
@@ -153,6 +156,8 @@ unsigned int WINAPI TheThread(void *)
 		// No safe way out without graphics.
 		ExitProcess(1);
 	}
+	OGL::VR_StartGUI(PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
+	OGL::VRThread_StartLoop();
 
 	NativeInitGraphics();
 	NativeResized();
@@ -185,6 +190,8 @@ unsigned int WINAPI TheThread(void *)
 shutdown:
 	_InterlockedExchange(&emuThreadReady, THREAD_SHUTDOWN);
 
+	OGL::VRThread_Stop();
+
 	NativeShutdownGraphics();
 
 	host->ShutdownSound();
@@ -192,6 +199,8 @@ shutdown:
 	NativeShutdown();
 	host = oldHost;
 	host->ShutdownGraphics();
+
+	OGL::VR_StopGUI();
 	
 	_InterlockedExchange(&emuThreadReady, THREAD_END);
 

@@ -45,6 +45,7 @@
 #include "GPU/Common/VR.h"
 #include "GPU/GLES/FBO.h"
 #include "GPU/GLES/Framebuffer.h"
+#include "GPU/GLES/VROGL.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceDisplay.h"
 #include "Core/Debugger/SymbolMap.h"
@@ -1098,6 +1099,7 @@ static void DrawFPS(DrawBuffer *draw2d, const Bounds &bounds) {
 }
 
 void EmuScreen::render() {
+	GL_CHECK();
 	if (invalid_) {
 		// It's possible this might be set outside PSP_RunLoopFor().
 		// In this case, we need to double check it here.
@@ -1118,6 +1120,7 @@ void EmuScreen::render() {
 
 	// Reapply the graphics state of the PSP
 	ReapplyGfxState();
+	GL_CHECK();
 
 	// We just run the CPU until we get to vblank. This will quickly sync up pretty nicely.
 	// The actual number of cycles doesn't matter so much here as we will break due to CORE_NEXTFRAME, most of the time hopefully...
@@ -1142,10 +1145,16 @@ void EmuScreen::render() {
 		fbo_unbind();
 
 	if (!osm.IsEmpty() || g_Config.bShowDebugStats || g_Config.iShowFPSCounter || g_Config.bShowTouchControls || g_Config.bShowDeveloperMenu || g_Config.bShowAudioDebug || saveStatePreview_->GetVisibility() != UI::V_GONE || g_Config.bShowFrameProfiler) {
+		if (g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
+			GL_CHECK();
+			OGL::VR_BeginGUI();
+		}
 		Thin3DContext *thin3d = screenManager()->getThin3DContext();
+		GL_CHECK();
 
 		// This sets up some important states but not the viewport.
 		screenManager()->getUIContext()->Begin();
+		GL_CHECK();
 
 		T3DViewport viewport;
 		viewport.TopLeftX = 0;
@@ -1155,40 +1164,50 @@ void EmuScreen::render() {
 		viewport.MaxDepth = 1.0;
 		viewport.MinDepth = 0.0;
 		thin3d->SetViewports(1, &viewport);
+		GL_CHECK();
 
 		DrawBuffer *draw2d = screenManager()->getUIContext()->Draw();
+		GL_CHECK();
 
 		if (root_) {
 			UI::LayoutViewHierarchy(*screenManager()->getUIContext(), root_);
 			root_->Draw(*screenManager()->getUIContext());
+			GL_CHECK();
 		}
 
 		if (g_Config.bShowDebugStats) {
 			DrawDebugStats(draw2d);
+			GL_CHECK();
 		}
 
 		if (g_Config.bShowAudioDebug) {
 			DrawAudioDebugStats(draw2d);
+			GL_CHECK();
 		}
 
 		if (g_Config.iShowFPSCounter) {
 			DrawFPS(draw2d, screenManager()->getUIContext()->GetBounds());
+			GL_CHECK();
 		}
 
 #ifdef USE_PROFILER
 		if (g_Config.bShowFrameProfiler) {
 			DrawProfile(*screenManager()->getUIContext());
+			GL_CHECK();
 		}
 #endif
 
 		screenManager()->getUIContext()->End();
+		GL_CHECK();
 	}
 
 	// We have no use for backbuffer depth or stencil, so let tiled renderers discard them after tiling.
 	if (gl_extensions.GLES3 && glInvalidateFramebuffer != nullptr) {
 		GLenum attachments[2] = { GL_DEPTH, GL_STENCIL };
 		glInvalidateFramebuffer(GL_FRAMEBUFFER, 2, attachments);
-	} else if (!gl_extensions.GLES3) {
+		GL_CHECK();
+	}
+	else if (!gl_extensions.GLES3) {
 #ifdef USING_GLES2
 		// Tiled renderers like PowerVR should benefit greatly from this. However - seems I can't call it?
 		bool hasDiscard = gl_extensions.EXT_discard_framebuffer;  // TODO

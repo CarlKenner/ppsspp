@@ -559,6 +559,7 @@ static ConfigSetting vrSettings[] = {
 	ReportedConfigSetting("Overdrive", &g_Config.bOverdrive, true),
 	ReportedConfigSetting("HQDistortion", &g_Config.bHqDistortion, false),
 	ReportedConfigSetting("DisableNearClipping", &g_Config.bDisableNearClipping, true),
+	ReportedConfigSetting("AsynchronousTimewarp", &g_Config.bAsynchronousTimewarp, false),
 	ReportedConfigSetting("ShowHands", &g_Config.bShowHands, false),
 	ReportedConfigSetting("ShowFeet", &g_Config.bShowFeet, false),
 	ReportedConfigSetting("ShowController", &g_Config.bShowController, false),

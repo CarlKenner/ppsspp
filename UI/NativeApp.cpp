@@ -79,6 +79,7 @@
 #include "Core/HLE/sceCtrl.h"
 #include "Core/Util/GameManager.h"
 #include "Core/Util/AudioFormat.h"
+#include "GPU/GLES/VROGL.h"
 
 #include "ui_atlas.h"
 #include "EmuScreen.h"
@@ -663,9 +664,15 @@ void DrawDownloadsOverlay(UIContext &dc) {
 }
 
 void NativeRender() {
+	GL_CHECK();
 	g_GameManager.Update();
+	GL_CHECK();
 
+	if (GetUIState() != UISTATE_INGAME && g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
+		OGL::VR_BeginGUI();
+	}
 	thin3d->Clear(T3DClear::COLOR | T3DClear::DEPTH | T3DClear::STENCIL, 0xFF000000, 0.0f, 0);
+	GL_CHECK(); // error 1286 (0506)
 
 	T3DViewport viewport;
 	viewport.TopLeftX = 0;
@@ -675,7 +682,9 @@ void NativeRender() {
 	viewport.MaxDepth = 1.0;
 	viewport.MinDepth = 0.0;
 	thin3d->SetViewports(1, &viewport);
+	GL_CHECK();
 	thin3d->SetTargetSize(pixel_xres, pixel_yres);
+	GL_CHECK();
 
 	float xres = dp_xres;
 	float yres = dp_yres;
@@ -689,20 +698,27 @@ void NativeRender() {
 		ortho = translation * ortho;
 	} else {
 		ortho.setOrtho(0.0f, xres, yres, 0.0f, -1.0f, 1.0f);
+		GL_CHECK();
 	}
 
 	ui_draw2d.SetDrawMatrix(ortho);
+	GL_CHECK();
 	ui_draw2d_front.SetDrawMatrix(ortho);
+	GL_CHECK();
 
 	screenManager->render();
+	GL_CHECK(); // error 1286 (0506)
 	if (screenManager->getUIContext()->Text()) {
 		screenManager->getUIContext()->Text()->OncePerFrame();
+		GL_CHECK();
 	}
 
 	DrawDownloadsOverlay(*screenManager->getUIContext());
+	GL_CHECK();
 
 	if (g_TakeScreenshot) {
 		TakeScreenshot();
+		GL_CHECK();
 	}
 
 	if (resized) {
@@ -712,6 +728,9 @@ void NativeRender() {
 			D3D9_Resize(0);
 #endif
 		}
+	}
+	if (g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
+		OGL::VR_EndGUI();
 	}
 }
 
@@ -786,6 +805,16 @@ bool NativeKey(const KeyInput &key) {
 		}
 	}
 #endif
+	if (g_has_hmd) {
+		static std::vector<int> pspKeys;
+		pspKeys.clear();
+		if (KeyMap::KeyToPspButton(key.deviceId, key.keyCode, &pspKeys)) {
+			if (std::find(pspKeys.begin(), pspKeys.end(), VIRTKEY_FREELOOK_RESET) != pspKeys.end()) {
+				VR_RecenterHMD();
+				// don't reset freelook here though, this is just for the menu and while the game is paused
+			}
+		}
+	}
 	g_buttonTracker.Process(key);
 	bool retval = false;
 	if (screenManager)

@@ -10,6 +10,7 @@
 #endif
 
 #include "GPU/Common/VR.h"
+#include "gfx/gl_debug_log.h"
 
 #ifdef HAVE_OCULUSSDK
 #include "OVR_CAPI_GL.h"
@@ -22,10 +23,23 @@ namespace OGL
 void VR_ConfigureHMD();
 void VR_StartFramebuffer(int target_width, int target_height);
 void VR_StopFramebuffer();
+void VR_StartGUI(int target_width, int target_height);
+void VR_StopGUI();
+
 void VR_RenderToEyebuffer(int eye);
+void VR_RenderToGUI();
 void VR_BeginFrame();
-void VR_PresentHMDFrame();
+void VR_BeginGUI();
+void VR_EndGUI();
+void VR_PresentHMDFrame(bool valid);
 void VR_DrawTimewarpFrame();
 void VR_DrawAsyncTimewarpFrame();
 
+void VRThread_Start();
+void VRThread_StartLoop();
+void VRThread_Stop();
+bool VRThread_Ready();
+
+extern HGLRC g_hOffscreenRC;
+extern bool vr_frame_valid;
 }
