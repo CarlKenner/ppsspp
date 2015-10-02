@@ -631,6 +631,7 @@ static ConfigSetting vrGameSettings[] = {
 	ReportedConfigSetting("DontClearScreen", &g_Config.bDontClearScreen, false, true, true),
 	ReportedConfigSetting("CanReadCameraAngles", &g_Config.bCanReadCameraAngles, false, true, true),
 	ReportedConfigSetting("DetectSkybox", &g_Config.bDetectSkybox, false, true, true),
+	ReportedConfigSetting("DontDrawScreenSpace", &g_Config.bDontDrawScreenSpace, true, true, true),
 	ConfigSetting("HudFullscreen", &g_Config.bHudFullscreen, false),
 	ConfigSetting("SelectedLayer", &g_Config.iSelectedLayer, -1),
 	ConfigSetting("FlashState", &g_Config.iFlashState, 0),

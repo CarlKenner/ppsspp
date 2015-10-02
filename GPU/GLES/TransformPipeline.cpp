@@ -580,6 +580,9 @@ void TransformDrawEngine::FreeBuffer(GLuint buf) {
 
 void TransformDrawEngine::DoFlush() {
 	PROFILE_THIS_SCOPE("flush");
+
+	bool DontDraw = false;
+
 	gpuStats.numFlushes++;
 	gpuStats.numTrackedVertexArrays = (int)vai_.size();
 
@@ -771,16 +774,22 @@ rotateVBO:
 			gstate_c.vertexFullAlpha = gstate_c.vertexFullAlpha && ((hasColor && (gstate.materialupdate & 1)) || gstate.getMaterialAmbientA() == 255) && (!gstate.isLightingEnabled() || gstate.getAmbientA() == 255);
 		}
 
+		if (textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+			DontDraw = g_Config.bDontDrawScreenSpace;
+		}
 		ApplyDrawStateLate();
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
 		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_);
 		SetupDecFmtForDraw(program, dec_->GetDecVtxFmt(), vbo ? 0 : decoded);
-		if (g_Config.bHudOnTop)
-			ApplyDepthState(m_layer_on_top);
-		if (useElements) {
-			glDrawElements(glprim[prim], vertexCount, GL_UNSIGNED_SHORT, ebo ? 0 : (GLvoid*)decIndex);
-		} else {
-			glDrawArrays(glprim[prim], 0, vertexCount);
+		if (!DontDraw) {
+			if (g_Config.bHudOnTop)
+				ApplyDepthState(m_layer_on_top);
+			if (useElements) {
+				glDrawElements(glprim[prim], vertexCount, GL_UNSIGNED_SHORT, ebo ? 0 : (GLvoid*)decIndex);
+			}
+			else {
+				glDrawArrays(glprim[prim], 0, vertexCount);
+			}
 		}
 	} else {
 		DecodeVerts();
@@ -809,6 +818,9 @@ rotateVBO:
 			prim, decoded, indexGen.VertexCount(),
 			dec_->VertexType(), inds, GE_VTYPE_IDX_16BIT, dec_->GetDecVtxFmt(),
 			maxIndex, framebufferManager_, textureCache_, transformed, transformedExpanded, drawBuffer, numTrans, drawIndexed, &result, 1.0);
+		if (textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+			DontDraw = g_Config.bDontDrawScreenSpace;
+		}
 		ApplyDrawStateLate();
 
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
@@ -828,12 +840,15 @@ rotateVBO:
 			if (attrMask & (1 << ATTR_TEXCOORD)) glVertexAttribPointer(ATTR_TEXCOORD, doTextureProjection ? 3 : 2, GL_FLOAT, GL_FALSE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, u));
 			if (attrMask & (1 << ATTR_COLOR0)) glVertexAttribPointer(ATTR_COLOR0, 4, GL_UNSIGNED_BYTE, GL_TRUE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, color0));
 			if (attrMask & (1 << ATTR_COLOR1)) glVertexAttribPointer(ATTR_COLOR1, 3, GL_UNSIGNED_BYTE, GL_TRUE, vertexSize, ((uint8_t*)drawBuffer) + offsetof(TransformedVertex, color1));
-			if (g_Config.bHudOnTop)
-				ApplyDepthState(m_layer_on_top);
-			if (drawIndexed) {
-				glDrawElements(glprim[prim], numTrans, GL_UNSIGNED_SHORT, inds);
-			} else {
-				glDrawArrays(glprim[prim], 0, numTrans);
+			if (!DontDraw) {
+				if (g_Config.bHudOnTop)
+					ApplyDepthState(m_layer_on_top);
+				if (drawIndexed) {
+					glDrawElements(glprim[prim], numTrans, GL_UNSIGNED_SHORT, inds);
+				}
+				else {
+					glDrawArrays(glprim[prim], 0, numTrans);
+				}
 			}
 		} else if (result.action == SW_CLEAR) {
 			u32 clearColor = result.color;

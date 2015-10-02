@@ -912,6 +912,7 @@ void TransformDrawEngine::ApplyDrawStateLate() {
 
 		textureCache_->ApplyTexture();
 
+		// this is only for blending in the shader
 		if (fboTexNeedBind_) {
 			framebufferManager_->BindFramebufferColor(GL_TEXTURE1, gstate.getFrameBufRawAddress(), nullptr, BINDFBCOLOR_MAY_COPY_WITH_UV);
 			framebufferManager_->RebindFramebuffer();

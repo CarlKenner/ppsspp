@@ -113,10 +113,10 @@ public:
 		bool Matches(u16 dim2, u8 format2, u8 maxLevel2);
 	};
 
+	TexCacheEntry *nextTexture_;
+
 protected:
 	void GetSamplingParams(int &minFilt, int &magFilt, bool &sClamp, bool &tClamp, float &lodBias, u8 maxLevel);
-
-	TexCacheEntry *nextTexture_;
 };
 
 inline bool TextureCacheCommon::TexCacheEntry::Matches(u16 dim2, u8 format2, u8 maxLevel2) {
