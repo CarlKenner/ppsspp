@@ -95,7 +95,8 @@ struct TextureBuffer
 	ovrSwapTextureSet* TextureSet;
 	GLuint        texId;
 	GLuint        fboId[8];
-	ovrSizei          texSize;
+	ovrSizei      texSize;
+ 	ovrPosef      eyePose[8];
 
 	TextureBuffer(ovrHmd hmd, bool rendertarget, bool displayableOnHmd, OVR::Sizei size, int mipLevels, unsigned char * data, int sampleCount)
 	{
@@ -212,6 +213,7 @@ struct TextureBuffer
 		ovrGLTexture* tex = (ovrGLTexture*)&TextureSet->Textures[WriteIndex];
 		GL_CHECK();
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboId[WriteIndex]);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex->OGL.TexId, 0);
 		GL_CHECK();
 		glViewport(0, 0, texSize.w, texSize.h);
 		GL_CHECK();
@@ -225,13 +227,10 @@ struct TextureBuffer
 
 	void UnsetRenderSurface()
 	{
-		GL_CHECK();
-		//glBindFramebuffer(GL_FRAMEBUFFER, fboId);
-		//GL_CHECK();
-		//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-		//GL_CHECK();
-		//glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-		//GL_CHECK();
+		int WriteIndex = TextureSet->CurrentIndex;
+		glBindFramebuffer(GL_FRAMEBUFFER, fboId[WriteIndex]);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
 	}
 };
 
@@ -812,9 +811,9 @@ void VR_StopFramebuffer()
 void VR_BeginFrame()
 {
 	GL_CHECK();
-	//glFlush();
+	glFlush();
 	//GL_CHECK();
-	//glFinish();
+	glFinish();
 	//GL_CHECK();
 	if (g_Config.bDisableNearClipping)
 		glEnable(GL_DEPTH_CLAMP);
@@ -836,6 +835,7 @@ void VR_BeginFrame()
 			{
 				// Increment to use next texture, just before writing
 				eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
+				eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
 			}
 		}
 #else
@@ -905,6 +905,7 @@ void VR_RenderToGUI()
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
+		guiRenderTexture->UnsetRenderSurface();
 		guiRenderTexture->SetAndClearRenderSurface();
 	}
 	else
@@ -920,13 +921,13 @@ void VR_RenderToEyebuffer(int eye)
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
-		eyeRenderTexture[eye]->UnsetRenderSurface();
-		GL_CHECK();
-		// Switch to eye render target
 		eyeRenderTexture[eye]->SetAndClearRenderSurface();
 		GL_CHECK();
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		GL_CHECK();
+		GLenum fbStatus = 0;
+		fbStatus = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+		vr_frame_valid = fbStatus == GL_FRAMEBUFFER_COMPLETE;
 	}
 #endif
 #if (defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 5)
@@ -958,10 +959,11 @@ void PresentFrameSDK6()
 				ld.Header.Type = ovrLayerType_EyeFov;
 				for (int eye = 0; eye < 2; eye++)
 				{
+					eyeRenderTexture[eye]->UnsetRenderSurface();
 					ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureSet;
 					ld.Viewport[eye] = eyeRenderViewport[eye];
 					ld.Fov[eye] = g_eye_fov[eye];
-					ld.RenderPose[eye] = g_front_eye_poses[eye];
+					ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex];
 				}
 				LayerList[count-1] = &ld.Header;
 			}
@@ -992,6 +994,8 @@ void PresentFrameSDK6()
 
 void VR_DoPresentHMDFrame(bool valid)
 {
+	if (g_asyc_timewarp_active)
+		return;
 	GL_CHECK();
 #ifdef HAVE_OPENVR
 	if (m_pCompositor)
@@ -1074,15 +1078,17 @@ void VR_PresentHMDFrame(bool valid)
 	{
 		vr_drew_frame = true;
 		glFinish();
+		//Sleep(8);
 		lock_guard guard(AsyncTimewarpLock);
-		g_front_eye_poses[0] = g_eye_poses[0];
-		g_front_eye_poses[1] = g_eye_poses[1];
 		g_new_tracking_frame = true;
 		if (g_asyc_timewarp_active) {
 			for (int eye = 0; eye < 2; eye++)
 			{
-				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet)
+				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet) {
 					eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
+					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+				}
+				eyeRenderTexture[eye]->UnsetRenderSurface();
 			}
 			has_gui = false;
 			return;
@@ -1148,7 +1154,7 @@ void VR_DrawTimewarpFrame()
 			ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureSet;
 			ld.Viewport[eye] = eyeRenderViewport[eye];
 			ld.Fov[eye] = g_eye_fov[eye];
-			ld.RenderPose[eye] = g_front_eye_poses[eye];
+			ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex];
 		}
 		ovrLayerHeader* layers = &ld.Header;
 		ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);

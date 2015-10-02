@@ -1431,13 +1431,13 @@ void FramebufferManager::CopyDisplayToOutput() {
 				GL_CHECK();
 				// Left Eye Image
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 0);
-				GLenum err = glGetError();
-				OGL::vr_frame_valid = (err == GL_NO_ERROR);
+				//GLenum err = glGetError();
+				//OGL::vr_frame_valid = (err == GL_NO_ERROR);
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
-				err = glGetError();
-				OGL::vr_frame_valid = OGL::vr_frame_valid && (err == GL_NO_ERROR);
+				//err = glGetError();
+				//OGL::vr_frame_valid = OGL::vr_frame_valid && (err == GL_NO_ERROR);
 				GL_CHECK();
 			}
 			else if (cardboardSettings.enabled) {

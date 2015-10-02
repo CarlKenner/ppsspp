@@ -7,7 +7,7 @@
 void gl_log_enable();
 
 #if !defined(USING_GLES2)
-#define DEBUG_OPENGL
+//#define DEBUG_OPENGL
 #endif
 
 #if defined(DEBUG_OPENGL)
