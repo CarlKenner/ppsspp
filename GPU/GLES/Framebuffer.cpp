@@ -1284,6 +1284,9 @@ void FramebufferManager::CopyDisplayToOutput() {
 	GL_CHECK();
 	fbo_unbind();
 	GL_CHECK();
+	//glFlush();
+	//glFinish();
+	//lock_guard guard(OGL::AsyncTimewarpLock);
 	if (g_has_hmd)
 	{
 		if (g_first_rift_frame && g_has_hmd)

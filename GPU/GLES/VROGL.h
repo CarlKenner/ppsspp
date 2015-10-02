@@ -10,6 +10,7 @@
 #endif
 
 #include "GPU/Common/VR.h"
+#include "base/mutex.h"
 #include "gfx/gl_debug_log.h"
 
 #ifdef HAVE_OCULUSSDK
@@ -42,4 +43,5 @@ bool VRThread_Ready();
 
 extern HGLRC g_hOffscreenRC;
 extern bool vr_frame_valid;
+extern recursive_mutex AsyncTimewarpLock;
 }

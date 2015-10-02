@@ -68,6 +68,8 @@ ovrGLTexture g_eye_texture[2];
 namespace OGL
 {
 
+void VR_DoPresentHMDFrame(bool valid);
+
 recursive_mutex vrThreadLock;
 recursive_mutex AsyncTimewarpLock;
 volatile long vrThreadReady;
@@ -890,7 +892,7 @@ void VR_EndGUI()
 			guiRenderTexture->TextureSet->CurrentIndex = (guiRenderTexture->TextureSet->CurrentIndex + 1) % guiRenderTexture->TextureSet->TextureCount;
 		}
 		if (!vr_drew_frame) {
-			VR_PresentHMDFrame(true);
+			VR_DoPresentHMDFrame(true);
 		}
 		vr_drew_frame = false;
 	}
@@ -988,33 +990,8 @@ void PresentFrameSDK6()
 #endif 
 }
 
-void VR_PresentHMDFrame(bool valid)
+void VR_DoPresentHMDFrame(bool valid)
 {
-	GL_CHECK();
-
-	if (valid)
-	{
-		vr_drew_frame = true;
-		lock_guard guard(AsyncTimewarpLock);
-		glFinish();
-		g_front_eye_poses[0] = g_eye_poses[0];
-		g_front_eye_poses[1] = g_eye_poses[1];
-		g_new_tracking_frame = true;
-		if (g_asyc_timewarp_active) {
-			for (int eye = 0; eye < 2; eye++)
-			{
-				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet)
-					eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
-			}
-			has_gui = false;
-			return;
-		}
-	}
-	else
-	{
-		g_new_tracking_frame = true;
-	}
-
 	GL_CHECK();
 #ifdef HAVE_OPENVR
 	if (m_pCompositor)
@@ -1090,6 +1067,35 @@ void VR_PresentHMDFrame(bool valid)
 #endif
 	has_gui = false;
 }
+
+void VR_PresentHMDFrame(bool valid)
+{
+	if (valid)
+	{
+		vr_drew_frame = true;
+		glFinish();
+		lock_guard guard(AsyncTimewarpLock);
+		g_front_eye_poses[0] = g_eye_poses[0];
+		g_front_eye_poses[1] = g_eye_poses[1];
+		g_new_tracking_frame = true;
+		if (g_asyc_timewarp_active) {
+			for (int eye = 0; eye < 2; eye++)
+			{
+				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet)
+					eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
+			}
+			has_gui = false;
+			return;
+		}
+	}
+	else
+	{
+		g_new_tracking_frame = true;
+	}
+
+	VR_DoPresentHMDFrame(valid);
+}
+
 
 void VR_DrawTimewarpFrame()
 {
