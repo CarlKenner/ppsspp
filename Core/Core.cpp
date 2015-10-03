@@ -30,6 +30,7 @@
 #include "Core/SaveState.h"
 #include "Core/System.h"
 #include "Core/MIPS/MIPS.h"
+#include "GPU/Common/VR.h"
 
 #ifdef _WIN32
 #ifndef _XBOX
@@ -195,6 +196,8 @@ void Core_RunLoop() {
 		time_update();
 		double diffTime = time_now_d() - startTime;
 		int sleepTime = (int)(1000.0 / 60.0) - (int)(diffTime * 1000.0);
+		if (g_has_hmd)
+			sleepTime = (int)(1000.0 / 75.0) - (int)(diffTime * 1000.0);
 		if (sleepTime > 0)
 			Sleep(sleepTime);
 		if (!windowHidden) {
