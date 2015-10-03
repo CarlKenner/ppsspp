@@ -89,6 +89,7 @@
 #include "GPU/GLES/TransformPipeline.h"
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/GLES/GLES_GPU.h"
+#include "GPU/Common/VR.h"
 
 extern const GLuint glprim[8] = {
 	GL_POINTS,
@@ -774,7 +775,7 @@ rotateVBO:
 			gstate_c.vertexFullAlpha = gstate_c.vertexFullAlpha && ((hasColor && (gstate.materialupdate & 1)) || gstate.getMaterialAmbientA() == 255) && (!gstate.isLightingEnabled() || gstate.getAmbientA() == 255);
 		}
 
-		if (textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+		if (g_has_hmd && g_Config.bEnableVR && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
 			DontDraw = g_Config.bDontDrawScreenSpace;
 		}
 		ApplyDrawStateLate();
@@ -818,7 +819,7 @@ rotateVBO:
 			prim, decoded, indexGen.VertexCount(),
 			dec_->VertexType(), inds, GE_VTYPE_IDX_16BIT, dec_->GetDecVtxFmt(),
 			maxIndex, framebufferManager_, textureCache_, transformed, transformedExpanded, drawBuffer, numTrans, drawIndexed, &result, 1.0);
-		if (textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+		if (g_has_hmd && g_Config.bEnableVR && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
 			DontDraw = g_Config.bDontDrawScreenSpace;
 		}
 		ApplyDrawStateLate();
