@@ -98,7 +98,7 @@ public:
 		: disc_total(0), disc_number(0), region(-1), fileType(FILETYPE_UNKNOWN), paramSFOLoaded(false),
 		  hasConfig(false), hasDefaults(false), stars(0), iconTexture(nullptr), pic0Texture(nullptr), pic1Texture(nullptr), wantFlags(0),
 		  lastAccessedTime(0.0), timeIconWasLoaded(0.0), timePic0WasLoaded(0.0), timePic1WasLoaded(0.0),
-		  gameSize(0), saveDataSize(0), installDataSize(0), fileLoader(nullptr) {}
+		  gameSize(0), saveDataSize(0), installDataSize(0), pending(true), fileLoader(nullptr) {}
 	~GameInfo();
 
 	bool Delete();  // Better be sure what you're doing when calling this.
@@ -166,6 +166,7 @@ public:
 	u64 gameSize;
 	u64 saveDataSize;
 	u64 installDataSize;
+	bool pending;
 
 protected:
 	FileLoader *fileLoader;
@@ -191,6 +192,11 @@ public:
 	void FlushBGs();  // Gets rid of all BG textures. Also gets rid of bg sounds.
 
 	PrioritizedWorkQueue *WorkQueue() { return gameInfoWQ_; }
+
+	void WaitUntilDone(GameInfo *info) {
+		// Hack - should really wait specifically for that item.
+		gameInfoWQ_->WaitUntilDone();
+	}
 
 private:
 	void SetupTexture(GameInfo *info, std::string &textureData, Thin3DContext *thin3d, Thin3DTexture *&tex, double &loadTime);

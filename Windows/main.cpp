@@ -41,6 +41,7 @@
 
 #include "Commctrl.h"
 
+#include "UI/GameInfoCache.h"
 #include "Windows/resource.h"
 
 #include "Windows/MainWindow.h"
@@ -351,6 +352,10 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 
 	CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
+#ifdef _DEBUG
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF|_CRTDBG_LEAK_CHECK_DF);
+#endif
+
 	PROFILE_INIT();
 
 	// FMA3 support in the 2013 CRT is broken on Vista and Windows 7 RTM (fixed in SP1). Just disable it.
@@ -625,12 +630,16 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	if (g_Config.bBruteForcing)
 		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
 	g_Config.Save();
+	g_gameInfoCache.Clear();
+	g_gameInfoCache.Shutdown();
 	ShutdownVR();
 	LogManager::Shutdown();
 
 	if (g_Config.bRestartRequired) {
 		W32Util::ExitAndRestart();
 	}
+
 	CoUninitialize();
+
 	return 0;
 }
