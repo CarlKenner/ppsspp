@@ -17,12 +17,23 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <Shobjidl.h>
+#include <string>
+#include "Common/CommonWindows.h"
 #include "GPU/Common/VR920.h"
+#include "Windows/W32Util/Misc.h"
 #endif
 
 #include "Common/Common.h"
 #include "Core/Config.h"
+#include "Core/CoreParameter.h"
+#include "Core/Debugger/SymbolMap.h"
+#include "Core/MemMap.h"
+#include "Core/MIPS/JitCommon/NativeJit.h"
+#include "Core/SaveState.h"
+#include "Core/System.h"
 #include "GPU/Common/VR.h"
+#include "GPU/GPU.h"
 
 #ifdef HAVE_OPENVR
 #include <openvr.h>
@@ -976,5 +987,208 @@ void ResetView()
 
 	bFreeLookChanged = false;
 	bProjectionChanged = true;
+}
+
+// Bruteforce culling codes by checking every function in the game to see if disabling it changes how much is drawn
+
+extern bool g_TakeScreenshot;
+extern char g_ScreenshotName[2048];
+extern int LoadCountThisSession;
+bool BruteForceInitialised = false;
+std::vector<u32> function_addrs;
+std::vector<std::string> function_names;
+
+void VR_BruteForceResume()
+{
+	g_Config.bEnableVR = false;
+	g_Config.bHardwareTransform = true;
+	g_Config.iAnisotropyLevel = 0;
+	g_Config.iTexScalingLevel = 0;
+	g_Config.iInternalResolution = 1;
+	g_Config.bEnableSound = false;
+	g_Config.bVSync = false;
+	g_Config.bEnableLogging = false;
+	PSP_CoreParameter().unthrottle = true;
+	for (int i = 0; i < 3; ++i)
+		s_fViewTranslationVector[i] = g_Config.BruteForceFreeLook[i];
+
+	int count = 0;
+	for (auto it = symbolMap.activeFunctions.begin(), end = symbolMap.activeFunctions.end(); it != end; ++it) {
+		const SymbolMap::FunctionEntry& entry = it->second;
+		const char* name = symbolMap.GetLabelName(it->first);
+		char temp[2048];
+		if (name != NULL)
+			sprintf(temp, "%s", name);
+		else
+			sprintf(temp, "0x%08X", it->first);
+		if (strncmp(temp, "sce", 3) && strncmp(temp, "zz_sce", 6) && strncmp(temp, "zz__sce", 7) && strncmp(temp, "zz___sce", 7) && strncmp(temp, "_malloc", 7) && strncmp(temp, "str", 3)) {
+			NOTICE_LOG(VR, "Func[%d]: %s at %8X", count, temp, it->first);
+			function_names.push_back(temp);
+			function_addrs.push_back(it->first);
+			++count;
+		}
+	}
+	NOTICE_LOG(VR, "Func Count = %d", count);
+	g_Config.bEnableLogging = false;
+	g_Config.BruteForceFunctionCount = count;
+	BruteForceInitialised = true;
+}
+
+void VR_BruteForceStart()
+{
+	BruteForceInitialised = false;
+	if (g_Config.bBruteForcing)
+	{
+		VR_BruteForceCancel();
+		return;
+	}
+		
+	for (int i = 0; i < 3; ++i)
+		g_Config.BruteForceFreeLook[i] = s_fViewTranslationVector[i];
+	g_Config.BruteForce_bEnableVR = g_Config.bEnableVR;
+	g_Config.BruteForce_bEnableLogging = g_Config.bEnableLogging;
+	g_Config.BruteForce_bVSync = g_Config.bVSync;
+	g_Config.BruteForce_bHardwareTransform = g_Config.bHardwareTransform;
+	g_Config.BruteForce_bEnableSound = g_Config.bEnableSound;
+	g_Config.BruteForce_iInternalResolution = g_Config.iInternalResolution;
+	g_Config.BruteForce_iAnisotropyLevel = g_Config.iAnisotropyLevel;
+	g_Config.BruteForce_iTexScalingLevel = g_Config.iTexScalingLevel;
+	g_Config.sBruteForceFileName = PSP_CoreParameter().fileToStart;
+	VR_BruteForceResume();
+
+	g_Config.BruteForceFramesToRunFor = 4;
+	SaveState::SaveSlot(PSP_CoreParameter().fileToStart, SaveState::SAVESTATESLOTS, nullptr);
+	g_Config.BruteForceCurrentFunctionIndex = -2;
+	g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
+	g_Config.bBruteForcing = true;
+	g_Config.Save();
+}
+
+void VR_BruteForceRestoreSettings()
+{
+	g_Config.bBruteForcing = false;
+	g_Config.bEnableVR = g_Config.BruteForce_bEnableVR;
+	g_Config.bEnableLogging = g_Config.BruteForce_bEnableLogging;
+	g_Config.bVSync = g_Config.BruteForce_bVSync;
+	g_Config.bHardwareTransform = g_Config.BruteForce_bHardwareTransform;
+	g_Config.bEnableSound = g_Config.BruteForce_bEnableSound;
+	g_Config.iInternalResolution = g_Config.BruteForce_iInternalResolution;
+	g_Config.iAnisotropyLevel = g_Config.BruteForce_iAnisotropyLevel;
+	g_Config.iTexScalingLevel = g_Config.BruteForce_iTexScalingLevel;
+	PSP_CoreParameter().unthrottle = false;
+	g_Config.Save();
+}
+
+void VR_BruteForceCancel()
+{
+	VR_BruteForceRestoreSettings();
+}
+
+void VR_BruteForceFinish()
+{
+	VR_BruteForceRestoreSettings();
+	ExitProcess(0);
+}
+
+void CPU_Shutdown();
+
+void VR_BruteForceBeginFrame()
+{
+	if (!g_Config.bBruteForcing)
+		return;
+	try {
+		bFreeLookChanged = true;
+		SaveState::Process();
+		if (g_Config.BruteForceFramesLeft == 0) {
+			++g_Config.BruteForceCurrentFunctionIndex;
+			gpuStats.numVertsSubmitted = 0;
+			SaveState::LoadSlot(PSP_CoreParameter().fileToStart, SaveState::SAVESTATESLOTS, nullptr);
+			SaveState::Process();
+			if (g_Config.BruteForceCurrentFunctionIndex == g_Config.BruteForceFunctionCount) {
+				// we already finished bruteforcing
+				VR_BruteForceFinish();
+				return;
+			} else if (LoadCountThisSession > 1000) {
+				// There's a memory leak with loading save states. 
+				// We start to run out of memory after about 4000, so restart PPSSPP every 1000 loads.
+				g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
+				g_Config.Save();
+				W32Util::ExitAndRestart();
+				return;
+			}
+			else if (!BruteForceInitialised) {
+				VR_BruteForceResume();
+			}
+
+			if (g_Config.BruteForceCurrentFunctionIndex >= 0)
+			{
+				// PatchFunction(BruteForceCurrentFunctionIndex, BruteForceReturnCode);
+				Memory::Write_U32(function_addrs[g_Config.BruteForceCurrentFunctionIndex],     0x03E00008); // jr ra    // return
+				Memory::Write_U32(function_addrs[g_Config.BruteForceCurrentFunctionIndex] + 4, 0x20020000);//0x00001025); // li v0, 0 // result = 0
+				if (MIPSComp::jit) {
+					MIPSComp::jit->ClearCache();
+				}
+			}
+			g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
+		}
+		else if (!BruteForceInitialised) {
+			VR_BruteForceResume();
+		}
+	}
+	catch (std::bad_alloc) {
+		// we ran out of memory, so it's safe to test this function again
+		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
+		// give ourselves some breathing room by freeing memory
+		bool temp = g_Config.bAutoSaveSymbolMap;
+		g_Config.bAutoSaveSymbolMap = false;
+		try {
+			CPU_Shutdown();
+		} catch (...) {}
+		g_Config.bAutoSaveSymbolMap = temp;
+		try {
+			GPU_Shutdown();
+		} catch (...) {}
+		try {
+			g_Config.Save();
+		} catch (...) {
+			// this could actually be a problem...
+			// we might end up starting again from scratch
+		}
+		W32Util::ExitAndRestart();
+	}
+	catch (...) {
+		// we crashed, so skip this function when we restart
+		g_Config.BruteForceFramesLeft = 0;
+		g_Config.Save();
+		W32Util::ExitAndRestart();
+	}
+}
+
+void VR_BruteForceEndFrame()
+{
+	if (!g_Config.bBruteForcing)
+		return;
+	--g_Config.BruteForceFramesLeft;
+	// if end of function
+	if (g_Config.BruteForceFramesLeft == 0 && g_Config.BruteForceCurrentFunctionIndex != -2) {
+		// count how many draw calls
+		bool isDifferent = false;
+		if (g_Config.BruteForceCurrentFunctionIndex == -1)
+		{
+			g_Config.BruteForceOriginalVertexCount = gpuStats.numVertsSubmitted;
+			isDifferent = true;
+		}
+		else {
+			isDifferent = (gpuStats.numVertsSubmitted != g_Config.BruteForceOriginalVertexCount);
+		}
+		if (isDifferent) {
+			if (g_Config.BruteForceCurrentFunctionIndex<0)
+				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "000 original %d", gpuStats.numVertsSubmitted);
+			else
+				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "%d %8x %s %d", g_Config.BruteForceCurrentFunctionIndex, function_addrs[g_Config.BruteForceCurrentFunctionIndex], function_names[g_Config.BruteForceCurrentFunctionIndex].c_str(), gpuStats.numVertsSubmitted);
+			g_TakeScreenshot = true;
+		}
+	}
+
 }
 

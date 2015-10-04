@@ -343,6 +343,8 @@ std::vector<std::wstring> GetWideCmdLine() {
 	return wideArgs;
 }
 
+extern std::string boot_filename;
+
 int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLine, int iCmdShow)
 {
 	setCurrentThreadName("Main");
@@ -503,6 +505,10 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 #ifdef _DEBUG
 	g_Config.bEnableLogging = true;
 #endif
+	if (g_Config.bBruteForcing) {
+		boot_filename = g_Config.sBruteForceFileName;
+		PSP_CoreParameter().unthrottle = true;
+	}
 
 	LogManager::Init();
 	// Consider at least the following cases before changing this code:
@@ -616,7 +622,8 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		// For now, turn off software rendering too, similar to the command-line.
 		g_Config.bSoftwareRendering = false;
 	}
-
+	if (g_Config.bBruteForcing)
+		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
 	g_Config.Save();
 	ShutdownVR();
 	LogManager::Shutdown();

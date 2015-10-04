@@ -44,8 +44,11 @@
 #include "GPU/GPUState.h"
 #include "UI/OnScreenDisplay.h"
 
+int LoadCountThisSession = 0;
+
 namespace SaveState
 {
+
 	struct SaveStart
 	{
 		void DoState(PointerWrap &p);
@@ -502,6 +505,8 @@ namespace SaveState
 		return hasLoadedState;
 	}
 
+	static u8 *MemorySaveState = nullptr;
+
 	void Process()
 	{
 #ifndef MOBILE_DEVICE
@@ -540,8 +545,21 @@ namespace SaveState
 			switch (op.type)
 			{
 			case SAVESTATE_LOAD:
-				INFO_LOG(COMMON, "Loading state from %s", op.filename.c_str());
-				result = CChunkFileReader::Load(op.filename, REVISION, PPSSPP_GIT_VERSION, state, &reason);
+				++LoadCountThisSession;
+				if (g_Config.bBruteForcing) {
+					size_t sz;
+					result = CChunkFileReader::ERROR_NONE;
+					if (!MemorySaveState) {
+						result = CChunkFileReader::LoadFile(op.filename, REVISION, PPSSPP_GIT_VERSION, MemorySaveState, sz, &reason);
+					}
+					if (result == CChunkFileReader::ERROR_NONE) {
+						result = CChunkFileReader::LoadPtr(MemorySaveState, state);
+					}
+				}
+				else {
+					INFO_LOG(COMMON, "Loading state from %s", op.filename.c_str());
+					result = CChunkFileReader::Load(op.filename, REVISION, PPSSPP_GIT_VERSION, state, &reason);
+				}
 				if (result == CChunkFileReader::ERROR_NONE) {
 					osm.Show(sc->T("Loaded State"), 2.0);
 					callbackResult = true;
@@ -558,10 +576,12 @@ namespace SaveState
 				break;
 
 			case SAVESTATE_SAVE:
-				INFO_LOG(COMMON, "Saving state to %s", op.filename.c_str());
+				delete[] MemorySaveState;
+				MemorySaveState = nullptr;
+				if (!g_Config.bBruteForcing)
+					INFO_LOG(COMMON, "Saving state to %s", op.filename.c_str());
 				result = CChunkFileReader::Save(op.filename, REVISION, PPSSPP_GIT_VERSION, state);
 				if (result == CChunkFileReader::ERROR_NONE) {
-
 					osm.Show(sc->T("Saved State"), 2.0);
 					callbackResult = true;
 				} else if (result == CChunkFileReader::ERROR_BROKEN_STATE) {

@@ -22,6 +22,7 @@
 
 #include "Common.h"
 #include "Common/ChunkFile.h"
+#include "Core/Config.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/MIPSInt.h"
 #include "Core/MIPS/MIPSTables.h"
@@ -265,14 +266,15 @@ void MIPSState::DoState(PointerWrap &p) {
 	auto s = p.Section("MIPSState", 1, 3);
 	if (!s)
 		return;
-
-	// Reset the jit if we're loading.
-	if (p.mode == p.MODE_READ)
-		Reset();
-	if (MIPSComp::jit)
-		MIPSComp::jit->DoState(p);
-	else
-		MIPSComp::jit->DoDummyState(p);
+	if (!g_Config.bBruteForcing) {
+		// Reset the jit if we're loading.
+		if (p.mode == p.MODE_READ)
+			Reset();
+		if (MIPSComp::jit)
+			MIPSComp::jit->DoState(p);
+		else
+			MIPSComp::jit->DoDummyState(p);
+	}
 
 	p.DoArray(r, sizeof(r) / sizeof(r[0]));
 	p.DoArray(f, sizeof(f) / sizeof(f[0]));

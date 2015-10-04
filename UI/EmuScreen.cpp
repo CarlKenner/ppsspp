@@ -1081,17 +1081,23 @@ static void DrawFPS(DrawBuffer *draw2d, const Bounds &bounds) {
 	float vps, fps, actual_fps;
 	__DisplayGetFPS(&vps, &fps, &actual_fps);
 	char fpsbuf[256];
-	switch (g_Config.iShowFPSCounter) {
-	case 1:
-		snprintf(fpsbuf, sizeof(fpsbuf), "Speed: %0.1f%%", vps / (59.94f / 100.0f)); break;
-	case 2:
-		snprintf(fpsbuf, sizeof(fpsbuf), "FPS: %0.1f", actual_fps); break;
-	case 3:
-		snprintf(fpsbuf, sizeof(fpsbuf), "%0.0f/%0.0f (%0.1f%%)", actual_fps, fps, vps / (59.94f / 100.0f)); break;
-	default:
-		return;
+	if (g_Config.bBruteForcing) {
+		float speed = actual_fps / g_Config.BruteForceFramesToRunFor;
+		int remaining = (g_Config.BruteForceFunctionCount - g_Config.BruteForceCurrentFunctionIndex) / speed;
+		snprintf(fpsbuf, sizeof(fpsbuf), "%0.0f/s, ETA: %d:%ds, %5.3f%%", speed, remaining / 60, remaining % 60, g_Config.BruteForceCurrentFunctionIndex * 100.0f / g_Config.BruteForceFunctionCount);
 	}
-
+	else {
+		switch (g_Config.iShowFPSCounter) {
+		case 1:
+			snprintf(fpsbuf, sizeof(fpsbuf), "Speed: %0.1f%%", vps / (59.94f / 100.0f)); break;
+		case 2:
+			snprintf(fpsbuf, sizeof(fpsbuf), "FPS: %0.1f", actual_fps); break;
+		case 3:
+			snprintf(fpsbuf, sizeof(fpsbuf), "%0.0f/%0.0f (%0.1f%%)", actual_fps, fps, vps / (59.94f / 100.0f)); break;
+		default:
+			return;
+		}
+	}
 	draw2d->SetFontScale(0.7f, 0.7f);
 	draw2d->DrawText(UBUNTU24, fpsbuf, bounds.x2() - 8, 12, 0xc0000000, ALIGN_TOPRIGHT | FLAG_DYNAMIC_ASCII);
 	draw2d->DrawText(UBUNTU24, fpsbuf, bounds.x2() - 10, 10, 0xFF3fFF3f, ALIGN_TOPRIGHT | FLAG_DYNAMIC_ASCII);
@@ -1175,7 +1181,7 @@ void EmuScreen::render() {
 			GL_CHECK();
 		}
 
-		if (g_Config.bShowDebugStats) {
+		if (g_Config.bShowDebugStats && !g_Config.bBruteForcing) {
 			DrawDebugStats(draw2d);
 			GL_CHECK();
 		}
@@ -1185,7 +1191,7 @@ void EmuScreen::render() {
 			GL_CHECK();
 		}
 
-		if (g_Config.iShowFPSCounter) {
+		if (g_Config.iShowFPSCounter || g_Config.bBruteForcing) {
 			DrawFPS(draw2d, screenManager()->getUIContext()->GetBounds());
 			GL_CHECK();
 		}

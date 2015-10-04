@@ -424,7 +424,9 @@ BEGIN
         MENUITEM "Dump Next Frame to Log",                  ID_DEBUG_DUMPNEXTFRAME
         MENUITEM "Take Screenshot",                         ID_DEBUG_TAKESCREENSHOT
         MENUITEM SEPARATOR
-        MENUITEM "Show Debug Statistics",                   ID_DEBUG_SHOWDEBUGSTATISTICS
+		MENUITEM "Bruteforce Culling Codes",                ID_DEBUG_BRUTEFORCE
+		MENUITEM SEPARATOR
+		MENUITEM "Show Debug Statistics", ID_DEBUG_SHOWDEBUGSTATISTICS
         MENUITEM "Ignore Illegal Reads/Writes",             ID_DEBUG_IGNOREILLEGALREADS
         MENUITEM "Run on Load",                             ID_DEBUG_RUNONLOAD
         MENUITEM SEPARATOR

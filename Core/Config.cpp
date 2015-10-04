@@ -539,6 +539,27 @@ static ConfigSetting graphicsSettings[] = {
 
 static ConfigSetting vrSettings[] = {
 	ConfigSetting("ForceVR", &g_Config.bForceVR, false),
+	ReportedConfigSetting("BruteForcing", &g_Config.bBruteForcing, false),
+	ReportedConfigSetting("BruteForceCurrentFunctionIndex", &g_Config.BruteForceCurrentFunctionIndex, -2),
+	ReportedConfigSetting("BruteForceFramesLeft", &g_Config.BruteForceFramesLeft, 0),
+	ReportedConfigSetting("BruteForceFramesToRunFor", &g_Config.BruteForceFramesToRunFor, 4),
+	ReportedConfigSetting("BruteForceFunctionCount", &g_Config.BruteForceFunctionCount, 0),
+	ReportedConfigSetting("BruteForceOriginalVertexCount", &g_Config.BruteForceOriginalVertexCount, 0),
+	ReportedConfigSetting("BruteForceReturnCode", &g_Config.BruteForceReturnCode, 0),
+	ReportedConfigSetting("BruteForceFileName", &g_Config.sBruteForceFileName, ""),
+
+	ReportedConfigSetting("BruteForceEnableVR", &g_Config.BruteForce_bEnableVR, true),
+	ReportedConfigSetting("BruteForceVSyncInterval", &g_Config.BruteForce_bVSync, false),
+	ReportedConfigSetting("BruteForceHardwareTransform", &g_Config.BruteForce_bHardwareTransform, true),
+	ReportedConfigSetting("BruteForceEnableSound", &g_Config.BruteForce_bEnableSound, true),
+	ReportedConfigSetting("BruteForceEnableLogging", &g_Config.BruteForce_bEnableLogging, true),
+	ReportedConfigSetting("BruteForceInternalResolution", &g_Config.BruteForce_iInternalResolution, &DefaultInternalResolution),
+	ReportedConfigSetting("BruteForceAnisotropyLevel", &g_Config.BruteForce_iAnisotropyLevel, 8),
+	ReportedConfigSetting("BruteForceTexScalingLevel", &g_Config.BruteForce_iTexScalingLevel, 1),
+	ReportedConfigSetting("BruteForceFreeLookX", &g_Config.BruteForceFreeLook[0], 0),
+	ReportedConfigSetting("BruteForceFreeLookY", &g_Config.BruteForceFreeLook[1], 0),
+	ReportedConfigSetting("BruteForceFreeLookZ", &g_Config.BruteForceFreeLook[2], 0),
+
 	ReportedConfigSetting("Scale", &g_Config.fScale, 1.0f),
 	ReportedConfigSetting("FreeLookSensitivity", &g_Config.fFreeLookSensitivity, DEFAULT_VR_FREE_LOOK_SENSITIVITY),
 	ReportedConfigSetting("ScaleFreeLook", &g_Config.bScaleFreeLook, true),

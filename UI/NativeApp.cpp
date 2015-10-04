@@ -131,6 +131,7 @@ bool iosCanUseJit;
 
 // Really need to clean this mess of globals up... but instead I add more :P
 bool g_TakeScreenshot;
+char g_ScreenshotName[2048] = "";
 static bool isOuya;
 static bool resized = false;
 
@@ -455,7 +456,7 @@ void NativeInit(int argc, const char *argv[],
 	g_gameInfoCache.Init();
 
 	screenManager = new ScreenManager();
-	if (skipLogo) {
+	if (skipLogo || g_Config.bBruteForcing) {
 		screenManager->switchScreen(new EmuScreen(boot_filename));
 	} else {
 		screenManager->switchScreen(new LogoScreen());
@@ -599,9 +600,18 @@ void TakeScreenshot() {
 	g_TakeScreenshot = false;
 
 #if defined(_WIN32) || (defined(USING_QT_UI) && !defined(MOBILE_DEVICE))
+	std::string gameId = g_paramSFO.GetValueString("DISC_ID");
+	if (gameId.empty()) {
+		gameId = "MENU";
+	}
+
 	std::string path = GetSysDirectory(DIRECTORY_SCREENSHOT);
 	while (path.length() > 0 && path.back() == '/') {
 		path.resize(path.size() - 1);
+	}
+	if (g_ScreenshotName[0] != 0) {
+		path.append("/");
+		path.append(gameId);
 	}
 	if (!File::Exists(path)) {
 		File::CreateDir(path);
@@ -610,21 +620,25 @@ void TakeScreenshot() {
 	// First, find a free filename.
 	int i = 0;
 
-	std::string gameId = g_paramSFO.GetValueString("DISC_ID");
-	if (gameId.empty()) {
-		gameId = "MENU";
-	}
 
 	char filename[2048];
-	while (i < 10000){
+	if (g_ScreenshotName[0] == 0) {
+		while (i < 10000){
+			if (g_Config.bScreenshotsAsPNG)
+				snprintf(filename, sizeof(filename), "%s/%s_%05d.png", path.c_str(), gameId.c_str(), i);
+			else
+				snprintf(filename, sizeof(filename), "%s/%s_%05d.jpg", path.c_str(), gameId.c_str(), i);
+			FileInfo info;
+			if (!getFileInfo(filename, &info))
+				break;
+			i++;
+		}
+	} else {
 		if (g_Config.bScreenshotsAsPNG)
-			snprintf(filename, sizeof(filename), "%s/%s_%05d.png", path.c_str(), gameId.c_str(), i);
+			snprintf(filename, sizeof(filename), "%s/%s.png", path.c_str(), g_ScreenshotName);
 		else
-			snprintf(filename, sizeof(filename), "%s/%s_%05d.jpg", path.c_str(), gameId.c_str(), i);
-		FileInfo info;
-		if (!getFileInfo(filename, &info))
-			break;
-		i++;
+			snprintf(filename, sizeof(filename), "%s/%s.jpg", path.c_str(), g_ScreenshotName);
+		g_ScreenshotName[0] = 0;
 	}
 
 	bool success = TakeGameScreenshot(filename, g_Config.bScreenshotsAsPNG ? SCREENSHOT_PNG : SCREENSHOT_JPG, SCREENSHOT_DISPLAY);
@@ -667,6 +681,9 @@ void NativeRender() {
 	GL_CHECK();
 	g_GameManager.Update();
 	GL_CHECK();
+
+	if (GetUIState() == UISTATE_INGAME)
+		VR_BruteForceBeginFrame();
 
 	if (GetUIState() != UISTATE_INGAME && g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
 		OGL::VR_BeginGUI();
@@ -715,6 +732,9 @@ void NativeRender() {
 
 	DrawDownloadsOverlay(*screenManager->getUIContext());
 	GL_CHECK();
+
+	if (GetUIState() == UISTATE_INGAME)
+		VR_BruteForceEndFrame();
 
 	if (g_TakeScreenshot) {
 		TakeScreenshot();

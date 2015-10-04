@@ -15,6 +15,7 @@
 #include "GPU/GLES/TextureCache.h"
 #include "UI/OnScreenDisplay.h"
 #include "GPU/Common/PostShader.h"
+#include "GPU/Common/VR.h"
 #include "GPU/GLES/Framebuffer.h"
 #include "Core/Config.h"
 #include "Core/FileSystems/MetaFileSystem.h"
@@ -245,6 +246,7 @@ namespace MainWindow {
 		TranslateMenuItem(menu, ID_DEBUG_RESETSYMBOLTABLE);
 		TranslateMenuItem(menu, ID_DEBUG_DUMPNEXTFRAME);
 		TranslateMenuItem(menu, ID_DEBUG_TAKESCREENSHOT, L"\tF12");
+		TranslateMenuItem(menu, ID_DEBUG_BRUTEFORCE);
 		TranslateMenuItem(menu, ID_DEBUG_SHOWDEBUGSTATISTICS);
 		TranslateMenuItem(menu, ID_DEBUG_IGNOREILLEGALREADS);
 		TranslateMenuItem(menu, ID_DEBUG_RUNONLOAD);
@@ -895,6 +897,14 @@ namespace MainWindow {
 
 		case ID_DEBUG_TAKESCREENSHOT:
 			g_TakeScreenshot = true;
+			break;
+
+		case ID_DEBUG_BRUTEFORCE:
+			// do bruteforce
+			SetInternalResolution(RESOLUTION_NATIVE);
+			setTexScalingMultiplier(TEXSCALING_OFF);
+			SetCursor(LoadCursor(0, IDC_WAIT));
+			VR_BruteForceStart();
 			break;
 
 		default:

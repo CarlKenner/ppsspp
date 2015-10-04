@@ -120,7 +120,7 @@ public:
 
 	void UpdateActiveSymbols();
 
-private:
+public:
 	void AssignFunctionIndices();
 	const char *GetLabelName(u32 address) const;
 	const char *GetLabelNameRel(u32 relAddress, int moduleIndex) const;
@@ -161,6 +161,7 @@ private:
 	// This is indexed by the end address of the module.
 	std::map<u32, const ModuleEntry> activeModuleEnds;
 
+private:
 	typedef std::pair<int, u32> SymbolKey;
 
 	// These are indexed by the module id and relative address in the module.

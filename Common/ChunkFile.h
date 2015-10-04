@@ -691,10 +691,10 @@ public:
 		return ERROR_NONE;
 	}
 
-private:
 	static CChunkFileReader::Error LoadFile(const std::string& _rFilename, int _Revision, const char *_VersionString, u8 *&buffer, size_t &sz, std::string *_failureReason);
 	static CChunkFileReader::Error SaveFile(const std::string& _rFilename, int _Revision, const char *_VersionString, u8 *buffer, size_t sz);
 
+private:
 	struct SChunkHeader
 	{
 		int Revision;

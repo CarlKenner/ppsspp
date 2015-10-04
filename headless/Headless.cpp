@@ -75,6 +75,13 @@ void NativeUpdate(InputState &input_state) { }
 void NativeRender() { }
 void NativeResized() { }
 void NativeMessageReceived(const char *message, const char *value) {}
+bool g_TakeScreenshot = false;
+char g_ScreenshotName[2048] = "";
+namespace W32Util
+{
+	void __cdecl ExitAndRestart();
+}
+void __cdecl W32Util::ExitAndRestart() {}
 
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 int System_GetPropertyInt(SystemProperty prop) { return -1; }

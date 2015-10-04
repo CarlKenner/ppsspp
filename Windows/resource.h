@@ -317,6 +317,7 @@
 #define ID_OPTIONS_BUFNEARESTFILTER      40153
 #define ID_OPTIONS_DIRECTX               40154
 #define ID_OPTIONS_OPENGL                40155
+#define ID_DEBUG_BRUTEFORCE              40156
 
 // Dummy option to let the buffered rendering hotkey cycle through all the options.
 #define ID_OPTIONS_BUFFEREDRENDERINGDUMMY 40500

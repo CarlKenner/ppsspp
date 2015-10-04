@@ -200,6 +200,25 @@ public:
 	// VR command line
 	bool bForceVR;
 
+	// Brute forcing
+	bool bBruteForcing;
+	std::string sBruteForceFileName;
+	int BruteForceFramesToRunFor;
+	int BruteForceFramesLeft;
+	int BruteForceCurrentFunctionIndex;
+	int BruteForceFunctionCount;
+	int BruteForceReturnCode;
+	int BruteForceOriginalVertexCount;
+	bool BruteForce_bEnableVR;
+	bool BruteForce_bVSync;
+	bool BruteForce_bEnableLogging;
+	bool BruteForce_bHardwareTransform;
+	bool BruteForce_bEnableSound;
+	int BruteForce_iInternalResolution;
+	int BruteForce_iAnisotropyLevel;
+	int BruteForce_iTexScalingLevel;
+	float BruteForceFreeLook[3];
+
 	// Stereoscopy
 	bool bStereoEFBMonoDepth;
 	int iStereoDepthPercentage;

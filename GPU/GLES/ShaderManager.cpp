@@ -776,15 +776,13 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 			skybox_changed = true;
 		}
 	}
-	if (dirty & DIRTY_PROJMATRIX || (bFrameChanged && g_Config.bEnableVR && g_has_hmd)) {
+	if (dirty & DIRTY_PROJMATRIX || bFreeLookChanged || (bFrameChanged && g_Config.bEnableVR && g_has_hmd)) {
 		if (g_Config.bEnableVR && g_has_hmd) {
 			Matrix4x4 flippedMatrix = SetProjectionConstants(gstate.projMatrix, dirty & DIRTY_PROJMATRIX, false);
 			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m); 
 			//bProjectionChanged = false;
 		}
 		else {
-			if (g_has_hmd)
-				UpdateHeadTrackingIfNeeded();
 			Matrix4x4 flippedMatrix;
 			memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 
@@ -831,7 +829,16 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 				}
 			}
 
+			// enable freelook also for non-VR mode
+			Matrix4x4 free_look_matrix;
+			Vec3 pos;
+			float UnitsPerMetre = g_Config.fUnitsPerMetre / g_Config.fScale;
+			for (int i = 0; i < 3; ++i)
+				pos[i] = s_fViewTranslationVector[i] * UnitsPerMetre;
+			free_look_matrix.setTranslation(pos);
+
 			ScaleProjMatrix(flippedMatrix);
+			flippedMatrix = free_look_matrix * flippedMatrix;
 
 			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 		}
