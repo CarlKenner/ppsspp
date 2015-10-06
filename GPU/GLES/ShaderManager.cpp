@@ -1038,8 +1038,16 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		LogProj(flippedMatrix);
 
 	float gameLeft, gameRight, gameBottom, gameTop, gameZNear, gameZFar, gameHFOV, gameVFOV;
-	bool gameFlipZ;
+	bool gameFlipX = false, gameFlipY = false, gameFlipZ;
 	flippedMatrix.getOpenGLProjection(&gameLeft, &gameRight, &gameBottom, &gameTop, &gameZNear, &gameZFar, &gameHFOV, &gameVFOV, &gameFlipZ);
+	if (gameHFOV < 0) {
+		gameFlipX = true;
+		gameHFOV = -gameHFOV;
+	}
+	if (gameVFOV < 0) {
+		gameFlipY = true;
+		gameVFOV = -gameVFOV;
+	}
 
 	///////////////////////////////////////////////////////
 	// First, identify any special layers and hacks
@@ -1048,7 +1056,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	bool bFullscreenLayer = g_Config.bHudFullscreen && !isPerspective;
 	bool bFlashing = (debug_projNum - 1) == g_Config.iSelectedLayer;
 	bool bStuckToHead = false, bHide = false;
-	int flipped_x = 1, flipped_y = 1, iTelescopeHack = -1;
+	int iTelescopeHack = -1;
 	float fScaleHack = 1, fWidthHack = 1, fHeightHack = 1, fUpHack = 0, fRightHack = 0;
 
 	//if (g_Config.iMetroidPrime)
@@ -1332,40 +1340,6 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		}
 	}
 
-	//VR sometimes yaw needs to be inverted for games that use a flipped x axis
-	// (ActionGirlz even uses flipped matrices and non-flipped matrices in the same frame)
-	if (isPerspective)
-	{
-		if (flippedMatrix.xx<0)
-		{
-			if (debug_newScene)
-				INFO_LOG(VR, "flipped X");
-			// flip all the x axis values, except x squared (data[0])
-			//Needed for Action Girlz Racing, Backyard Baseball
-			//rotation_matrix.data[1] *= -1;
-			//rotation_matrix.data[2] *= -1;
-			//rotation_matrix.data[3] *= -1;
-			//rotation_matrix.data[4] *= -1;
-			//rotation_matrix.data[8] *= -1;
-			//rotation_matrix.data[12] *= -1;
-			flipped_x = -1;
-		}
-		if (flippedMatrix.yy<0)
-		{
-			if (debug_newScene)
-				INFO_LOG(VR, "flipped Y");
-			// flip all the y axis values, except y squared (data[5])
-			// Needed for ABBA
-			//rotation_matrix.data[1] *= -1;
-			//rotation_matrix.data[4] *= -1;
-			//rotation_matrix.data[6] *= -1;
-			//rotation_matrix.data[7] *= -1;
-			//rotation_matrix.data[9] *= -1;
-			//rotation_matrix.data[13] *= -1;
-			flipped_y = -1;
-		}
-	}
-
 	// Position matrices
 	Matrix44 head_position_matrix, free_look_matrix, camera_forward_matrix, camera_position_matrix;
 	if (bStuckToHead || g_is_skybox)
@@ -1432,9 +1406,9 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		}
 
 		look_matrix = camera_forward_matrix * camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
-		if (gameFlipZ) {
+		if (gameFlipX || gameFlipY || gameFlipZ) {
 			Matrix4x4 scale;
-			scale.setScaling(Vec3(1.0f, 1.0f, -1.0f));
+			scale.setScaling(Vec3(gameFlipX ? -1.0f : 1.0f, gameFlipY ? -1.0f : 1.0f, gameFlipZ ? -1.0f : 1.0f));
 			look_matrix = scale * look_matrix;
 		}
 	}
@@ -1658,42 +1632,6 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		//final_matrix_left = flippedMatrix;
 	}
 
-	if (flipped_x < 0)
-	{
-		// flip all the x axis values, except x squared (data[0])
-		//Needed for Action Girlz Racing, Backyard Baseball
-		final_matrix_left.data[1] *= -1;
-		final_matrix_left.data[2] *= -1;
-		final_matrix_left.data[3] *= -1;
-		stereoparams[2] *= -1;
-		final_matrix_left.data[4] *= -1;
-		final_matrix_left.data[8] *= -1;
-		final_matrix_left.data[12] *= -1;
-		final_matrix_right.data[1] *= -1;
-		final_matrix_right.data[2] *= -1;
-		final_matrix_right.data[3] *= -1;
-		stereoparams[3] *= -1;
-		final_matrix_right.data[4] *= -1;
-		final_matrix_right.data[8] *= -1;
-		final_matrix_right.data[12] *= -1;
-		stereoparams[0] *= -1;
-		stereoparams[1] *= -1;
-	}
-	if (flipped_y < 0)
-	{
-		final_matrix_left.data[1] *= -1;
-		final_matrix_left.data[4] *= -1;
-		final_matrix_left.data[6] *= -1;
-		final_matrix_left.data[7] *= -1;
-		final_matrix_left.data[9] *= -1;
-		final_matrix_left.data[13] *= -1;
-		final_matrix_right.data[1] *= -1;
-		final_matrix_right.data[4] *= -1;
-		final_matrix_right.data[6] *= -1;
-		final_matrix_right.data[7] *= -1;
-		final_matrix_right.data[9] *= -1;
-		final_matrix_right.data[13] *= -1;
-	}
 	if (debug_newScene) {
 		final_matrix_left.toOpenGL(s, 1024);
 		INFO_LOG(VR, "final: %s", s);
