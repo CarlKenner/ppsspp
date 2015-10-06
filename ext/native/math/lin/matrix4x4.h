@@ -161,7 +161,7 @@ public:
 		*/
 	}
 	void toText(char *buffer, int len) const;
-	bool getOpenGLProjection(float *l, float *r, float *b, float *t, float *zNear, float *zFar, float *hfov, float *vfov) const;
+	bool getOpenGLProjection(float *l, float *r, float *b, float *t, float *zNear, float *zFar, float *hfov, float *vfov, bool *lefthanded) const;
 	void toOpenGL(char *buffer, int len) const;
 	void print() const;
 	static Matrix4x4 fromPRS(const Vec3 &position, const Quaternion &normal, const Vec3 &scale);

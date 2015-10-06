@@ -167,7 +167,8 @@ void LogProj(const Matrix4x4 & m) { //VR
 	p[5] = m.wz;
 	p[6] = m.zw;
 	float left, right, bottom, top, zfar, znear, vfov, hfov;
-	m.getOpenGLProjection(&left, &right, &bottom, &top, &znear, &zfar, &hfov, &vfov);
+	bool lefthanded;
+	m.getOpenGLProjection(&left, &right, &bottom, &top, &znear, &zfar, &hfov, &vfov, &lefthanded);
 	vfov = vfov*180.0f / 3.1415926535f;
 	hfov = hfov*180.0f / 3.1415926535f;
 
@@ -852,7 +853,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 	{
 		Matrix4x4 proj_through;
 		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0.0f, 1.0f);
-		NOTICE_LOG(VR, "proj_through: (%d, %d) to (%d, %d), %g to %g", 0, 0, gstate_c.curRTWidth, gstate_c.curRTHeight, 0.0f, 1.0f);
+		DEBUG_LOG(VR, "proj_through: (%d, %d) to (%d, %d), %g to %g", 0, 0, gstate_c.curRTWidth, gstate_c.curRTHeight, 0.0f, 1.0f);
 		if (g_Config.bEnableVR && g_has_hmd)
 		{
 			Matrix4x4 flippedMatrix = SetProjectionConstants(proj_through.m, false, true);
@@ -985,7 +986,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		NOTICE_LOG(VR, "input: %s", s);
 	}
 
-	bool isPerspective = flippedMatrix.zw == -1;
+	bool isPerspective = flippedMatrix.zw == -1.0f || flippedMatrix.zw == 1.0f;
 
 	const bool invertedY = gstate_c.vpHeight < 0;
 	if (invertedY) {
@@ -1037,8 +1038,9 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		LogProj(flippedMatrix);
 
 	float gameLeft, gameRight, gameBottom, gameTop, gameZNear, gameZFar, gameHFOV, gameVFOV;
-	flippedMatrix.getOpenGLProjection(&gameLeft, &gameRight, &gameBottom, &gameTop, &gameZNear, &gameZFar, &gameHFOV, &gameVFOV);
-	
+	bool gameFlipZ;
+	flippedMatrix.getOpenGLProjection(&gameLeft, &gameRight, &gameBottom, &gameTop, &gameZNear, &gameZFar, &gameHFOV, &gameVFOV, &gameFlipZ);
+
 	///////////////////////////////////////////////////////
 	// First, identify any special layers and hacks
 
@@ -1230,10 +1232,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	float znear2 = (1 + hmd_left.zz * zfar) / hmd_left.zz;
 	if (debug_newScene)
 	{
-		if (debug_newScene) {
-			hmd_left.toOpenGL(s, 1024);
-			WARN_LOG(VR, "hmd_left: %s", s);
-		}
+		hmd_left.toOpenGL(s, 1024);
+		WARN_LOG(VR, "hmd_left: %s", s);
 
 		// yellow = HMD's suggestion
 		WARN_LOG(VR, "O hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov2, vfov2, znear2, zfar2);
@@ -1263,7 +1263,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	}
 
 	if (debug_newScene) {
-		flippedMatrix.toOpenGL(s, 1024);
+		proj_left.toOpenGL(s, 1024);
 		ERROR_LOG(VR, "mine: %s", s);
 	}
 
@@ -1432,6 +1432,11 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		}
 
 		look_matrix = camera_forward_matrix * camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
+		if (gameFlipZ) {
+			Matrix4x4 scale;
+			scale.setScaling(Vec3(1.0f, 1.0f, -1.0f));
+			look_matrix = scale * look_matrix;
+		}
 	}
 	else
 		//if (xfmem.projection.type != GX_PERSPECTIVE || g_viewport_type == VIEW_HUD_ELEMENT || g_viewport_type == VIEW_OFFSCREEN)
@@ -1568,8 +1573,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			zNear2D = gameZNear;
 
 			// proj_through
-			NOTICE_LOG(VR, "2D: (%g, %g) to (%g, %g), %g to %g", left2D, top2D, right2D, bottom2D, zNear2D, zFar2D);
-			NOTICE_LOG(VR, "HUDWidth = %g, HudHeight = %g, HudThickness = %g, HudDistance = %g", HudWidth, HudHeight, HudThickness, HudDistance);
+			//NOTICE_LOG(VR, "2D: (%g, %g) to (%g, %g), %g to %g", left2D, top2D, right2D, bottom2D, zNear2D, zFar2D);
+			//NOTICE_LOG(VR, "HUDWidth = %g, HudHeight = %g, HudThickness = %g, HudDistance = %g", HudWidth, HudHeight, HudThickness, HudDistance);
 
 			// for 2D, work out the fraction of the HUD we should fill, and multiply the scale by that
 			// also work out what fraction of the height we should shift it up, and what fraction of the width we should shift it left

@@ -268,7 +268,8 @@ void Matrix4x4::toText(char *buffer, int len) const {
 	buffer[len - 1] = '\0';
 }
 
-bool Matrix4x4::getOpenGLProjection(float *l, float *r, float *b, float *t, float *zNear, float *zFar, float *hfov, float *vfov) const {
+bool Matrix4x4::getOpenGLProjection(float *l, float *r, float *b, float *t, float *zNear, float *zFar, float *hfov, float *vfov, bool *lefthanded) const {
+	*lefthanded = false;
 	// orthographic projection
 	if (ww == 1.0f && zw == 0.0f) {
 		// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=x+%3D+2%2F(r-l)%0Ay+%3D+2%2F(t-b)%0Au+%3D+-(r%2Bl)%2F(r-l)%0Av+%3D+-(t%2Bb)%2F(t-b)%0Az+%3D+-2%2F(f-n)%0Aw+%3D+-(f%2Bn)%2F(f-n)&v2=l%0Ar%0Ab%0At%0An%0Af
@@ -283,21 +284,38 @@ bool Matrix4x4::getOpenGLProjection(float *l, float *r, float *b, float *t, floa
 		return true;
 	} else {
 	// assume perspective projection
-		if (zz == -1.0f) {
-			// infinite far
+		if (zz == -1.0f && zw == -1.0f) {
+			// infinite far, right handed
 			*zNear = wz / -2;
 			*zFar = INFINITY;
+		} else if (zz == 1.0f && zw == 1.0f) {
+			// infinite far, left handed
+			*lefthanded = true;
+			*zNear = wz / -2; // is this correct?
+			*zFar = INFINITY;
 		}
-		else {
+		else if (zw != 1.0f) {
 			// http://www.quickmath.com/webMathematica3/quickmath/equations/solve/advanced.jsp#c=solve_advancedsolveequations&v1=z+%3D+-(f%2Bn)%2F(f-n)%0Aw+%3D+-2*(f*n)%2F(f-n)&v2=f%0An
 			*zNear = wz / (zz - 1);
 			*zFar = wz / (zz + 1);
+		} else {
+			*lefthanded = true;
+			*zNear = wz / (-zz - 1);
+			*zFar = wz / (-zz + 1);
 		}
 		// glFrustum
-		*r = *zNear*(zx + 1.0f) / xx;
-		*l = *zNear*(zx - 1.0f) / xx;
-		*t = *zNear*(zy + 1.0f) / yy;
-		*b = *zNear*(zy - 1.0f) / yy;
+		if (*lefthanded) {
+			*r = *zNear*(-zx + 1.0f) / xx;
+			*l = *zNear*(-zx - 1.0f) / xx;
+			*t = *zNear*(-zy + 1.0f) / yy;
+			*b = *zNear*(-zy - 1.0f) / yy;
+		}
+		else {
+			*r = *zNear*(zx + 1.0f) / xx;
+			*l = *zNear*(zx - 1.0f) / xx;
+			*t = *zNear*(zy + 1.0f) / yy;
+			*b = *zNear*(zy - 1.0f) / yy;
+		}
 		*hfov = 2 * atan(1.0f / xx);
 		*vfov = 2 * atan(1.0f / yy);
 		return false;
@@ -332,16 +350,19 @@ void Matrix4x4::toOpenGL(char *buffer, int len) const {
 			snprintf(buffer, len, "glFrustum(left=%g, right=%g, bottom=%g, top=%g, zNear=%g, zFar=%g) //zz=%g, wz=%g", l,r,b,t, zNear, zFar, zz, wz);
 		}
 	}
-	// D3D perspective projection
+	// left handed perspective projection
 	else if (ww == 0.0f && zw == 1.0f) {
-		zNear = -wz / zz;
-		zFar = -wz / (zz - 1);
+		zNear = wz / (-zz - 1);
+		zFar = wz / (-zz + 1);
+
+		//D3D:   zNear = -wz / zz;
+		//D3D:   zFar = -wz / (zz - 1);
 		if (zx == 0.0f && zy == 0.0f) {
 			// D3DXMatrixPerspectiveFovLH
 			float fovy = 2 * atan(1.0f / yy);
 			float fovx = 2 * atan(1.0f / xx);
 			float aspect = yy / xx;
-			snprintf(buffer, len, "D3DXMatrixPerspectiveFovLH(fovy=%g deg, aspect=%g, zNear=%g, zFar=%g) //16:%g, hfov=%g degl zz=%g, wz=%g", RADIANS_TO_DEGREES(fovy), aspect, zNear, zFar, 16.0f / aspect, RADIANS_TO_DEGREES(fovx), zz, wz);
+			snprintf(buffer, len, "glScalef(1,1,-1); gluPerspective(fovy=%g deg, aspect=%g, zNear=%g, zFar=%g); //16:%g, hfov=%g degl zz=%g, wz=%g", RADIANS_TO_DEGREES(fovy), aspect, zNear, zFar, 16.0f / aspect, RADIANS_TO_DEGREES(fovx), zz, wz);
 		}
 		else {
 			// D3DXMatrixPerspectiveOffCenterLH
