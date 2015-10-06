@@ -789,13 +789,17 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 
 			const bool invertedY = gstate_c.vpHeight < 0;
 			if (invertedY) {
-				flippedMatrix[5] = -flippedMatrix[5];
-				flippedMatrix[13] = -flippedMatrix[13];
+				flippedMatrix.xy = -flippedMatrix.xy;
+				flippedMatrix.yy = -flippedMatrix.yy;
+				flippedMatrix.zy = -flippedMatrix.zy;
+				flippedMatrix.wy = -flippedMatrix.wy;
 			}
 			const bool invertedX = gstate_c.vpWidth < 0;
 			if (invertedX) {
-				flippedMatrix[0] = -flippedMatrix[0];
-				flippedMatrix[12] = -flippedMatrix[12];
+				flippedMatrix.xx = -flippedMatrix.xx;
+				flippedMatrix.yx = -flippedMatrix.yx;
+				flippedMatrix.zx = -flippedMatrix.zx;
+				flippedMatrix.wx = -flippedMatrix.wx;
 			}
 
 			// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
@@ -988,15 +992,21 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 
 	bool isPerspective = flippedMatrix.zw == -1.0f || flippedMatrix.zw == 1.0f;
 
-	const bool invertedY = gstate_c.vpHeight < 0;
-	if (invertedY) {
-		flippedMatrix[5] = -flippedMatrix[5];
-		flippedMatrix[13] = -flippedMatrix[13];
-	}
-	const bool invertedX = gstate_c.vpWidth < 0;
-	if (invertedX) {
-		flippedMatrix[0] = -flippedMatrix[0];
-		flippedMatrix[12] = -flippedMatrix[12];
+	if (!isThrough) {
+		const bool invertedY = gstate_c.vpHeight < 0;
+		if (invertedY) {
+			flippedMatrix.xy = -flippedMatrix.xy;
+			flippedMatrix.yy = -flippedMatrix.yy;
+			flippedMatrix.zy = -flippedMatrix.zy;
+			flippedMatrix.wy = -flippedMatrix.wy;
+		}
+		const bool invertedX = gstate_c.vpWidth < 0;
+		if (invertedX) {
+			flippedMatrix.xx = -flippedMatrix.xx;
+			flippedMatrix.yx = -flippedMatrix.yx;
+			flippedMatrix.zx = -flippedMatrix.zx;
+			flippedMatrix.wx = -flippedMatrix.wx;
+		}
 	}
 
 	// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
