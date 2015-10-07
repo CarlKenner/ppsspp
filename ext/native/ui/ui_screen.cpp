@@ -321,6 +321,12 @@ PopupSliderChoice::PopupSliderChoice(int *value, int minValue, int maxValue, con
 	OnClick.Handle(this, &PopupSliderChoice::HandleClick);
 }
 
+PopupARGBChoice::PopupARGBChoice(int *value, const std::string &text, ScreenManager *screenManager, LayoutParams *layoutParams) 
+	: Choice(text, "", false, layoutParams), value_(value), screenManager_(screenManager)
+{
+	OnClick.Handle(this, &PopupARGBChoice::HandleClick);
+}
+
 PopupSliderChoiceFloat::PopupSliderChoiceFloat(float *value, float minValue, float maxValue, const std::string &text, ScreenManager *screenManager, const std::string &units, LayoutParams *layoutParams)
 	: Choice(text, "", false, layoutParams), value_(value), minValue_(minValue), maxValue_(maxValue), step_(1.0f), screenManager_(screenManager), units_(units) {
 	OnClick.Handle(this, &PopupSliderChoiceFloat::HandleClick);
@@ -389,6 +395,37 @@ void PopupSliderChoiceFloat::Draw(UIContext &dc) {
 	Choice::Draw(dc);
 	char temp[32];
 	sprintf(temp, "%2.2f", *value_);
+	dc.SetFontStyle(dc.theme->uiFont);
+	dc.DrawText(temp, bounds_.x2() - 12, bounds_.centerY(), style.fgColor, ALIGN_RIGHT | ALIGN_VCENTER);
+}
+
+EventReturn PopupARGBChoice::HandleClick(EventParams &e) {
+	restoreFocus_ = HasFocus();
+
+	ARGBPopupScreen *popupScreen = new ARGBPopupScreen(value_, text_);
+	popupScreen->OnChange.Handle(this, &PopupARGBChoice::HandleChange);
+	screenManager_->push(popupScreen);
+	return EVENT_DONE;
+}
+
+EventReturn PopupARGBChoice::HandleChange(EventParams &e) {
+	e.v = this;
+	OnChange.Trigger(e);
+
+	if (restoreFocus_) {
+		SetFocusedView(this);
+	}
+	return EVENT_DONE;
+}
+
+void PopupARGBChoice::Draw(UIContext &dc) {
+	Style style = dc.theme->itemStyle;
+	if (!IsEnabled()) {
+		style = dc.theme->itemDisabledStyle;
+	}
+	Choice::Draw(dc);
+	char temp[32];
+	sprintf(temp, "%08X", *value_);
 	dc.SetFontStyle(dc.theme->uiFont);
 	dc.DrawText(temp, bounds_.x2() - 12, bounds_.centerY(), style.fgColor, ALIGN_RIGHT | ALIGN_VCENTER);
 }
@@ -497,6 +534,62 @@ void SliderPopupScreen::OnCompleted(DialogResult result) {
 }
 
 void SliderFloatPopupScreen::OnCompleted(DialogResult result) {
+	if (result == DR_OK) {
+		*value_ = sliderValue_;
+		EventParams e;
+		e.v = 0;
+		e.a = (int)*value_;
+		e.f = *value_;
+		OnChange.Trigger(e);
+	}
+}
+
+void ARGBPopupScreen::CreatePopupContents(UI::ViewGroup *parent) {
+	using namespace UI;
+	sliderValue_ = *value_;
+	LinearLayout *vert = parent->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(UI::Margins(10, 10))));
+	redslider_ = new SliderFloat(&redSliderValue_, 0.0f, 1.0f, new LinearLayoutParams(UI::Margins(10, 10)));
+	redslider_->OnClick.Handle(this, &ARGBPopupScreen::OnSliderChange);
+	//vert->Add(redslider_);
+	greenslider_ = new SliderFloat(&greenSliderValue_, 0.0f, 1.0f, new LinearLayoutParams(UI::Margins(10, 10)));
+	greenslider_->OnClick.Handle(this, &ARGBPopupScreen::OnSliderChange);
+	//vert->Add(greenslider_);
+	blueslider_ = new SliderFloat(&blueSliderValue_, 0.0f, 1.0f, new LinearLayoutParams(UI::Margins(10, 10)));
+	blueslider_->OnClick.Handle(this, &ARGBPopupScreen::OnSliderChange);
+	//vert->Add(blueslider_);
+	LinearLayout *lin = vert->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(UI::Margins(10, 10))));
+	//lin->Add(new Button(" - "))->OnClick.Handle(this, &ARGBPopupScreen::OnDecrease);
+	//lin->Add(new Button(" + "))->OnClick.Handle(this, &ARGBPopupScreen::OnIncrease);
+	char temp[64];
+	sprintf(temp, "%8X", sliderValue_);
+	edit_ = new TextEdit(temp, "", new LinearLayoutParams(10.0f));
+	edit_->SetMaxLen(11);
+	edit_->OnTextChange.Handle(this, &ARGBPopupScreen::OnTextChange);
+	changing_ = false;
+	lin->Add(edit_);
+	UI::SetFocusedView(edit_);
+}
+
+EventReturn ARGBPopupScreen::OnTextChange(EventParams &params) {
+	if (!changing_) {
+		sliderValue_ = strtoul((edit_->GetText()).c_str(), nullptr, 16);
+	}
+	return EVENT_DONE;
+}
+
+EventReturn ARGBPopupScreen::OnDecrease(EventParams &params) {
+	return EVENT_DONE;
+}
+
+EventReturn ARGBPopupScreen::OnIncrease(EventParams &params) {
+	return EVENT_DONE;
+}
+
+EventReturn ARGBPopupScreen::OnSliderChange(EventParams &params) {
+	return EVENT_DONE;
+}
+
+void ARGBPopupScreen::OnCompleted(DialogResult result) {
 	if (result == DR_OK) {
 		*value_ = sliderValue_;
 		EventParams e;

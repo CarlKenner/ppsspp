@@ -174,6 +174,30 @@ private:
 	bool changing_;
 };
 
+class ARGBPopupScreen : public PopupScreen {
+public:
+	ARGBPopupScreen(int *value, const std::string &title)
+		: PopupScreen(title, "OK", "Cancel"), value_(value) {}
+	void CreatePopupContents(UI::ViewGroup *parent) override;
+
+	Event OnChange;
+
+private:
+	EventReturn OnIncrease(EventParams &params);
+	EventReturn OnDecrease(EventParams &params);
+	EventReturn OnTextChange(EventParams &params);
+	EventReturn OnSliderChange(EventParams &params);
+	virtual void OnCompleted(DialogResult result) override;
+	UI::SliderFloat *redslider_;
+	UI::SliderFloat *greenslider_;
+	UI::SliderFloat *blueslider_;
+	UI::TextEdit *edit_;
+	int sliderValue_;
+	float redSliderValue_, greenSliderValue_, blueSliderValue_;
+	int *value_;
+	bool changing_;
+};
+
 class TextEditPopupScreen : public PopupScreen {
 public:
 	TextEditPopupScreen(std::string *value, std::string &placeholder, const std::string &title, int maxLen)
@@ -269,7 +293,23 @@ private:
 	bool restoreFocus_;
 };
 
-class PopupTextInputChoice: public Choice {
+class PopupARGBChoice : public Choice {
+public:
+	PopupARGBChoice(int *value, const std::string &text, ScreenManager *screenManager, LayoutParams *layoutParams = 0);
+
+	virtual void Draw(UIContext &dc) override;
+
+	Event OnChange;
+
+private:
+	EventReturn HandleClick(EventParams &e);
+	EventReturn HandleChange(EventParams &e);
+	int *value_;
+	ScreenManager *screenManager_;
+	bool restoreFocus_;
+};
+
+class PopupTextInputChoice : public Choice {
 public:
 	PopupTextInputChoice(std::string *value, const std::string &title, const std::string &placeholder, int maxLen, ScreenManager *screenManager, LayoutParams *layoutParams = 0);
 

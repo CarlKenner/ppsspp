@@ -85,12 +85,12 @@ enum {
 
 class LinkedShader {
 public:
-	LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous);
+	LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous, bool isClear);
 	~LinkedShader();
 
-	void use(u32 vertType, LinkedShader *previous);
+	u32 use(u32 vertType, LinkedShader *previous, bool isClear);
 	void stop();
-	void UpdateUniforms(u32 vertType);
+	u32 UpdateUniforms(u32 vertType, bool isClear);
 	Matrix4x4 SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough);
 
 	Shader *vs_, *gs_;
@@ -233,7 +233,7 @@ public:
 	// If you call ApplyVertexShader, you MUST call ApplyFragmentShader soon afterwards.
 	Shader *ApplyVertexShader(int prim, u32 vertType);
 	Shader *ApplyGeometryShader(int prim, u32 vertType);
-	LinkedShader *ApplyFragmentShader(Shader *vs, Shader *gs, int prim, u32 vertType);
+	LinkedShader *ApplyFragmentShader(Shader *vs, Shader *gs, int prim, u32 vertType, bool isClear);
 
 	void DirtyShader();
 	void DirtyUniform(u32 what) {

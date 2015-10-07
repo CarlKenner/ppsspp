@@ -408,6 +408,9 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bCanReadCameraAngles, gr->T("Read Camera Angles")));
 	vrSettings->Add(new CheckBox(&g_Config.bDetectSkybox, gr->T("Detect Skybox")));
 	vrSettings->Add(new CheckBox(&g_Config.bDontDrawScreenSpace, gr->T("Dont Draw Screen-Space Effects")));
+	vrSettings->Add(new CheckBox(&g_Config.bBefore3DIsBackground, gr->T("Before 3D is Background")));
+	vrSettings->Add(new PopupARGBChoice(&g_Config.iBackgroundColor, gr->T("Background Colour (AARRGGBB)"), screenManager()));
+	vrSettings->Add(new CheckBox(&g_Config.bOverrideClearColor, gr->T("Override Clear Color")));
 
 	// Audio
 	ViewGroup *audioSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));

@@ -91,6 +91,8 @@
 #include "GPU/GLES/GLES_GPU.h"
 #include "GPU/Common/VR.h"
 
+extern bool g_is_skyplane;
+
 extern const GLuint glprim[8] = {
 	GL_POINTS,
 	GL_LINES,
@@ -595,7 +597,7 @@ void TransformDrawEngine::DoFlush() {
 
 	Shader *vshader = shaderManager_->ApplyVertexShader(prim, lastVType_);
 
-	if (vshader->UseHWTransform()) {
+	if (vshader->UseHWTransform() && !gstate.isModeClear()) {
 		GLuint vbo = 0, ebo = 0;
 		int vertexCount = 0;
 		bool useElements = true;
@@ -780,17 +782,37 @@ rotateVBO:
 		}
 		ApplyDrawStateLate();
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
-		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_);
+		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_, false);
 		SetupDecFmtForDraw(program, dec_->GetDecVtxFmt(), vbo ? 0 : decoded);
 		if (!DontDraw) {
 			if (g_Config.bHudOnTop)
 				ApplyDepthState(m_layer_on_top);
+			if (g_is_skyplane) {
+				// check which way around the depth buffer is
+				switch (gstate.getDepthTestFunction()) {
+				case GE_COMP_GREATER:
+				case GE_COMP_GEQUAL:
+					glstate.depthRange.set(gstate.getDepthRangeMin() / 65535.0, gstate.getDepthRangeMin() / 65535.0);
+					break;
+				default:
+					glstate.depthRange.set(gstate.getDepthRangeMax() / 65535.0, gstate.getDepthRangeMax() / 65535.0);
+					break;
+				}
+				glEnable(GL_DEPTH_CLAMP);
+				glstate.depthFunc.set(GL_ALWAYS);
+				//ELOG("Draw Skyplane");
+			}
+			else {
+				//ELOG("Draw");
+			}
 			if (useElements) {
 				glDrawElements(glprim[prim], vertexCount, GL_UNSIGNED_SHORT, ebo ? 0 : (GLvoid*)decIndex);
 			}
 			else {
 				glDrawArrays(glprim[prim], 0, vertexCount);
 			}
+			if (g_is_skyplane && !g_Config.bDisableNearClipping)
+				glDisable(GL_DEPTH_CLAMP);
 		}
 	} else {
 		DecodeVerts();
@@ -825,7 +847,7 @@ rotateVBO:
 		ApplyDrawStateLate();
 
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
-		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_);
+		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_, result.action != SW_DRAW_PRIMITIVES);
 
 		if (result.action == SW_DRAW_PRIMITIVES) {
 			if (result.setStencil) {
@@ -844,15 +866,40 @@ rotateVBO:
 			if (!DontDraw) {
 				if (g_Config.bHudOnTop)
 					ApplyDepthState(m_layer_on_top);
+				if (g_is_skyplane) {
+					// check which way around the depth buffer is
+					switch (gstate.getDepthTestFunction()) {
+					case GE_COMP_GREATER:
+					case GE_COMP_GEQUAL:
+						glstate.depthRange.set(gstate.getDepthRangeMin() / 65535.0, gstate.getDepthRangeMin() / 65535.0);
+						break;
+					case GE_COMP_LESS:
+					case GE_COMP_LEQUAL:
+						glstate.depthRange.set(gstate.getDepthRangeMax() / 65535.0, gstate.getDepthRangeMax() / 65535.0);
+						break;
+					}
+					glEnable(GL_DEPTH_CLAMP);
+					glstate.depthFunc.set(GL_ALWAYS);
+					//ELOG("Draw Skyplane");
+				}
+				else {
+					//ELOG("Draw");
+				}
 				if (drawIndexed) {
 					glDrawElements(glprim[prim], numTrans, GL_UNSIGNED_SHORT, inds);
 				}
 				else {
 					glDrawArrays(glprim[prim], 0, numTrans);
 				}
+				if (g_is_skyplane && !g_Config.bDisableNearClipping)
+					glDisable(GL_DEPTH_CLAMP);
 			}
 		} else if (result.action == SW_CLEAR) {
 			u32 clearColor = result.color;
+			if (g_Config.bOverrideClearColor) {
+				u32 argb = (u32)(g_Config.iBackgroundColor);
+				clearColor = (clearColor & 0xFF000000) | ((argb & 0xFF) << 16) | ((argb & 0xFF0000) >> 16) | (argb & 0x00FF00);
+			}
 			float clearDepth = result.depth;
 			const float col[4] = {
 				((clearColor & 0xFF)) / 255.0f,
@@ -867,6 +914,7 @@ rotateVBO:
 			if (depthMask) {
 				framebufferManager_->SetDepthUpdated();
 			}
+			//ELOG("clear %d %d %8x   %d %g", colorMask, alphaMask, result.color, depthMask, clearDepth);
 
 			// Note that scissor may still apply while clearing.  Turn off other tests for the clear.
 			glstate.stencilTest.disable();

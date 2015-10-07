@@ -266,7 +266,6 @@ public:
 	bool bOverdrive;
 	bool bHqDistortion;
 	bool bDisableNearClipping;
-	bool bDontDrawScreenSpace;
 	bool bScaleFreeLook;
 	bool bShowHands;
 	bool bShowFeet;
@@ -319,6 +318,10 @@ public:
 	bool bDontClearScreen;
 	bool bCanReadCameraAngles;
 	bool bDetectSkybox;
+	bool bDontDrawScreenSpace;
+	bool bBefore3DIsBackground;
+	bool bOverrideClearColor;
+	int iBackgroundColor;
 	int iTelescopeEye;
 	int iMetroidPrime;
 	// VR layer debugging

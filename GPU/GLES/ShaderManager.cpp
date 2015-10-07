@@ -56,6 +56,7 @@ int debug_viewportNum = 0;
 int debug_projNum = 0;
 float debug_projList[64][7] = { 0 };
 int vr_widest_3d_projNum = -1;
+bool this_frame_has_3d = false, last_frame_had_3d = false;
 //EFBRectangle g_final_screen_region = EFBRectangle(0, 0, 640, 528);
 //EFBRectangle g_requested_viewport = EFBRectangle(0, 0, 640, 528), g_rendered_viewport = EFBRectangle(0, 0, 640, 528);
 enum ViewportType g_viewport_type = VIEW_FULLSCREEN, g_old_viewport_type = VIEW_FULLSCREEN;
@@ -72,7 +73,7 @@ enum SplitScreenType {
 	SS_CUSTOM
 };
 enum SplitScreenType g_splitscreen_type = SS_FULLSCREEN, g_old_splitscreen_type = SS_FULLSCREEN;
-bool g_is_skybox = false;
+bool g_is_skybox = false, g_is_skyplane = false;
 
 static float oldpos[3] = { 0, 0, 0 }, totalpos[3] = { 0, 0, 0 };
 
@@ -116,14 +117,34 @@ void ClearDebugProj() { //VR
 		HACK_LOG(VR, "***** New scene *****");
 		// General VR hacks
 		vr_widest_3d_projNum = -1;
+		//ELOG("********* New scene *********");
+	}
+	// Only change from a HUD back to a 2D screen if we have had no 3D for 2 frames, this prevents the alternating 2D/HUD flashing bug.
+	if (!this_frame_has_3d && !last_frame_had_3d) {
+		//ELOG("**** Resetting to 2D ****");
 		vr_widest_3d_HFOV = 0;
 		vr_widest_3d_VFOV = 0;
 		vr_widest_3d_zNear = 0;
 		vr_widest_3d_zFar = 0;
+	} else if (this_frame_widest_HFOV > 0) {
+		vr_widest_3d_HFOV = this_frame_widest_HFOV;
+		vr_widest_3d_VFOV = this_frame_widest_VFOV;
+		vr_widest_3d_zNear = this_frame_widest_zNear;
+		vr_widest_3d_zFar = this_frame_widest_zFar;
+		//ELOG("**** this frame: H=%g, V=%g, n=%g, f=%g ****", vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar);
+	} else {
+		//ELOG("**** remembered: H=%g, V=%g, n=%g, f=%g ****", vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar);
 	}
 	debug_nextScene = false;
 	debug_projNum = 0;
 	debug_viewportNum = 0;
+	last_frame_had_3d = this_frame_has_3d;
+	this_frame_has_3d = false;
+	this_frame_widest_HFOV = 0;
+	this_frame_widest_VFOV = 0;
+	this_frame_widest_zNear = 0;
+	this_frame_widest_zFar = 0;
+
 	// Metroid Prime hacks
 	//NewMetroidFrame();
 }
@@ -172,21 +193,37 @@ void LogProj(const Matrix4x4 & m) { //VR
 	vfov = vfov*180.0f / 3.1415926535f;
 	hfov = hfov*180.0f / 3.1415926535f;
 
-	if (m.zw == -1) { // perspective projection
+	if (m.zw == -1.0f || m.zw == 1.0f) { // perspective projection
 		p[1] = m.zx;
 		p[3] = m.zy;
-		// don't change this formula!
-		// metroid layer detection depends on exact values
 
-		if (debug_newScene && fabs(hfov) > vr_widest_3d_HFOV && fabs(hfov) <= 125 && (fabs(m.yy) != fabs(m.xx))) {
+		float h = fabs(hfov);
+
+		if (h > this_frame_widest_HFOV && h <= 125 && (fabs(m.yy) != fabs(m.xx))) {
+			this_frame_widest_HFOV = h;
+			this_frame_widest_VFOV = fabs(vfov);
+			this_frame_widest_zNear = fabs(znear);
+			this_frame_widest_zFar = fabs(zfar);
+			if (h > vr_widest_3d_HFOV) {
+				vr_widest_3d_projNum = debug_projNum;
+				vr_widest_3d_HFOV = h;
+				vr_widest_3d_VFOV = fabs(vfov);
+				vr_widest_3d_zNear = fabs(znear);
+				vr_widest_3d_zFar = fabs(zfar);
+				//ELOG("* widening: H=%g, V=%g, n=%g, f=%g *", vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar);
+			}
+		}
+
+		if (debug_newScene && h > vr_widest_3d_HFOV && h <= 125 && (fabs(m.yy) != fabs(m.xx))) {
 			DEBUG_LOG(VR, "***** New Widest 3D *****");
 
 			vr_widest_3d_projNum = debug_projNum;
-			vr_widest_3d_HFOV = fabs(hfov);
+			vr_widest_3d_HFOV = h;
 			vr_widest_3d_VFOV = fabs(vfov);
 			vr_widest_3d_zNear = fabs(znear);
 			vr_widest_3d_zFar = fabs(zfar);
 			DEBUG_LOG(VR, "%d: %g x %g deg, n=%g f=%g, p4=%g p5=%g; xs=%g ys=%g", vr_widest_3d_projNum, vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar, m.zz, m.wz, m.xx, m.yy);
+			//ELOG("** widening: H=%g, V=%g, n=%g, f=%g **", vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar);
 		}
 	}
 	else
@@ -268,7 +305,7 @@ Shader::~Shader() {
 		glDeleteShader(shader);
 }
 
-LinkedShader::LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous)
+LinkedShader::LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, bool useHWTransform, LinkedShader *previous, bool isClear)
 		: useHWTransform_(useHWTransform), program(0), dirtyUniforms(0) {
 	PROFILE_THIS_SCOPE("shaderlink");
 
@@ -462,7 +499,7 @@ LinkedShader::LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, boo
 	// The rest, use the "dirty" mechanism.
 	dirtyUniforms = DIRTY_ALL;
 	bFrameChanged = true;
-	use(vertType, previous);
+	use(vertType, previous, isClear);
 }
 
 LinkedShader::~LinkedShader() {
@@ -554,9 +591,9 @@ static inline void ScaleProjMatrix(Matrix4x4 &in) {
 	in.translateAndScale(trans, scale);
 }
 
-void LinkedShader::use(u32 vertType, LinkedShader *previous) {
+u32 LinkedShader::use(u32 vertType, LinkedShader *previous, bool isClear) {
 	glUseProgram(program);
-	UpdateUniforms(vertType);
+	u32 stillDirty = UpdateUniforms(vertType, isClear);
 	int enable, disable;
 	if (previous) {
 		enable = attrMask & ~previous->attrMask;
@@ -571,6 +608,7 @@ void LinkedShader::use(u32 vertType, LinkedShader *previous) {
 		else if (disable & (1 << i))
 			glDisableVertexAttribArray(i);
 	}
+	return stillDirty;
 }
 
 void LinkedShader::stop() {
@@ -580,11 +618,14 @@ void LinkedShader::stop() {
 	}
 }
 
-void LinkedShader::UpdateUniforms(u32 vertType) {
+u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
+	//if (isClear)
+	//	ELOG("Clear");
+
 	u32 dirty = dirtyUniforms & availableUniforms;
-	dirtyUniforms = 0;
+	dirtyUniforms &= (DIRTY_PROJMATRIX | DIRTY_PROJTHROUGHMATRIX);
 	if (!dirty)
-		return;
+		return dirtyUniforms;
 
 	static bool temp_skybox = false;
 	bool position_changed = false, skybox_changed = false;
@@ -777,7 +818,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 			skybox_changed = true;
 		}
 	}
-	if (dirty & DIRTY_PROJMATRIX || bFreeLookChanged || (bFrameChanged && g_Config.bEnableVR && g_has_hmd)) {
+	if (!gstate.isModeThrough() && !isClear && (dirty & DIRTY_PROJMATRIX || bFreeLookChanged || (bFrameChanged && g_Config.bEnableVR && g_has_hmd))) {
 		if (g_Config.bEnableVR && g_has_hmd) {
 			Matrix4x4 flippedMatrix = SetProjectionConstants(gstate.projMatrix, dirty & DIRTY_PROJMATRIX, false);
 			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m); 
@@ -847,13 +888,15 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 
 			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 		}
-	} 
+		dirtyUniforms &= ~DIRTY_PROJMATRIX;
+	}
 	else if (skybox_changed && g_Config.bEnableVR && g_has_hmd)
 	{
 		Matrix4x4 flippedMatrix = SetProjectionConstants(gstate.projMatrix, false, false);
 		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
+		dirtyUniforms &= ~DIRTY_PROJMATRIX;
 	}
-	if (dirty & DIRTY_PROJTHROUGHMATRIX || (bFrameChanged && g_Config.bEnableVR && g_has_hmd))
+	if (gstate.isModeThrough() && !isClear && (dirty & DIRTY_PROJTHROUGHMATRIX || (bFrameChanged && g_Config.bEnableVR && g_has_hmd)))
 	{
 		Matrix4x4 proj_through;
 		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0.0f, 1.0f);
@@ -867,6 +910,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 		{
 			glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, proj_through.m);
 		}
+		dirtyUniforms &= ~DIRTY_PROJTHROUGHMATRIX;
 	}
 	bFrameChanged = false;
 
@@ -971,6 +1015,7 @@ void LinkedShader::UpdateUniforms(u32 vertType) {
 			if (u_lightspecular[i] != -1) SetColorUniform3(u_lightspecular[i], gstate.lcolor[i * 3 + 2]);
 		}
 	}
+	return dirtyUniforms;
 }
 
 
@@ -1075,12 +1120,26 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		//	&fScaleHack, &fWidthHack, &fHeightHack, &fUpHack, &fRightHack, &iTelescopeHack);
 	//}
 
+	if (g_Config.bBefore3DIsBackground && last_frame_had_3d && !isPerspective && !this_frame_has_3d)
+	{
+		NOTICE_LOG(VR, "Before 3D: Background");
+		g_is_skyplane = true;
+	}
+	else if (g_Config.bBefore3DIsBackground) {
+		g_is_skyplane = false;
+	}
+
+	bool isSkybox = g_is_skybox || g_is_skyplane;
+
+	//if (isSkybox && !isThrough)
+	//	bHide = true;
+
 	// VR: in split-screen, only draw VR player TODO: fix offscreen to render to a separate texture in VR 
 	bHide = bHide || (g_has_hmd && (g_viewport_type == VIEW_OFFSCREEN || (g_viewport_type >= VIEW_PLAYER_1 && g_viewport_type <= VIEW_PLAYER_4 && g_Config.iVRPlayer != g_viewport_type - VIEW_PLAYER_1)));
 	// flash selected layer for debugging
 	bHide = bHide || (bFlashing && g_Config.iFlashState > 5);
 	// hide skybox or everything to reduce motion sickness
-	bHide = bHide || (g_is_skybox && g_Config.iMotionSicknessSkybox == 1) || g_vr_black_screen;
+	bHide = bHide || (isSkybox && g_Config.iMotionSicknessSkybox == 1) || g_vr_black_screen;
 
 	// Split WidthHack and HeightHack into left and right versions for telescopes
 	float fLeftWidthHack = fWidthHack, fRightWidthHack = fWidthHack;
@@ -1173,6 +1232,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	// Real 3D scene
 	if (isPerspective && g_viewport_type != VIEW_HUD_ELEMENT && g_viewport_type != VIEW_OFFSCREEN)
 	{
+		this_frame_has_3d = true;
+
 		znear = gameZNear;
 		zfar = gameZFar;
 		hfov = gameHFOV;
@@ -1186,11 +1247,20 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			//CheckOrientationConstants();
 			g_vr_had_3D_already = true;
 		}
+		//ELOG("3D");
 	}
 	// 2D layer we will turn into a 3D scene
 	// or 3D HUD element that we will treat like a part of the 2D HUD 
 	else
 	{
+		//if (isThrough && isSkybox)
+		//	ELOG("2D Skybox Through");
+		//else if (isSkybox)
+		//	ELOG("2D Skybox");
+		//else if (isThrough)
+		//	ELOG("2D Through");
+		//else
+		//	ELOG("2D");
 		m_layer_on_top = g_Config.bHudOnTop;
 		if (vr_widest_3d_HFOV > 0)
 		{
@@ -1320,7 +1390,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		float extra_pitch = -g_Config.fLeanBackAngle;
 		lean_back_matrix.setRotationX(-DEGREES_TO_RADIANS(extra_pitch));
 		// camera pitch
-		if ((g_Config.bStabilizePitch || g_Config.bStabilizeRoll || g_Config.bStabilizeYaw) && g_Config.bCanReadCameraAngles && (g_Config.iMotionSicknessSkybox != 2 || !g_is_skybox))
+		if ((g_Config.bStabilizePitch || g_Config.bStabilizeRoll || g_Config.bStabilizeYaw) && g_Config.bCanReadCameraAngles && (g_Config.iMotionSicknessSkybox != 2 || !isSkybox))
 		{
 			if (!g_Config.bStabilizePitch)
 			{
@@ -1352,7 +1422,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 
 	// Position matrices
 	Matrix44 head_position_matrix, free_look_matrix, camera_forward_matrix, camera_position_matrix;
-	if (bStuckToHead || g_is_skybox)
+	if (bStuckToHead || isSkybox)
 	{
 		Matrix44::LoadIdentity(head_position_matrix);
 		Matrix44::LoadIdentity(free_look_matrix);
@@ -1402,7 +1472,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		// leaning back
 		// head position tracking
 		// head rotation tracking
-		if (bNoForward || g_is_skybox || bStuckToHead)
+		if (bNoForward || isSkybox || bStuckToHead)
 		{
 			camera_forward_matrix.setIdentity();
 		}
@@ -1433,11 +1503,17 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		// 2D Screen
 		if (vr_widest_3d_HFOV <= 0)
 		{
-			HudThickness = g_Config.fScreenThickness * UnitsPerMetre;
-			HudDistance = g_Config.fScreenDistance * UnitsPerMetre;
-			HudHeight = g_Config.fScreenHeight * UnitsPerMetre;
-			HudHeight = g_Config.fScreenHeight * UnitsPerMetre;
-			HudWidth = HudHeight * (float)16 / 9;
+			if (isSkybox) {
+				HudThickness = 0;
+				HudDistance = zfar*2;
+				HudWidth = HudHeight = HudDistance * 2; // 90 degree skycube
+			} else {
+				HudThickness = g_Config.fScreenThickness * UnitsPerMetre;
+				HudDistance = g_Config.fScreenDistance * UnitsPerMetre;
+				HudHeight = g_Config.fScreenHeight * UnitsPerMetre;
+				HudHeight = g_Config.fScreenHeight * UnitsPerMetre;
+				HudWidth = HudHeight * (float)16 / 9;
+			}
 			CameraForward = 0;
 			HudUp = g_Config.fScreenUp * UnitsPerMetre;
 			AimDistance = HudDistance;
@@ -1445,24 +1521,34 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		else
 			// HUD over 3D world
 		{
-			// Give the 2D layer a 3D effect if different parts of the 2D layer are rendered at different z coordinates
-			HudThickness = g_Config.fHudThickness * UnitsPerMetre;  // the 2D layer is actually a 3D box this many game units thick
-			HudDistance = g_Config.fHudDistance * UnitsPerMetre;   // depth 0 on the HUD should be this far away
-			HudUp = 0;
-			if (bNoForward)
+			if (isSkybox) {
+				HudThickness = 0;
+				HudDistance = zfar*2;
+				// It might be better to use 90 degrees for the hfov (but not vfov), we should test what looks best
+				HudWidth  = 2.0f * tanf(DEGREES_TO_RADIANS(hfov / 2.0f)) * HudDistance;
+				HudHeight = 2.0f * tanf(DEGREES_TO_RADIANS(vfov / 2.0f)) * HudDistance;
 				CameraForward = 0;
-			else
-				CameraForward = (g_Config.fCameraForward + zoom_forward) * UnitsPerMetre;
-			// When moving the camera forward, correct the size of the HUD so that aiming is correct at AimDistance
-			AimDistance = g_Config.fAimDistance * UnitsPerMetre;
-			if (AimDistance <= 0)
-				AimDistance = HudDistance;
-			// Now that we know how far away the box is, and what FOV it should fill, we can work out the width and height in game units
-			// Note: the HUD won't line up exactly (except at AimDistance) if CameraForward is non-zero 
-			//float HudWidth = 2.0f * tanf(hfov / 2.0f * 3.14159f / 180.0f) * (HudDistance) * Correction;
-			//float HudHeight = 2.0f * tanf(vfov / 2.0f * 3.14159f / 180.0f) * (HudDistance) * Correction;
-			HudWidth = 2.0f * tanf(DEGREES_TO_RADIANS(hfov / 2.0f)) * HudDistance * (AimDistance + CameraForward) / AimDistance;
-			HudHeight = 2.0f * tanf(DEGREES_TO_RADIANS(vfov / 2.0f)) * HudDistance * (AimDistance + CameraForward) / AimDistance;
+			}
+			else {
+				// Give the 2D layer a 3D effect if different parts of the 2D layer are rendered at different z coordinates
+				HudThickness = g_Config.fHudThickness * UnitsPerMetre;  // the 2D layer is actually a 3D box this many game units thick
+				HudDistance = g_Config.fHudDistance * UnitsPerMetre;   // depth 0 on the HUD should be this far away
+				HudUp = 0;
+				if (bNoForward)
+					CameraForward = 0;
+				else
+					CameraForward = (g_Config.fCameraForward + zoom_forward) * UnitsPerMetre;
+				// When moving the camera forward, correct the size of the HUD so that aiming is correct at AimDistance
+				AimDistance = g_Config.fAimDistance * UnitsPerMetre;
+				if (AimDistance <= 0)
+					AimDistance = HudDistance;
+				// Now that we know how far away the box is, and what FOV it should fill, we can work out the width and height in game units
+				// Note: the HUD won't line up exactly (except at AimDistance) if CameraForward is non-zero 
+				//float HudWidth = 2.0f * tanf(hfov / 2.0f * 3.14159f / 180.0f) * (HudDistance) * Correction;
+				//float HudHeight = 2.0f * tanf(vfov / 2.0f * 3.14159f / 180.0f) * (HudDistance) * Correction;
+				HudWidth = 2.0f * tanf(DEGREES_TO_RADIANS(hfov / 2.0f)) * HudDistance * (AimDistance + CameraForward) / AimDistance;
+				HudHeight = 2.0f * tanf(DEGREES_TO_RADIANS(vfov / 2.0f)) * HudDistance * (AimDistance + CameraForward) / AimDistance;
+			}
 		}
 
 		Vec3 scale; // width, height, and depth of box in game units divided by 2D width, height, and depth 
@@ -1607,7 +1693,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	Matrix44 eye_pos_matrix_left, eye_pos_matrix_right;
 	float posLeft[3] = { 0, 0, 0 };
 	float posRight[3] = { 0, 0, 0 };
-	if (!g_is_skybox)
+	if (!isSkybox)
 	{
 		VR_GetEyePos(posLeft, posRight);
 		for (int i = 0; i < 3; ++i)
@@ -1636,11 +1722,6 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	//Matrix44::Multiply(proj_left, view_matrix_left, final_matrix_left);
 	//Matrix44::Multiply(proj_right, view_matrix_right, final_matrix_right);
 	final_matrix_left = view_matrix_left * proj_left;
-
-	if (!isPerspective)
-	{
-		//final_matrix_left = flippedMatrix;
-	}
 
 	if (debug_newScene) {
 		final_matrix_left.toOpenGL(s, 1024);
@@ -1831,11 +1912,14 @@ Shader *ShaderManager::ApplyGeometryShader(int prim, u32 vertType) {
 	return gs;
 }
 
-LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, Shader *gs, int prim, u32 vertType) {
+// This is the only place where UpdateUniforms is called!
+LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, Shader *gs, int prim, u32 vertType, bool isClear) {
 	ShaderID FSID;
 	ComputeFragmentShaderID(&FSID);
 	if (lastVShaderSame_ && lastGShaderSame_ && FSID == lastFSID_) {
-		lastShader_->UpdateUniforms(vertType);
+		u32 stillDirty = lastShader_->UpdateUniforms(vertType, isClear);
+		globalDirty_ |= stillDirty;
+		shaderSwitchDirty_ |= stillDirty;
 		return lastShader_;
 	}
 
@@ -1873,11 +1957,13 @@ LinkedShader *ShaderManager::ApplyFragmentShader(Shader *vs, Shader *gs, int pri
 			return NULL;
 		}
 #endif
-		ls = new LinkedShader(vs, gs, fs, vertType, vs->UseHWTransform(), lastShader_);  // This does "use" automatically
+		ls = new LinkedShader(vs, gs, fs, vertType, vs->UseHWTransform(), lastShader_, isClear);  // This does "use" automatically
 		const LinkedShaderCacheEntry entry(vs, gs, fs, ls);
 		linkedShaderCache_.push_back(entry);
 	} else {
-		ls->use(vertType, lastShader_);
+		u32 stillDirty = ls->use(vertType, lastShader_, isClear);
+		shaderSwitchDirty_ |= stillDirty;
+		globalDirty_ |= stillDirty;
 	}
 
 	lastShader_ = ls;

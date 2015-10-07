@@ -158,7 +158,10 @@ void FramebufferManager::ClearBuffer() {
 	glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glstate.stencilFunc.set(GL_ALWAYS, 0, 0);
 	glstate.stencilMask.set(0xFF);
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	if (g_Config.bOverrideClearColor)
+		glClearColor(((g_Config.iBackgroundColor >> 16) & 0xFF)/255.0f, ((g_Config.iBackgroundColor >> 8) & 0xFF) / 255.0f, (g_Config.iBackgroundColor & 0xFF) / 255.0f, 0.0f);
+	else
+		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClearStencil(0);
 #ifdef USING_GLES2
 	glClearDepthf(0.0f);
@@ -1384,6 +1387,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 				OGL::VR_RenderToEyebuffer(1);
 				ClearBuffer();
 				OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
+				//ELOG("==end==");
 			}
 			return;
 		}
@@ -1520,6 +1524,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 			}
 		}
 
+		//ELOG("==end==");
 		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		if (g_has_hmd && g_Config.bEnableVR && !g_Config.bDontClearScreen) {
@@ -2075,6 +2080,7 @@ void ShowScreenResolution();
 #endif
 
 void FramebufferManager::EndFrame() {
+	//ELOG("==END==");
 	if (resized_) {
 		OGL::VR_StopFramebuffer();
 		// TODO: Only do this if the new size actually changed the renderwidth/height.
