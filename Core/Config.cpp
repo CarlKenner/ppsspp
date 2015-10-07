@@ -674,7 +674,6 @@ static ConfigSetting soundSettings[] = {
 };
 
 static bool DefaultShowTouchControls() {
-#if defined(MOBILE_DEVICE)
 	int deviceType = System_GetPropertyInt(SYSPROP_DEVICE_TYPE);
 	if (deviceType == DEVICE_TYPE_MOBILE) {
 		std::string name = System_GetProperty(SYSPROP_NAME);
@@ -690,9 +689,6 @@ static bool DefaultShowTouchControls() {
 	} else {
 		return false;
 	}
-#else
-	return false;
-#endif
 }
 
 static const float defaultControlScale = 1.15f;
