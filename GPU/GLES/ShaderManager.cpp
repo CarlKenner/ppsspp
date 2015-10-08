@@ -1131,6 +1131,14 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 
 	bool isSkybox = g_is_skybox || g_is_skyplane;
 
+	//if (isThrough) {
+	//	flippedMatrix.toOpenGL(s, 1024);
+	//	ELOG("Through: %s", s);
+	//} else {
+	//	flippedMatrix.toOpenGL(s, 1024);
+	//	ELOG("%s", s);
+	//}
+
 	//if (isSkybox && !isThrough)
 	//	bHide = true;
 
@@ -1291,12 +1299,6 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			// TODO: fix aspect ratio in portrait mode
 			//if (debug_newScene)
 			//	NOTICE_LOG(VR, "Only 2D Projecting: %g x %g, n=%fm f=%fm", hfov, vfov, znear, zfar);
-		}
-		// proj_through matrix is strangely hardcoded to always have znear=0 zfar=-1
-		if (zfar < 0 && znear <= 0) {
-			zfar = -zfar;
-			znear = -znear;
-			zNearBetter = -zNearBetter;
 		}
 		//if (debug_newScene)
 		//	NOTICE_LOG(VR, "2D: zNear3D = %f, znear = %f, zFar = %f", zNear3D, znear, zfar);
@@ -1667,8 +1669,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			}
 			else {
 				scale[2] = HudThickness / (zFar2D - zNear2D); // Scale 2D z values into 3D game units so it is the right thickness
-				if (isThrough)
-					scale[2] = -scale[2];
+				//if (isThrough)
+					//scale[2] = -scale[2];
 			}
 			position[0] = scale[0] * (-(right2D + left2D) / 2.0f) + viewport_offset[0] * HudWidth; // shift it right into the centre of the view
 			position[1] = scale[1] * (-(top2D + bottom2D) / 2.0f) + viewport_offset[1] * HudHeight + HudUp; // shift it up into the centre of the view;
