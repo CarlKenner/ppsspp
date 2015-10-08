@@ -29,6 +29,7 @@
 #include "Core/System.h"
 #include "Core/Config.h"
 #include "Core/Reporting.h"
+#include "GPU/Common/VR.h"
 #include "GPU/GLES/GLES_GPU.h"
 #include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/ShaderManager.h"
@@ -756,25 +757,30 @@ void TransformDrawEngine::ApplyDrawState(int prim) {
 	renderX += gstate_c.curRTOffsetX * renderWidthFactor;
 
 	// Scissor
-	int scissorX1 = gstate.getScissorX1();
-	int scissorY1 = gstate.getScissorY1();
-	int scissorX2 = gstate.getScissorX2() + 1;
-	int scissorY2 = gstate.getScissorY2() + 1;
-
-	// This is a bit of a hack as the render buffer isn't always that size
-	if (scissorX1 == 0 && scissorY1 == 0 
-		&& scissorX2 >= (int) gstate_c.curRTWidth
-		&& scissorY2 >= (int) gstate_c.curRTHeight) {
+	if (g_Config.bEnableVR && g_has_hmd) {
+		// scissor doesn't work in VR, unless rendering to a texture
 		glstate.scissorTest.disable();
 	} else {
-		glstate.scissorTest.enable();
-		glstate.scissorRect.set(
-			renderX + scissorX1 * renderWidthFactor,
-			renderY + renderHeight - (scissorY2 * renderHeightFactor),
-			(scissorX2 - scissorX1) * renderWidthFactor,
-			(scissorY2 - scissorY1) * renderHeightFactor);
-	}
+		int scissorX1 = gstate.getScissorX1();
+		int scissorY1 = gstate.getScissorY1();
+		int scissorX2 = gstate.getScissorX2() + 1;
+		int scissorY2 = gstate.getScissorY2() + 1;
 
+		// This is a bit of a hack as the render buffer isn't always that size
+		if (scissorX1 == 0 && scissorY1 == 0
+			&& scissorX2 >= (int)gstate_c.curRTWidth
+			&& scissorY2 >= (int)gstate_c.curRTHeight) {
+			glstate.scissorTest.disable();
+		}
+		else {
+			glstate.scissorTest.enable();
+			glstate.scissorRect.set(
+				renderX + scissorX1 * renderWidthFactor,
+				renderY + renderHeight - (scissorY2 * renderHeightFactor),
+				(scissorX2 - scissorX1) * renderWidthFactor,
+				(scissorY2 - scissorY1) * renderHeightFactor);
+		}
+	}
 	/*
 	int regionX1 = gstate.region1 & 0x3FF;
 	int regionY1 = (gstate.region1 >> 10) & 0x3FF;
