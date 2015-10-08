@@ -22,7 +22,6 @@
 #include "Common/Arm64Emitter.h"
 #include "Core/MIPS/JitCommon/JitState.h"
 #include "Core/MIPS/JitCommon/JitBlockCache.h"
-#include "Core/MIPS/ARM64/Arm64Asm.h"
 #include "Core/MIPS/ARM64/Arm64RegCache.h"
 #include "Core/MIPS/ARM64/Arm64RegCacheFPU.h"
 #include "Core/MIPS/MIPSVFPUUtils.h"
@@ -187,8 +186,8 @@ private:
 	void AddContinuedBlock(u32 dest);
 	MIPSOpcode GetOffsetInstruction(int offset);
 
-	void WriteDownCount(int offset = 0);
-	void WriteDownCountR(Arm64Gen::ARM64Reg reg);
+	void WriteDownCount(int offset = 0, bool updateFlags = true);
+	void WriteDownCountR(Arm64Gen::ARM64Reg reg, bool updateFlags = true);
 	void RestoreRoundingMode(bool force = false);
 	void ApplyRoundingMode(bool force = false);
 	void UpdateRoundingMode();

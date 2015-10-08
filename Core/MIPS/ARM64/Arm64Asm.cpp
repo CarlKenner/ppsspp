@@ -25,7 +25,6 @@
 #include "Common/CPUDetect.h"
 #include "Common/Arm64Emitter.h"
 #include "Core/MIPS/ARM64/Arm64Jit.h"
-#include "Core/MIPS/ARM64/Arm64Asm.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
 
 using namespace Arm64Gen;
@@ -99,11 +98,11 @@ void Arm64Jit::GenerateFixedCode(const JitOptions &jo) {
 	if (jo.useStaticAlloc) {
 		saveStaticRegisters = AlignCode16();
 		STR(INDEX_UNSIGNED, DOWNCOUNTREG, CTXREG, offsetof(MIPSState, downcount));
-		gpr.EmitSaveStaticAllocs();
+		gpr.EmitSaveStaticRegisters();
 		RET();
 
 		loadStaticRegisters = AlignCode16();
-		gpr.EmitLoadStaticAllocs();
+		gpr.EmitLoadStaticRegisters();
 		LDR(INDEX_UNSIGNED, DOWNCOUNTREG, CTXREG, offsetof(MIPSState, downcount));
 		RET();
 
@@ -172,7 +171,7 @@ void Arm64Jit::GenerateFixedCode(const JitOptions &jo) {
 				MOV(W0, DOWNCOUNTREG);
 				MOV(X1, MEMBASEREG);
 				MOV(X2, JITBASEREG);
-				QuickCallFunction(SCRATCH1, (void *)&ShowPC);
+				QuickCallFunction(SCRATCH1_64, (void *)&ShowPC);
 			}
 
 			LDR(INDEX_UNSIGNED, SCRATCH1, CTXREG, offsetof(MIPSState, pc));
@@ -186,6 +185,7 @@ void Arm64Jit::GenerateFixedCode(const JitOptions &jo) {
 			SetJumpTarget(skipJump);
 
 			// No block found, let's jit. I don't think we actually need to save static regs that are in callee-save regs here but whatever.
+			// Also, rounding mode gotta be irrelevant here..
 			SaveStaticRegisters();
 			RestoreRoundingMode(true);
 			QuickCallFunction(SCRATCH1_64, (void *)&MIPSComp::JitAt);
