@@ -1121,11 +1121,10 @@ void VR_BruteForceBeginFrame()
 			if (g_Config.BruteForceCurrentFunctionIndex >= 0)
 			{
 				// PatchFunction(BruteForceCurrentFunctionIndex, BruteForceReturnCode);
-				Memory::Write_U32(function_addrs[g_Config.BruteForceCurrentFunctionIndex],     0x03E00008); // jr ra    // return
-				Memory::Write_U32(function_addrs[g_Config.BruteForceCurrentFunctionIndex] + 4, 0x20020000);//0x00001025); // li v0, 0 // result = 0
-				if (MIPSComp::jit) {
-					MIPSComp::jit->ClearCache();
-				}
+				u32 addr = function_addrs[g_Config.BruteForceCurrentFunctionIndex];
+				currentMIPS->InvalidateICache(addr & ~3, 8);
+				Memory::Write_U32(0x03E00008, addr);     // jr ra    // return
+				Memory::Write_U32(0x20020000, addr + 4); //0x00001025 // li v0, 0 // result = 0
 			}
 			g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
 		}

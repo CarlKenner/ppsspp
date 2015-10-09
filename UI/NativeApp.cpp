@@ -38,6 +38,7 @@
 #include "Windows/DSoundStream.h"
 #include "Windows/MainWindow.h"
 #include "Windows/D3D9Base.h"
+#include "Windows/W32Util/Misc.h"
 #endif
 
 #include "base/display.h"
@@ -80,6 +81,7 @@
 #include "Core/Util/GameManager.h"
 #include "Core/Util/AudioFormat.h"
 #include "GPU/GLES/VROGL.h"
+#include "GPU/GPU.h"
 
 #include "ui_atlas.h"
 #include "EmuScreen.h"
@@ -712,54 +714,90 @@ void NativeRender() {
 
 	if (GetUIState() == UISTATE_INGAME)
 		VR_BruteForceBeginFrame();
+	try {
+		if (GetUIState() != UISTATE_INGAME && g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
+			OGL::VR_BeginGUI();
+		}
+		thin3d->Clear(T3DClear::COLOR | T3DClear::DEPTH | T3DClear::STENCIL, 0xFF000000, 0.0f, 0);
+		GL_CHECK(); // error 1286 (0506)
 
-	if (GetUIState() != UISTATE_INGAME && g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
-		OGL::VR_BeginGUI();
-	}
-	thin3d->Clear(T3DClear::COLOR | T3DClear::DEPTH | T3DClear::STENCIL, 0xFF000000, 0.0f, 0);
-	GL_CHECK(); // error 1286 (0506)
+		T3DViewport viewport;
+		viewport.TopLeftX = 0;
+		viewport.TopLeftY = 0;
+		viewport.Width = pixel_xres;
+		viewport.Height = pixel_yres;
+		viewport.MaxDepth = 1.0;
+		viewport.MinDepth = 0.0;
+		thin3d->SetViewports(1, &viewport);
+		GL_CHECK();
+		thin3d->SetTargetSize(pixel_xres, pixel_yres);
+		GL_CHECK();
 
-	T3DViewport viewport;
-	viewport.TopLeftX = 0;
-	viewport.TopLeftY = 0;
-	viewport.Width = pixel_xres;
-	viewport.Height = pixel_yres;
-	viewport.MaxDepth = 1.0;
-	viewport.MinDepth = 0.0;
-	thin3d->SetViewports(1, &viewport);
-	GL_CHECK();
-	thin3d->SetTargetSize(pixel_xres, pixel_yres);
-	GL_CHECK();
+		float xres = dp_xres;
+		float yres = dp_yres;
 
-	float xres = dp_xres;
-	float yres = dp_yres;
+		// Apply the UIContext bounds as a 2D transformation matrix.
+		Matrix4x4 ortho;
+		if (g_Config.iGPUBackend == GPU_BACKEND_DIRECT3D9) {
+			ortho.setOrthoD3D(0.0f, xres, yres, 0.0f, -1.0f, 1.0f);
+			Matrix4x4 translation;
+			translation.setTranslation(Vec3(-0.5f, -0.5f, 0.0f));
+			ortho = translation * ortho;
+		}
+		else {
+			ortho.setOrtho(0.0f, xres, yres, 0.0f, -1.0f, 1.0f);
+			GL_CHECK();
+		}
 
-	// Apply the UIContext bounds as a 2D transformation matrix.
-	Matrix4x4 ortho;
-	if (g_Config.iGPUBackend == GPU_BACKEND_DIRECT3D9) {
-		ortho.setOrthoD3D(0.0f, xres, yres, 0.0f, -1.0f, 1.0f);
-		Matrix4x4 translation;
-		translation.setTranslation(Vec3(-0.5f, -0.5f, 0.0f));
-		ortho = translation * ortho;
-	} else {
-		ortho.setOrtho(0.0f, xres, yres, 0.0f, -1.0f, 1.0f);
+		ui_draw2d.SetDrawMatrix(ortho);
+		GL_CHECK();
+		ui_draw2d_front.SetDrawMatrix(ortho);
+		GL_CHECK();
+
+		screenManager->render();
+		GL_CHECK(); // error 1286 (0506)
+		if (screenManager->getUIContext()->Text()) {
+			screenManager->getUIContext()->Text()->OncePerFrame();
+			GL_CHECK();
+		}
+
+		DrawDownloadsOverlay(*screenManager->getUIContext());
 		GL_CHECK();
 	}
+	catch (std::bad_alloc) {
+		// we ran out of memory, so it's probably safe to test this function again
+		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
+		// give ourselves some breathing room by freeing memory
+		bool temp = g_Config.bAutoSaveSymbolMap;
+		g_Config.bAutoSaveSymbolMap = false;
+		try {
+			//CPU_Shutdown();
+		}
+		catch (...) {}
+		g_Config.bAutoSaveSymbolMap = temp;
+		try {
+			GPU_Shutdown();
+		}
+		catch (...) {}
+		try {
+			g_Config.Save();
+		}
+		catch (...) {
+			// this could actually be a problem...
+			// we might end up starting again from scratch
+		}
 
-	ui_draw2d.SetDrawMatrix(ortho);
-	GL_CHECK();
-	ui_draw2d_front.SetDrawMatrix(ortho);
-	GL_CHECK();
-
-	screenManager->render();
-	GL_CHECK(); // error 1286 (0506)
-	if (screenManager->getUIContext()->Text()) {
-		screenManager->getUIContext()->Text()->OncePerFrame();
-		GL_CHECK();
+		W32Util::ExitAndRestart();
+	}
+	catch (...) {
+		// we crashed, so skip this function when we restart
+		g_Config.BruteForceFramesLeft = 0;
+		g_Config.Save();
+		W32Util::ExitAndRestart();
 	}
 
-	DrawDownloadsOverlay(*screenManager->getUIContext());
-	GL_CHECK();
+
+
 
 	if (GetUIState() == UISTATE_INGAME)
 		VR_BruteForceEndFrame();
