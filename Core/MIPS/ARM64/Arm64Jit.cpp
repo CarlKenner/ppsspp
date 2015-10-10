@@ -19,6 +19,7 @@
 #include "profiler/profiler.h"
 #include "Common/ChunkFile.h"
 #include "Common/CPUDetect.h"
+#include "Common/StringUtils.h"
 
 #include "Core/Reporting.h"
 #include "Core/Config.h"
@@ -69,8 +70,8 @@ Arm64Jit::Arm64Jit(MIPSState *mips) : blocks(mips, this), gpr(mips, &js, &jo), f
 	fpr.SetEmitter(this, &fp);
 	AllocCodeSpace(1024 * 1024 * 16);  // 32MB is the absolute max because that's what an ARM branch instruction can reach, backwards and forwards.
 	GenerateFixedCode(jo);
-
 	js.startDefaultPrefix = mips_->HasDefaultPrefix();
+	js.currentRoundingFunc = convertS0ToSCRATCH1[0];
 }
 
 Arm64Jit::~Arm64Jit() {
@@ -87,6 +88,10 @@ void Arm64Jit::DoState(PointerWrap &p) {
 		js.lastSetRounding = 0;
 	} else {
 		js.hasSetRounding = 1;
+	}
+
+	if (p.GetMode() == PointerWrap::MODE_READ) {
+		js.currentRoundingFunc = convertS0ToSCRATCH1[(mips_->fcr31) & 3];
 	}
 }
 
@@ -220,7 +225,7 @@ void Arm64Jit::Compile(u32 em_address) {
 
 void Arm64Jit::RunLoopUntil(u64 globalticks) {
 	PROFILE_THIS_SCOPE("jit");
-	((void (*)())enterCode)();
+	((void (*)())enterDispatcher)();
 }
 
 u32 Arm64Jit::GetCompilerPC() {
@@ -350,8 +355,39 @@ void Arm64Jit::AddContinuedBlock(u32 dest) {
 }
 
 bool Arm64Jit::DescribeCodePtr(const u8 *ptr, std::string &name) {
-	// TODO: Not used by anything yet.
-	return false;
+	// Used in disassembly viewer.
+	if (ptr == applyRoundingMode)
+		name = "applyRoundingMode";
+	else if (ptr == updateRoundingMode)
+		name = "updateRoundingMode";
+	else if (ptr == dispatcher)
+		name = "dispatcher";
+	else if (ptr == dispatcherPCInSCRATCH1)
+		name = "dispatcher (PC in SCRATCH1)";
+	else if (ptr == dispatcherNoCheck)
+		name = "dispatcherNoCheck";
+	else if (ptr == enterDispatcher)
+		name = "enterDispatcher";
+	else if (ptr == restoreRoundingMode)
+		name = "restoreRoundingMode";
+	else if (ptr == saveStaticRegisters)
+		name = "saveStaticRegisters";
+	else if (ptr == loadStaticRegisters)
+		name = "loadStaticRegisters";
+	else {
+		u32 addr = blocks.GetAddressFromBlockPtr(ptr);
+		std::vector<int> numbers;
+		blocks.GetBlockNumbersFromAddress(addr, &numbers);
+		if (!numbers.empty()) {
+			const JitBlock *block = blocks.GetBlock(numbers[0]);
+			if (block) {
+				name = StringFromFormat("(block %d at %08x)", numbers[0], block->originalAddress);
+				return true;
+			}
+		}
+		return false;
+	}
+	return true;
 }
 
 void Arm64Jit::Comp_RunBlock(MIPSOpcode op) {
@@ -385,7 +421,7 @@ bool Arm64Jit::ReplaceJalTo(u32 dest) {
 		QuickCallFunction(SCRATCH1_64, (const void *)(entry->replaceFunc));
 		ApplyRoundingMode();
 		LoadStaticRegisters();
-		WriteDownCountR(W0);
+		WriteDownCountR(W0);  // W0 is the return value from entry->replaceFunc. Neither LoadStaticRegisters nor ApplyRoundingMode can trash it.
 	}
 
 	js.compilerPC += 4;
@@ -528,13 +564,7 @@ void Arm64Jit::WriteDownCountR(ARM64Reg reg, bool updateFlags) {
 void Arm64Jit::RestoreRoundingMode(bool force) {
 	// If the game has never set an interesting rounding mode, we can safely skip this.
 	if (force || js.hasSetRounding) {
-		MRS(SCRATCH2_64, FIELD_FPCR);
-		// We are not in flush-to-zero mode outside the JIT, so let's turn it off.
-		uint32_t mask = ~(4 << 22);
-		// Assume we're always in round-to-nearest mode beforehand.
-		mask &= ~(3 << 22);
-		ANDI2R(SCRATCH2, SCRATCH2, mask);
-		_MSR(FIELD_FPCR, SCRATCH2_64);
+		QuickCallFunction(SCRATCH2_64, restoreRoundingMode);
 	}
 }
 
@@ -542,70 +572,13 @@ void Arm64Jit::RestoreRoundingMode(bool force) {
 void Arm64Jit::ApplyRoundingMode(bool force) {
 	// If the game has never set an interesting rounding mode, we can safely skip this.
 	if (force || js.hasSetRounding) {
-		LDR(INDEX_UNSIGNED, SCRATCH2, CTXREG, offsetof(MIPSState, fcr31));
-		TSTI2R(SCRATCH2, 1 << 24);
-		ANDI2R(SCRATCH2, SCRATCH2, 3);
-		FixupBranch skip1 = B(CC_EQ);
-		ADDI2R(SCRATCH2, SCRATCH2, 4);
-		SetJumpTarget(skip1);
-		// We can only skip if the rounding mode is zero and flush is set.
-		CMPI2R(SCRATCH2, 4);
-		// At this point, if it was zero, we can skip the rest.
-		FixupBranch skip = B(CC_EQ);
-
-		// MIPS Rounding Mode:       ARM Rounding Mode
-		//   0: Round nearest        0
-		//   1: Round to zero        3
-		//   2: Round up (ceil)      1
-		//   3: Round down (floor)   2
-		ANDI2R(SCRATCH1, SCRATCH2, 3);
-		CMPI2R(SCRATCH1, 1);
-
-		FixupBranch skipadd = B(CC_NEQ);
-		ADDI2R(SCRATCH2, SCRATCH2, 2);
-		SetJumpTarget(skipadd);
-		FixupBranch skipsub = B(CC_LE);
-		SUBI2R(SCRATCH2, SCRATCH2, 1);
-		SetJumpTarget(skipsub);
-
-		MRS(SCRATCH1_64, FIELD_FPCR);
-
-		// Clear both flush-to-zero and rounding before re-setting them.
-		ANDI2R(SCRATCH1, SCRATCH1, ~((4 | 3) << 22));
-
-		ORR(SCRATCH1, SCRATCH1, SCRATCH2, ArithOption(SCRATCH2, ST_LSL, 22));
-		_MSR(FIELD_FPCR, SCRATCH1_64);
-
-		// Let's update js.currentRoundingFunc with the right convertS0ToSCRATCH1 func.
-		MOVP2R(SCRATCH1_64, convertS0ToSCRATCH1);
-		// We already index this array including the FZ bit.  Easy.
-		LSL(SCRATCH2, SCRATCH2, 3);
-		LDR(SCRATCH2_64, SCRATCH1_64, SCRATCH2);
-		MOVP2R(SCRATCH1_64, &js.currentRoundingFunc);
-		STR(INDEX_UNSIGNED, SCRATCH2_64, SCRATCH1_64, 0);
-
-		SetJumpTarget(skip);
+		QuickCallFunction(SCRATCH2_64, applyRoundingMode);
 	}
 }
 
 // Destroys SCRATCH1 and SCRATCH2
 void Arm64Jit::UpdateRoundingMode() {
-	LDR(INDEX_UNSIGNED, SCRATCH2, CTXREG, offsetof(MIPSState, fcr31));
-
-	TSTI2R(SCRATCH2, 1 << 24);
-	ANDI2R(SCRATCH2, SCRATCH2, 3);
-	FixupBranch skip = B(CC_EQ);
-	ADDI2R(SCRATCH2, SCRATCH2, 4);
-	SetJumpTarget(skip);
-
-	// We can only skip if the rounding mode is zero and flush is not set.
-	CMPI2R(SCRATCH2, 3);
-
-	FixupBranch skip2 = B(CC_EQ);
-	MOVI2R(SCRATCH2, 1);
-	MOVP2R(SCRATCH1_64, &js.hasSetRounding);
-	STRB(INDEX_UNSIGNED, SCRATCH2, SCRATCH1_64, 0);
-	SetJumpTarget(skip2);
+	QuickCallFunction(SCRATCH2_64, updateRoundingMode);
 }
 
 // IDEA - could have a WriteDualExit that takes two destinations and two condition flags,
