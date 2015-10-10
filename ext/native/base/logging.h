@@ -17,13 +17,17 @@
 #undef Crash
 
 #include <stdio.h>
+
+extern bool g_bruteforcing;
+void VR_BruteForceCrash(bool outofmemory);
+
 // Logging
 #ifdef _WIN32
 
 #ifdef _M_X64
-inline void Crash() { int *x = (int *)1337; *x = 1; }
+inline void Crash() { if (g_bruteforcing) VR_BruteForceCrash(false); int *x = (int *)1337; *x = 1; }
 #else
-inline void Crash() { __asm { int 3 }; }
+inline void Crash() { if (g_bruteforcing) VR_BruteForceCrash(false); __asm { int 3 }; }
 #endif
 
 #else

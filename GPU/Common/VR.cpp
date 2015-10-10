@@ -25,6 +25,7 @@
 #endif
 
 #include "Common/Common.h"
+#include "Common/StringUtils.h"
 #include "Core/Config.h"
 #include "Core/CoreParameter.h"
 #include "Core/Debugger/SymbolMap.h"
@@ -988,7 +989,7 @@ void ResetView()
 }
 
 // Bruteforce culling codes by checking every function in the game to see if disabling it changes how much is drawn
-
+bool g_bruteforcing = false;
 extern bool g_TakeScreenshot;
 extern char g_ScreenshotName[2048];
 extern int LoadCountThisSession;
@@ -998,6 +999,7 @@ std::vector<std::string> function_names;
 
 void VR_BruteForceResume()
 {
+	g_bruteforcing = true;
 	g_Config.bEnableVR = false;
 	g_Config.bHardwareTransform = true;
 	g_Config.iAnisotropyLevel = 0;
@@ -1040,7 +1042,7 @@ void VR_BruteForceStart()
 		VR_BruteForceCancel();
 		return;
 	}
-		
+
 	for (int i = 0; i < 3; ++i)
 		g_Config.BruteForceFreeLook[i] = s_fViewTranslationVector[i];
 	g_Config.BruteForce_bEnableVR = g_Config.bEnableVR;
@@ -1059,11 +1061,13 @@ void VR_BruteForceStart()
 	g_Config.BruteForceCurrentFunctionIndex = -2;
 	g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
 	g_Config.bBruteForcing = true;
+	g_bruteforcing = true;
 	g_Config.Save();
 }
 
 void VR_BruteForceRestoreSettings()
 {
+	g_bruteforcing = false;
 	g_Config.bBruteForcing = false;
 	g_Config.bEnableVR = g_Config.BruteForce_bEnableVR;
 	g_Config.bEnableLogging = g_Config.BruteForce_bEnableLogging;
@@ -1090,6 +1094,9 @@ void VR_BruteForceFinish()
 
 void CPU_Shutdown();
 
+static bool isDifferent = false;
+static int prev_verts = 0;
+
 void VR_BruteForceBeginFrame()
 {
 	if (!g_Config.bBruteForcing)
@@ -1098,7 +1105,13 @@ void VR_BruteForceBeginFrame()
 		bFreeLookChanged = true;
 		SaveState::Process();
 		if (g_Config.BruteForceFramesLeft == 0) {
-			++g_Config.BruteForceCurrentFunctionIndex;
+			if (isDifferent && g_Config.BruteForceReturnCode == 0) {
+				++g_Config.BruteForceReturnCode;
+			}
+			else {
+				++g_Config.BruteForceCurrentFunctionIndex;
+				g_Config.BruteForceReturnCode = 0;
+			}
 			gpuStats.numVertsSubmitted = 0;
 			SaveState::LoadSlot(PSP_CoreParameter().fileToStart, SaveState::SAVESTATESLOTS, nullptr);
 			SaveState::Process();
@@ -1124,41 +1137,23 @@ void VR_BruteForceBeginFrame()
 				u32 addr = function_addrs[g_Config.BruteForceCurrentFunctionIndex];
 				currentMIPS->InvalidateICache(addr & ~3, 8);
 				Memory::Write_U32(0x03E00008, addr);     // jr ra    // return
-				Memory::Write_U32(0x20020000, addr + 4); //0x00001025 // li v0, 0 // result = 0
+				Memory::Write_U32(0x20020000 | (g_Config.BruteForceReturnCode & 0xFFFF), addr + 4); // li v0, g_Config.BruteForceReturnCode // result = g_Config.BruteForceReturnCode
 			}
 			g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
 		}
 		else if (!BruteForceInitialised) {
 			VR_BruteForceResume();
 		}
+	} catch (std::bad_alloc) {
+		VR_BruteForceCrash(true);
+	} catch (...) {
+		VR_BruteForceCrash(false);
 	}
-	catch (std::bad_alloc) {
-		// we ran out of memory, so it's safe to test this function again
-		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
-		// give ourselves some breathing room by freeing memory
-		bool temp = g_Config.bAutoSaveSymbolMap;
-		g_Config.bAutoSaveSymbolMap = false;
-		try {
-			CPU_Shutdown();
-		} catch (...) {}
-		g_Config.bAutoSaveSymbolMap = temp;
-		try {
-			GPU_Shutdown();
-		} catch (...) {}
-		try {
-			g_Config.Save();
-		} catch (...) {
-			// this could actually be a problem...
-			// we might end up starting again from scratch
-		}
-		W32Util::ExitAndRestart();
-	}
-	catch (...) {
-		// we crashed, so skip this function when we restart
-		g_Config.BruteForceFramesLeft = 0;
-		g_Config.Save();
-		W32Util::ExitAndRestart();
-	}
+	// save that we are up to the next frame, in case we crash without detecting it
+	int temp = g_Config.BruteForceFramesLeft;
+	g_Config.BruteForceFramesLeft = 0;
+	//g_Config.Save();
+	g_Config.BruteForceFramesLeft = temp;
 }
 
 void VR_BruteForceEndFrame()
@@ -1169,7 +1164,7 @@ void VR_BruteForceEndFrame()
 	// if end of function
 	if (g_Config.BruteForceFramesLeft == 0 && g_Config.BruteForceCurrentFunctionIndex != -2) {
 		// count how many draw calls
-		bool isDifferent = false;
+		isDifferent = false;
 		if (g_Config.BruteForceCurrentFunctionIndex == -1)
 		{
 			g_Config.BruteForceOriginalVertexCount = gpuStats.numVertsSubmitted;
@@ -1179,13 +1174,63 @@ void VR_BruteForceEndFrame()
 			isDifferent = (gpuStats.numVertsSubmitted != g_Config.BruteForceOriginalVertexCount);
 		}
 		if (isDifferent) {
-			if (g_Config.BruteForceCurrentFunctionIndex<0)
-				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "000 original %d", gpuStats.numVertsSubmitted);
-			else
-				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "%d %8x %s %d", g_Config.BruteForceCurrentFunctionIndex, function_addrs[g_Config.BruteForceCurrentFunctionIndex], function_names[g_Config.BruteForceCurrentFunctionIndex].c_str(), gpuStats.numVertsSubmitted);
-			g_TakeScreenshot = true;
+			int verts = gpuStats.numVertsSubmitted;
+			int i = g_Config.BruteForceCurrentFunctionIndex;
+			if (i<0)
+				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "A original %d", verts);
+			else {
+				if (g_Config.BruteForceReturnCode>0) {
+					if (verts != prev_verts) {
+						// our best results are where the return code matters
+						// todo: first rename the original screenshot
+						if (verts > g_Config.BruteForceOriginalVertexCount)
+							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "B %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+						else
+							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "C %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+					} else {
+						isDifferent = false;
+					}
+				} else if (verts == 0)
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "Z %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+				else if (verts > g_Config.BruteForceOriginalVertexCount)
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "D %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+				else
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "E %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+			}
+			g_TakeScreenshot = isDifferent;
+			prev_verts = verts;
 		}
 	}
 
 }
 
+void VR_BruteForceCrash(bool outofmemory)
+{
+	if (outofmemory) {
+		// we ran out of memory, so it's safe to test this function again
+		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
+		// give ourselves some breathing room by freeing memory
+		bool temp = g_Config.bAutoSaveSymbolMap;
+		g_Config.bAutoSaveSymbolMap = false;
+		try {
+			CPU_Shutdown();
+		}
+		catch (...) {}
+		g_Config.bAutoSaveSymbolMap = temp;
+		try {
+			GPU_Shutdown();
+		}
+		catch (...) {}
+	} else {
+		// we crashed, so skip this function when we restart
+		g_Config.BruteForceFramesLeft = 0;
+	}
+	try {
+		g_Config.Save();
+	} catch (...) {
+		// this could actually be a problem...
+		// we might end up starting again from scratch
+	}
+	W32Util::ExitAndRestart();
+
+}

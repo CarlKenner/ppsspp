@@ -187,6 +187,7 @@ void VR_BruteForceStart();
 void VR_BruteForceBeginFrame();
 void VR_BruteForceEndFrame();
 void VR_BruteForceCancel();
+void VR_BruteForceCrash(bool outofmemory);
 
 extern bool g_force_vr, g_prefer_steamvr;
 extern bool g_has_hmd, g_has_rift, g_has_vr920, g_has_steamvr, g_is_direct_mode;

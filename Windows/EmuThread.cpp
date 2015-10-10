@@ -190,35 +190,9 @@ unsigned int WINAPI TheThread(void *)
 		}
 	} 
 	catch (std::bad_alloc) {
-		// we ran out of memory, so it's probably safe to test this function again
-		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
-		// give ourselves some breathing room by freeing memory
-		bool temp = g_Config.bAutoSaveSymbolMap;
-		g_Config.bAutoSaveSymbolMap = false;
-		try {
-			//CPU_Shutdown();
-		}
-		catch (...) {}
-		g_Config.bAutoSaveSymbolMap = temp;
-		try {
-			GPU_Shutdown();
-		}
-		catch (...) {}
-		try {
-			g_Config.Save();
-		}
-		catch (...) {
-			// this could actually be a problem...
-			// we might end up starting again from scratch
-		}
-
-		W32Util::ExitAndRestart();
-	}
-	catch (...) {
-		// we crashed, so skip this function when we restart
-		g_Config.BruteForceFramesLeft = 0;
-		g_Config.Save();
-		W32Util::ExitAndRestart();
+		VR_BruteForceCrash(true);
+	} catch (...) {
+		VR_BruteForceCrash(false);
 	}
 shutdown:
 	_InterlockedExchange(&emuThreadReady, THREAD_SHUTDOWN);

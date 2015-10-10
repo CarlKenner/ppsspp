@@ -69,6 +69,7 @@
 #include "Common/FileUtil.h"
 #include "Common/LogManager.h"
 #include "Common/MemArena.h"
+#include "Common/StringUtils.h"
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/FileLoaders/DiskCachingFileLoader.h"
@@ -674,6 +675,13 @@ void TakeScreenshot() {
 	bool success = TakeGameScreenshot(filename, g_Config.bScreenshotsAsPNG ? SCREENSHOT_PNG : SCREENSHOT_JPG, SCREENSHOT_DISPLAY);
 	if (success) {
 		osm.Show(filename);
+#ifdef _WIN32
+		if (g_Config.bBruteForcing && g_Config.BruteForceCurrentFunctionIndex < 0) {
+			std::string str = std::string("explorer.exe /select,\"") + ReplaceAll(filename, "/", "\\") + "\"";
+			_wsystem(ConvertUTF8ToWString(str).c_str());
+		}
+#endif
+
 	} else {
 		I18NCategory *err = GetI18NCategory("Error");
 		osm.Show(err->T("Could not save screenshot file"));
@@ -763,41 +771,11 @@ void NativeRender() {
 
 		DrawDownloadsOverlay(*screenManager->getUIContext());
 		GL_CHECK();
+	} catch (std::bad_alloc) {
+		VR_BruteForceCrash(true);
+	} catch (...) {
+		VR_BruteForceCrash(false);
 	}
-	catch (std::bad_alloc) {
-		// we ran out of memory, so it's probably safe to test this function again
-		g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
-		// give ourselves some breathing room by freeing memory
-		bool temp = g_Config.bAutoSaveSymbolMap;
-		g_Config.bAutoSaveSymbolMap = false;
-		try {
-			//CPU_Shutdown();
-		}
-		catch (...) {}
-		g_Config.bAutoSaveSymbolMap = temp;
-		try {
-			GPU_Shutdown();
-		}
-		catch (...) {}
-		try {
-			g_Config.Save();
-		}
-		catch (...) {
-			// this could actually be a problem...
-			// we might end up starting again from scratch
-		}
-
-		W32Util::ExitAndRestart();
-	}
-	catch (...) {
-		// we crashed, so skip this function when we restart
-		g_Config.BruteForceFramesLeft = 0;
-		g_Config.Save();
-		W32Util::ExitAndRestart();
-	}
-
-
-
 
 	if (GetUIState() == UISTATE_INGAME)
 		VR_BruteForceEndFrame();

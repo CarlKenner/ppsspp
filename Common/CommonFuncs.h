@@ -80,7 +80,7 @@ inline u64 __rotr64(u64 x, unsigned int shift){
 	#define fileno _fileno
 #ifndef _XBOX
 	#if _M_IX86
-		#define Crash() {__asm int 3}
+	#define Crash() {if (g_bruteforcing) VR_BruteForceCrash(false); __asm int 3}
 	#else
 extern "C" {
 	__declspec(dllimport) void __stdcall DebugBreak(void);

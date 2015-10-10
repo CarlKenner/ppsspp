@@ -156,3 +156,6 @@ bool GenericLogEnabled(LogTypes::LOG_LEVELS level, LogTypes::LOG_TYPE type);
 		if (!PanicYesNo(_fmt_, ##__VA_ARGS__)) {Crash();} \
 	}
 #endif // WIN32
+
+extern bool g_bruteforcing;
+void VR_BruteForceCrash(bool outofmemory);
