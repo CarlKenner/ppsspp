@@ -777,7 +777,7 @@ rotateVBO:
 			gstate_c.vertexFullAlpha = gstate_c.vertexFullAlpha && ((hasColor && (gstate.materialupdate & 1)) || gstate.getMaterialAmbientA() == 255) && (!gstate.isLightingEnabled() || gstate.getAmbientA() == 255);
 		}
 
-		if (g_has_hmd && g_Config.bEnableVR && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+		if (g_has_hmd && g_Config.bEnableVR && !gstate.isModeClear() && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
 			DontDraw = g_Config.bDontDrawScreenSpace;
 		}
 		ApplyDrawStateLate();
@@ -787,7 +787,7 @@ rotateVBO:
 		if (!DontDraw) {
 			if (g_Config.bHudOnTop)
 				ApplyDepthState(m_layer_on_top);
-			if (g_is_skyplane) {
+			if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd) {
 				// check which way around the depth buffer is
 				switch (gstate.getDepthTestFunction()) {
 				case GE_COMP_GREATER:
@@ -811,7 +811,7 @@ rotateVBO:
 			else {
 				glDrawArrays(glprim[prim], 0, vertexCount);
 			}
-			if (g_is_skyplane && !g_Config.bDisableNearClipping)
+			if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd && !g_Config.bDisableNearClipping)
 				glDisable(GL_DEPTH_CLAMP);
 		}
 	} else {
@@ -841,7 +841,7 @@ rotateVBO:
 			prim, decoded, indexGen.VertexCount(),
 			dec_->VertexType(), inds, GE_VTYPE_IDX_16BIT, dec_->GetDecVtxFmt(),
 			maxIndex, framebufferManager_, textureCache_, transformed, transformedExpanded, drawBuffer, numTrans, drawIndexed, &result, 1.0);
-		if (g_has_hmd && g_Config.bEnableVR && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+		if (g_has_hmd && g_Config.bEnableVR && !gstate.isModeClear() && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
 			DontDraw = g_Config.bDontDrawScreenSpace;
 		}
 		ApplyDrawStateLate();
@@ -866,7 +866,7 @@ rotateVBO:
 			if (!DontDraw) {
 				if (g_Config.bHudOnTop)
 					ApplyDepthState(m_layer_on_top);
-				if (g_is_skyplane) {
+				if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd) {
 					// check which way around the depth buffer is
 					switch (gstate.getDepthTestFunction()) {
 					case GE_COMP_GREATER:
@@ -891,12 +891,12 @@ rotateVBO:
 				else {
 					glDrawArrays(glprim[prim], 0, numTrans);
 				}
-				if (g_is_skyplane && !g_Config.bDisableNearClipping)
+				if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd && !g_Config.bDisableNearClipping)
 					glDisable(GL_DEPTH_CLAMP);
 			}
 		} else if (result.action == SW_CLEAR) {
 			u32 clearColor = result.color;
-			if (g_Config.bOverrideClearColor) {
+			if (g_Config.bOverrideClearColor && g_Config.bEnableVR && g_has_hmd) {
 				u32 argb = (u32)(g_Config.iBackgroundColor);
 				clearColor = (clearColor & 0xFF000000) | ((argb & 0xFF) << 16) | ((argb & 0xFF0000) >> 16) | (argb & 0x00FF00);
 			}

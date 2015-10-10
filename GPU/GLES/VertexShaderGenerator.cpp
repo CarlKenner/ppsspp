@@ -44,7 +44,7 @@
 #define WRITE p+=sprintf
 
 bool CanUseHardwareTransform(int prim) {
-	if (!g_Config.bHardwareTransform || gstate.isModeClear())
+	if (!g_Config.bHardwareTransform || (gstate.isModeClear() && g_Config.bEnableVR && g_has_hmd))
 		return false;
 	return !gstate.isModeThrough() && prim != GE_PRIM_RECTANGLES;
 }

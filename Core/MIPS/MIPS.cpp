@@ -22,7 +22,6 @@
 
 #include "Common.h"
 #include "Common/ChunkFile.h"
-#include "Core/Config.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/MIPSInt.h"
 #include "Core/MIPS/MIPSTables.h"
@@ -35,6 +34,8 @@
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/MIPS/JitCommon/NativeJit.h"
 #include "Core/CoreTiming.h"
+
+extern bool g_bruteforcing;
 
 MIPSState mipsr4k;
 MIPSState *currentMIPS = &mipsr4k;
@@ -266,7 +267,7 @@ void MIPSState::DoState(PointerWrap &p) {
 	auto s = p.Section("MIPSState", 1, 3);
 	if (!s)
 		return;
-	if (!g_Config.bBruteForcing) {
+	if (!g_bruteforcing) {
 		// Reset the jit if we're loading.
 		if (p.mode == p.MODE_READ)
 			Reset();

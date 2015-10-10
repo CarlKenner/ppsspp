@@ -158,7 +158,7 @@ void FramebufferManager::ClearBuffer() {
 	glstate.colorMask.set(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glstate.stencilFunc.set(GL_ALWAYS, 0, 0);
 	glstate.stencilMask.set(0xFF);
-	if (g_Config.bOverrideClearColor)
+	if (g_Config.bOverrideClearColor && g_Config.bEnableVR && g_has_hmd)
 		glClearColor(((g_Config.iBackgroundColor >> 16) & 0xFF)/255.0f, ((g_Config.iBackgroundColor >> 8) & 0xFF) / 255.0f, (g_Config.iBackgroundColor & 0xFF) / 255.0f, 0.0f);
 	else
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);

@@ -875,16 +875,18 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 				}
 			}
 
-			// enable freelook also for non-VR mode
-			Matrix4x4 free_look_matrix;
-			Vec3 pos;
-			float UnitsPerMetre = g_Config.fUnitsPerMetre / g_Config.fScale;
-			for (int i = 0; i < 3; ++i)
-				pos[i] = s_fViewTranslationVector[i] * UnitsPerMetre;
-			free_look_matrix.setTranslation(pos);
+			// enable freelook also for non-VR mode, but only for perspective projections, not orthographic
+			if (flippedMatrix.zw == -1.0f || flippedMatrix.zw == 1.0f) {
+				Matrix4x4 free_look_matrix;
+				Vec3 pos;
+				float UnitsPerMetre = g_Config.fUnitsPerMetre / g_Config.fScale;
+				for (int i = 0; i < 3; ++i)
+					pos[i] = s_fViewTranslationVector[i] * UnitsPerMetre;
+				free_look_matrix.setTranslation(pos);
 
-			ScaleProjMatrix(flippedMatrix);
-			flippedMatrix = free_look_matrix * flippedMatrix;
+				ScaleProjMatrix(flippedMatrix);
+				flippedMatrix = free_look_matrix * flippedMatrix;
+			}
 
 			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 		}

@@ -16,12 +16,13 @@
 // http://code.google.com/p/dolphin-emu/
 
 #include "Common.h" // Local
-#include "../Core/Config.h"
 #include "StringUtils.h"
 #include "util/text/utf8.h"
 #include <string>
 
 bool MsgHandler(const char* caption, const char* text, bool yes_no, int Style);
+
+extern bool g_bruteforcing;
 
 static bool AlertEnabled = true;
 
@@ -35,7 +36,7 @@ void SetEnableAlert(bool enable)
 // correct window is shown
 bool MsgAlert(bool yes_no, int Style, const char* format, ...)
 {
-	if (g_Config.bBruteForcing)
+	if (g_bruteforcing)
 		return false;
 	// Read message and write it to the log
 	char buffer[2048];
