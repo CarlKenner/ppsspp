@@ -194,6 +194,7 @@ public:
 	bool bFragmentTestCache;
 	int iSplineBezierQuality; // 0 = low , 1 = Intermediate , 2 = High
 	std::string sPostShaderName;  // Off for off.
+	bool bGfxDebugOutput;
 
 	// VR command line
 	bool bForceVR;
