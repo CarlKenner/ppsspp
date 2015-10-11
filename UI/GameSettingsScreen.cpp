@@ -411,6 +411,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bBefore3DIsBackground, gr->T("Before 3D is Background")));
 	vrSettings->Add(new PopupARGBChoice(&g_Config.iBackgroundColor, gr->T("Background Colour (AARRGGBB)"), screenManager()));
 	vrSettings->Add(new CheckBox(&g_Config.bOverrideClearColor, gr->T("Override Clear Color")));
+	vrSettings->Add(new PopupSliderChoice(&g_Config.iVRCPUSpeed, 0, 1000, sy->T("Change CPU Clock", "Change CPU Clock (0 = default) (unstable)"), screenManager()));
 
 	// Audio
 	ViewGroup *audioSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));

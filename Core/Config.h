@@ -323,6 +323,7 @@ public:
 	int iBackgroundColor;
 	int iTelescopeEye;
 	int iMetroidPrime;
+	int iVRCPUSpeed;
 	// VR layer debugging
 	int iSelectedLayer;
 	int iFlashState;

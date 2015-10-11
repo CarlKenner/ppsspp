@@ -650,6 +650,7 @@ static ConfigSetting vrGameSettings[] = {
 	ConfigSetting("SelectedLayer", &g_Config.iSelectedLayer, -1),
 	ConfigSetting("FlashState", &g_Config.iFlashState, 0),
 	ConfigSetting("HasVRCheats", &g_Config.bHasVRCheats, false, false),
+	ReportedConfigSetting("CPUSpeed", &g_Config.iVRCPUSpeed, 0, true, true),
 
 	ConfigSetting(false),
 };

@@ -60,15 +60,23 @@ static std::vector<VolatileWaitingThread> volatileWaitingThreads;
 static int pllFreq = 222;
 static int busFreq = 111;
 
+extern bool g_has_hmd;
+
 void __PowerInit() {
 	memset(powerCbSlots, 0, sizeof(powerCbSlots));
 	volatileMemLocked = false;
 	volatileWaitingThreads.clear();
 
-	if (g_Config.iLockedCPUSpeed > 0) {
-		CoreTiming::SetClockFrequencyMHz(g_Config.iLockedCPUSpeed);
-		pllFreq = g_Config.iLockedCPUSpeed;
-		busFreq = g_Config.iLockedCPUSpeed / 2;
+	int speed;
+	if (g_Config.bEnableVR && g_has_hmd && g_Config.iVRCPUSpeed > 0)
+		speed = g_Config.iVRCPUSpeed;
+	else
+		speed = g_Config.iLockedCPUSpeed;
+
+	if (speed > 0) {
+		CoreTiming::SetClockFrequencyMHz(speed);
+		pllFreq = speed;
+		busFreq = speed / 2;
 	} else {
 		pllFreq = 222;
 		busFreq = 111;
@@ -354,8 +362,13 @@ static int sceKernelVolatileMemLock(int type, u32 paddr, u32 psize) {
 
 
 static u32 scePowerSetClockFrequency(u32 pllfreq, u32 cpufreq, u32 busfreq) {
-	if (g_Config.iLockedCPUSpeed > 0) {
-		INFO_LOG(HLE,"scePowerSetClockFrequency(%i,%i,%i): locked by user config at %i, %i, %i", pllfreq, cpufreq, busfreq, g_Config.iLockedCPUSpeed, g_Config.iLockedCPUSpeed, busFreq);
+	int speed;
+	if (g_Config.bEnableVR && g_has_hmd && g_Config.iVRCPUSpeed > 0)
+		speed = g_Config.iVRCPUSpeed;
+	else
+		speed = g_Config.iLockedCPUSpeed;
+	if (speed > 0) {
+		INFO_LOG(HLE,"scePowerSetClockFrequency(%i,%i,%i): locked by user config at %i, %i, %i", pllfreq, cpufreq, busfreq, speed, speed, busFreq);
 	}
 	else {
 		if (cpufreq == 0 || cpufreq > 333) {
@@ -372,8 +385,13 @@ static u32 scePowerSetClockFrequency(u32 pllfreq, u32 cpufreq, u32 busfreq) {
 }
 
 static u32 scePowerSetCpuClockFrequency(u32 cpufreq) {
-	if(g_Config.iLockedCPUSpeed > 0) {
-		DEBUG_LOG(HLE,"scePowerSetCpuClockFrequency(%i): locked by user config at %i", cpufreq, g_Config.iLockedCPUSpeed);
+	int speed;
+	if (g_Config.bEnableVR && g_has_hmd && g_Config.iVRCPUSpeed > 0)
+		speed = g_Config.iVRCPUSpeed;
+	else
+		speed = g_Config.iLockedCPUSpeed;
+	if(speed > 0) {
+		DEBUG_LOG(HLE,"scePowerSetCpuClockFrequency(%i): locked by user config at %i", cpufreq, speed);
 	}
 	else {
 		if (cpufreq == 0 || cpufreq > 333) {
@@ -387,7 +405,12 @@ static u32 scePowerSetCpuClockFrequency(u32 cpufreq) {
 }
 
 static u32 scePowerSetBusClockFrequency(u32 busfreq) {
-	if(g_Config.iLockedCPUSpeed > 0) {
+	int speed;
+	if (g_Config.bEnableVR && g_has_hmd && g_Config.iVRCPUSpeed > 0)
+		speed = g_Config.iVRCPUSpeed;
+	else
+		speed = g_Config.iLockedCPUSpeed;
+	if (speed > 0) {
 		DEBUG_LOG(HLE,"scePowerSetBusClockFrequency(%i): locked by user config at %i", busfreq, busFreq);
 	}
 	else {
