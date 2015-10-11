@@ -21,6 +21,8 @@
 #include "ui/ui_screen.h"
 #include "thin3d/thin3d.h"
 
+#include "Common/StringUtils.h"
+
 #include "Core/Reporting.h"
 #include "Core/SaveState.h"
 #include "Core/System.h"
@@ -42,6 +44,7 @@
 
 #include "gfx_es2/draw_buffer.h"
 #include "ui/ui_context.h"
+#include "util/text/utf8.h"
 
 extern bool g_has_hmd;
 
@@ -326,6 +329,10 @@ void GamePauseScreen::CreateViews() {
 	} else if (g_Config.bHasVRCheats && g_Config.bEnableVR && g_has_hmd) {
 		rightColumnItems->Add(new Choice(pa->T("VR Hacks")))->OnClick.Handle(this, &GamePauseScreen::OnCwCheat);
 	}
+	//if (info->hasDefaults)
+	//	rightColumnItems->Add(new Choice(pa->T("Show Defaults")))->OnClick.Handle(this, &GamePauseScreen::OnShowDefaults);
+	//else
+		rightColumnItems->Add(new Choice(pa->T("Create Defaults")))->OnClick.Handle(this, &GamePauseScreen::OnShowDefaults);
 
 	// TODO, also might be nice to show overall compat rating here?
 	// Based on their platform or even cpu/gpu/config.  Would add an API for it.
@@ -443,6 +450,18 @@ UI::EventReturn GamePauseScreen::OnDeleteConfig(UI::EventParams &e)
 	return UI::EVENT_DONE;
 }
 
+UI::EventReturn GamePauseScreen::OnShowDefaults(UI::EventParams &e) {
+#ifdef _WIN32
+	std::string gameId = g_paramSFO.GetValueString("DISC_ID");
+	GameInfo *info = g_gameInfoCache.GetInfo(NULL, gamePath_, 0);
+	g_Config.createGameDefaultConfig(gameId, info->title);
+	info->hasDefaults = true;
+	std::string filename = ReplaceAll(g_Config.getGameDefaultConfigFile(info->id), "/", "\\");
+	std::string str = std::string("start \"\" \"") + filename + "\"";
+	_wsystem(ConvertUTF8ToWString(str).c_str());
+#endif
+	return UI::EVENT_DONE;
+}
 
 void GamePauseScreen::sendMessage(const char *message, const char *value) {
 	// Since the language message isn't allowed to be in native, we have to have add this
