@@ -25,6 +25,8 @@ static bool cheatsEnabled;
 void hleCheat(u64 userdata, int cyclesLate);
 void trim2(std::string& str);
 
+extern bool g_has_hmd;
+
 static void __CheatStop() {
 	if (cheatEngine != 0) {
 		cheatEngine->Exit();
@@ -65,7 +67,7 @@ void __CheatInit() {
 	// Always register the event, want savestates to be compatible whether cheats on or off.
 	CheatEvent = CoreTiming::RegisterEvent("CheatEvent", &hleCheat);
 
-	if (g_Config.bEnableCheats) {
+	if (g_Config.bEnableCheats || (g_Config.bHasVRCheats && g_Config.bEnableVR && g_has_hmd)) {
 		__CheatStart();
 	}
 
@@ -99,9 +101,9 @@ void __CheatDoState(PointerWrap &p) {
 }
 
 void hleCheat(u64 userdata, int cyclesLate) {
-	if (cheatsEnabled != g_Config.bEnableCheats) {
+	if (cheatsEnabled != (g_Config.bEnableCheats || (g_Config.bHasVRCheats && g_Config.bEnableVR && g_has_hmd))) {
 		// Okay, let's move to the desired state, then.
-		if (g_Config.bEnableCheats) {
+		if (g_Config.bEnableCheats || (g_Config.bHasVRCheats && g_Config.bEnableVR && g_has_hmd)) {
 			__CheatStart();
 		} else {
 			__CheatStop();
@@ -263,18 +265,40 @@ inline void trim2(std::string& str) {
 std::vector<std::string> CWCheatEngine::GetCodesList() { //Reads the entire cheat list from the appropriate .ini.
 	std::string line;
 	std::vector<std::string> codesList;  // Read from INI here
+	if (g_Config.bEnableCheats) {
 #ifdef _WIN32
-	std::ifstream list(ConvertUTF8ToWString(activeCheatFile));
+		std::ifstream list(ConvertUTF8ToWString(activeCheatFile));
 #else
-	std::ifstream list(activeCheatFile.c_str());
+		std::ifstream list(activeCheatFile.c_str());
 #endif
-	if (!list) {
-		return codesList;
+		if (list) {
+			for (int i = 0; !list.eof(); i++) {
+				getline(list, line, '\n');
+				if (line.length() > 3 && (line.substr(0, 1) == "_" || line.substr(0, 2) == "//")){
+					codesList.push_back(line);
+				}
+			}
+		}
 	}
-	for (int i = 0; !list.eof(); i ++) {
-		getline(list, line, '\n');
-		if (line.length() > 3 && (line.substr(0,1) == "_"||line.substr(0,2) == "//")){
-			codesList.push_back(line);
+	if (g_Config.bHasVRCheats) {
+		std::string iniDefaultFileNameFull = g_Config.getGameDefaultConfigFile(g_Config.gameId_);
+#ifdef _WIN32
+		std::ifstream list(iniDefaultFileNameFull.c_str());
+#else
+		std::ifstream list(iniDefaultFileNameFull.c_str());
+#endif
+		if (list) {
+			bool inSection = false;
+			for (int i = 0; !list.eof(); i++) {
+				getline(list, line, '\n');
+				if (line.length() >= strlen("[VRCheats]") && strcasecmp(line.substr(0, strlen("[VRCheats]")).c_str(), "[VRCheats]") == 0)
+					inSection = true;
+				else if (line.length() >= 2 && line.substr(0, 1) == "[")
+					inSection = false;
+				else if (inSection && line.length() > 3 && (line.substr(0, 1) == "_" || line.substr(0, 2) == "//")){
+					codesList.push_back(line);
+				}
+			}
 		}
 	}
 	for(size_t i = 0; i < codesList.size(); i++) {

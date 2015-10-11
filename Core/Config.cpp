@@ -649,7 +649,8 @@ static ConfigSetting vrGameSettings[] = {
 	ConfigSetting("HudFullscreen", &g_Config.bHudFullscreen, false),
 	ConfigSetting("SelectedLayer", &g_Config.iSelectedLayer, -1),
 	ConfigSetting("FlashState", &g_Config.iFlashState, 0),
-	
+	ConfigSetting("HasVRCheats", &g_Config.bHasVRCheats, false, false),
+
 	ConfigSetting(false),
 };
 
@@ -1505,6 +1506,8 @@ bool Config::loadGameConfig(const std::string &pGameId)
 	{
 		INFO_LOG(LOADER, "Failed to read %s. No game-specific settings found, using global defaults.", iniFileNameFull.c_str());
 	}
+
+	g_Config.bHasVRCheats = iniFile.HasSection("VRCheats");
 
 	for (size_t i = 0; i < ARRAY_SIZE(sections); ++i) {
 		IniFile::Section *section = iniFile.GetOrCreateSection(sections[i].section);

@@ -319,6 +319,7 @@ public:
 	bool bDontDrawScreenSpace;
 	bool bBefore3DIsBackground;
 	bool bOverrideClearColor;
+	bool bHasVRCheats;
 	int iBackgroundColor;
 	int iTelescopeEye;
 	int iMetroidPrime;
@@ -556,8 +557,8 @@ public:
 		return (iInternalScreenRotation == ROTATION_LOCKED_VERTICAL || iInternalScreenRotation == ROTATION_LOCKED_VERTICAL180) && iRenderingMode != 0;
 	}
 	
-private:
 	std::string gameId_;
+private:
 	std::string iniFilename_;
 	std::string controllerIniFilename_;
 	std::vector<std::string> searchPath_;

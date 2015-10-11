@@ -43,6 +43,8 @@
 #include "gfx_es2/draw_buffer.h"
 #include "ui/ui_context.h"
 
+extern bool g_has_hmd;
+
 void AsyncImageFileView::GetContentDimensions(const UIContext &dc, float &w, float &h) const {
 	if (texture_) {
 		float texw = (float)texture_->Width();
@@ -321,6 +323,8 @@ void GamePauseScreen::CreateViews() {
 	}
 	if (g_Config.bEnableCheats) {
 		rightColumnItems->Add(new Choice(pa->T("Cheats")))->OnClick.Handle(this, &GamePauseScreen::OnCwCheat);
+	} else if (g_Config.bHasVRCheats && g_Config.bEnableVR && g_has_hmd) {
+		rightColumnItems->Add(new Choice(pa->T("VR Hacks")))->OnClick.Handle(this, &GamePauseScreen::OnCwCheat);
 	}
 
 	// TODO, also might be nice to show overall compat rating here?
