@@ -366,7 +366,7 @@ static ConfigSetting generalSettings[] = {
 #ifdef ANDROID
 	ConfigSetting("ScreenRotation", &g_Config.iScreenRotation, 1),
 #endif
-	ConfigSetting("InternalScreenRotation", &g_Config.iInternalScreenRotation, 1),
+	ConfigSetting("InternalScreenRotation", &g_Config.iInternalScreenRotation, 1, true, true),
 
 #if defined(USING_WIN_UI)
 	ConfigSetting("TopMost", &g_Config.bTopMost, false),

@@ -70,6 +70,8 @@ namespace http {
 
 struct UrlEncoder;
 
+extern bool g_has_hmd;
+
 struct Config {
 public:
 	Config();
@@ -556,7 +558,7 @@ public:
 	void GetReportingInfo(UrlEncoder &data);
 
 	bool IsPortrait() const {
-		return (iInternalScreenRotation == ROTATION_LOCKED_VERTICAL || iInternalScreenRotation == ROTATION_LOCKED_VERTICAL180) && iRenderingMode != 0;
+		return (iInternalScreenRotation == ROTATION_LOCKED_VERTICAL || iInternalScreenRotation == ROTATION_LOCKED_VERTICAL180) && iRenderingMode != 0 && !(bEnableVR && g_has_hmd);
 	}
 	
 	std::string gameId_;

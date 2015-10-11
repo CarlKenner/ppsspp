@@ -1495,6 +1495,13 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			scale.setScaling(Vec3(gameFlipX ? -1.0f : 1.0f, gameFlipY ? -1.0f : 1.0f, gameFlipZ ? -1.0f : 1.0f));
 			look_matrix = scale * look_matrix;
 		}
+
+		if (g_Config.iInternalScreenRotation != ROTATION_LOCKED_HORIZONTAL) {
+			Matrix4x4 portrait;
+			portrait.setRotationZ(DEGREES_TO_RADIANS(90));
+			look_matrix = portrait * look_matrix;
+		}
+
 	}
 	else
 		//if (xfmem.projection.type != GX_PERSPECTIVE || g_viewport_type == VIEW_HUD_ELEMENT || g_viewport_type == VIEW_OFFSCREEN)
@@ -1688,10 +1695,17 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		scale_matrix.setScaling(scale);
 		position_matrix.setTranslation(position);
 
-		// order: scale, position
-		look_matrix = scale_matrix * position_matrix * camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
-		//look_matrix = camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
-		//look_matrix = scale_matrix * head_position_matrix;
+		if (g_Config.iInternalScreenRotation != ROTATION_LOCKED_HORIZONTAL) {
+			Matrix4x4 portrait;
+			portrait.setRotationZ(DEGREES_TO_RADIANS(90));
+			look_matrix = scale_matrix * position_matrix * portrait * camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
+		}
+		else {
+			// order: scale, position
+			look_matrix = scale_matrix * position_matrix * camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
+			//look_matrix = camera_position_matrix * camera_pitch_matrix * free_look_matrix * lean_back_matrix * head_position_matrix * rotation_matrix;
+			//look_matrix = scale_matrix * head_position_matrix;
+		}
 	}
 
 	Matrix44 eye_pos_matrix_left, eye_pos_matrix_right;

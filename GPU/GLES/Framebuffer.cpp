@@ -504,6 +504,8 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 	// (it always runs at output resolution so FXAA may look odd).
 	float x, y, w, h;
 	int uvRotation = (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) ? g_Config.iInternalScreenRotation : ROTATION_LOCKED_HORIZONTAL;
+	if (g_Config.bEnableVR && g_has_hmd)
+		uvRotation = ROTATION_LOCKED_HORIZONTAL;
 	CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)pixelWidth_, (float)pixelHeight_, uvRotation);
 	if (g_has_hmd) {
 		// Left Eye Image
@@ -1413,6 +1415,8 @@ void FramebufferManager::CopyDisplayToOutput() {
 		GLuint colorTexture = fbo_get_color_texture(vfb->fbo);
 
 		int uvRotation = (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) ? g_Config.iInternalScreenRotation : ROTATION_LOCKED_HORIZONTAL;
+		if (g_Config.bEnableVR && g_has_hmd)
+			uvRotation = ROTATION_LOCKED_HORIZONTAL;
 
 		// Output coordinates
 		float x, y, w, h;
