@@ -1188,7 +1188,10 @@ void VR_BruteForceStart(bool TestIfs)
 	g_Config.sBruteForceFileName = PSP_CoreParameter().fileToStart;
 	VR_BruteForceResume();
 
-	g_Config.BruteForceFramesToRunFor = 4;
+	if (TestIfs)
+		g_Config.BruteForceFramesToRunFor = 6;
+	else
+		g_Config.BruteForceFramesToRunFor = 4;
 	SaveState::SaveSlot(PSP_CoreParameter().fileToStart, SaveState::SAVESTATESLOTS, nullptr);
 	g_Config.BruteForceCurrentFunctionIndex = -2;
 	g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
@@ -1243,6 +1246,7 @@ void VR_BruteForceBeginFrame()
 			else {
 				++g_Config.BruteForceCurrentFunctionIndex;
 				g_Config.BruteForceReturnCode = 0;
+				prev_verts = 0;
 			}
 			gpuStats.numVertsSubmitted = 0;
 			SaveState::LoadSlot(PSP_CoreParameter().fileToStart, SaveState::SAVESTATESLOTS, nullptr);
@@ -1292,6 +1296,8 @@ void VR_BruteForceBeginFrame()
 	g_Config.BruteForceFramesLeft = temp;
 }
 
+static std::string prev_name;
+
 void VR_BruteForceEndFrame()
 {
 	if (!g_Config.bBruteForcing)
@@ -1310,30 +1316,54 @@ void VR_BruteForceEndFrame()
 			isDifferent = (gpuStats.numVertsSubmitted != g_Config.BruteForceOriginalVertexCount);
 		}
 		if (isDifferent) {
+			char g_change_screenshot_name[2048];
+			std::string path = GetSysDirectory(DIRECTORY_SCREENSHOT);
+			while (path.length() > 0 && path.back() == '/') {
+				path.resize(path.size() - 1);
+			}
+			std::string ext;
+			if (g_Config.bScreenshotsAsPNG)
+				ext = ".png";
+			else
+				ext = ".jpg";
+
 			int verts = gpuStats.numVertsSubmitted;
 			int i = g_Config.BruteForceCurrentFunctionIndex;
 			if (i<0)
-				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "A original %d", verts);
+				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "A original v%d", verts);
 			else {
 				if (g_Config.BruteForceReturnCode>0) {
 					if (verts != prev_verts) {
 						// our best results are where the return code matters
 						// todo: first rename the original screenshot
-						if (verts > g_Config.BruteForceOriginalVertexCount)
-							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "B %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
-						else
-							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "C %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+						if (verts > g_Config.BruteForceOriginalVertexCount || prev_verts > g_Config.BruteForceOriginalVertexCount) {
+							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "draw test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts, function_addrs[i] - 0x8800000 + 0x20000000);
+							snprintf(g_change_screenshot_name, sizeof(g_change_screenshot_name), "draw test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode - 1, function_names[i].c_str(), prev_verts, function_addrs[i] - 0x8800000 + 0x20000000);
+						}
+						else {
+							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "hide test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts, function_addrs[i] - 0x8800000 + 0x20000000);
+							snprintf(g_change_screenshot_name, sizeof(g_change_screenshot_name), "hide test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode - 1, function_names[i].c_str(), prev_verts, function_addrs[i] - 0x8800000 + 0x20000000);
+						}
+						if (!prev_name.empty()) {
+							rename(prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str());
+						}
 					} else {
 						isDifferent = false;
 					}
-				} else if (verts == 0)
-					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "Z %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+				}
+				else if (verts == 0)
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "zero %8x %d %s", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str());
 				else if (verts > g_Config.BruteForceOriginalVertexCount)
-					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "D %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "draw v%d %8x %d %s _L 0x%8X", verts, function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), function_addrs[i] - 0x8800000 + 0x20000000);
 				else
-					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "E %8x %d %s %d", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts);
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "hide v%d %8x %d %s _L 0x%8X", verts, function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), function_addrs[i] - 0x8800000 + 0x20000000);
 			}
-			g_TakeScreenshot = isDifferent;
+			if (verts > 0 || prev_verts > 0) {
+				prev_name = (path + "/") + g_ScreenshotName + ext;
+				g_TakeScreenshot = isDifferent;
+			} else {
+				prev_name = "";
+			}
 			prev_verts = verts;
 		}
 	}

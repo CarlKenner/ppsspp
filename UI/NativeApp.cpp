@@ -648,12 +648,10 @@ void TakeScreenshot() {
 		File::CreateDir(path);
 	}
 
-	// First, find a free filename.
-	int i = 0;
-
-
 	char filename[2048];
 	if (g_ScreenshotName[0] == 0) {
+		// First, find a free filename.
+		int i = 0;
 		while (i < 10000){
 			if (g_Config.bScreenshotsAsPNG)
 				snprintf(filename, sizeof(filename), "%s/%s_%05d.png", path.c_str(), gameId.c_str(), i);
