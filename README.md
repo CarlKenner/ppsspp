@@ -1,6 +1,5 @@
-﻿PPSSPP VR - a fast and portable PSP emulator
-for the Oculus Rift
-============================================
+﻿PPSSPP VR - a fast and portable PSP emulator for the Oculus Rift
+================================================================
 
 Virtual Reality support by Carl Kenner
 
@@ -24,10 +23,17 @@ For the latest source code, see [our github page](https://github.com/hrydgard/pp
 
 Building
 --------
+You need Visual Studio 2013 (at least Update 3), Visual Studio 2015 won't work yet.
 Update the submodules in Git.
-Extract the LibOVR folder from the Oculus SDK 0.4.2 or above into the /ext folder.
-Open /Windows/PPSSPP.sln in Visual Studio 2013 Update 3.
-Use the Build > Configuration Manager menu to choose Release and x64, or whatever you want.
+Extract the LibOVR folder from the Oculus SDK 0.6 into the /ext folder, other versions might work but aren't tested.
+Open /Windows/PPSSPP.sln in Visual Studio 2013.
+Use the Build > Configuration Manager menu to choose Release and x64.
+Build or run it.
+To make an installer, install NSIS (for free), build the Release x64 of PPSSPP VR, and right click the file in the installer folder and choose compile.
+
+The bruteforcer only works in Release Win32! x64 can't catch CPU exceptions! You need to rebuild for Win32 to use the bruteforcer!
+
+If it says the executable can't run, it's because the DLLs are for the wrong x64/Win32 and you need to rebuild the PPSSPP Windows project.
 
 For build instructions and other development tutorials, see the [wiki](https://github.com/hrydgard/ppsspp/wiki).
 
