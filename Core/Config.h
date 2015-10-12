@@ -203,6 +203,7 @@ public:
 
 	// Brute forcing
 	bool bBruteForcing;
+	bool bBruteForceIfs;
 	std::string sBruteForceFileName;
 	int BruteForceFramesToRunFor;
 	int BruteForceFramesLeft;

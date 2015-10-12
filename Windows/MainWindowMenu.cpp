@@ -247,6 +247,7 @@ namespace MainWindow {
 		TranslateMenuItem(menu, ID_DEBUG_DUMPNEXTFRAME);
 		TranslateMenuItem(menu, ID_DEBUG_TAKESCREENSHOT, L"\tF12");
 		TranslateMenuItem(menu, ID_DEBUG_BRUTEFORCE);
+		TranslateMenuItem(menu, ID_DEBUG_BRUTEFORCEIFS);
 		TranslateMenuItem(menu, ID_DEBUG_SHOWDEBUGSTATISTICS);
 		TranslateMenuItem(menu, ID_DEBUG_IGNOREILLEGALREADS);
 		TranslateMenuItem(menu, ID_DEBUG_RUNONLOAD);
@@ -900,11 +901,15 @@ namespace MainWindow {
 			break;
 
 		case ID_DEBUG_BRUTEFORCE:
-			// do bruteforce
-			SetInternalResolution(RESOLUTION_NATIVE);
-			setTexScalingMultiplier(TEXSCALING_OFF);
+			// bruteforce functions
 			SetCursor(LoadCursor(0, IDC_WAIT));
-			VR_BruteForceStart();
+			VR_BruteForceStart(false);
+			break;
+
+		case ID_DEBUG_BRUTEFORCEIFS:
+			// bruteforce functions and ifs
+			SetCursor(LoadCursor(0, IDC_WAIT));
+			VR_BruteForceStart(true);
 			break;
 
 		default:

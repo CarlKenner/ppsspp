@@ -676,7 +676,7 @@ void TakeScreenshot() {
 	if (success) {
 		osm.Show(filename);
 #ifdef _WIN32
-		if (g_Config.bBruteForcing && g_Config.BruteForceCurrentFunctionIndex < 0) {
+		if (g_Config.bBruteForcing && g_Config.BruteForceCurrentFunctionIndex == -1) {
 			std::string str = std::string("explorer.exe /select,\"") + ReplaceAll(filename, "/", "\\") + "\"";
 			_wsystem(ConvertUTF8ToWString(str).c_str());
 		}

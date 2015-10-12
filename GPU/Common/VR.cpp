@@ -995,7 +995,119 @@ extern char g_ScreenshotName[2048];
 extern int LoadCountThisSession;
 bool BruteForceInitialised = false;
 std::vector<u32> function_addrs;
+std::vector<u32> function_sizes;
 std::vector<std::string> function_names;
+
+// only checks for conditial jumps, not conditional assignments
+bool isMipsIf(u32 value)
+{
+	s16 offset;
+	switch ((value & 0xFC000000) >> 24) {
+	case 0x04: // bgez, bltz, bgezal, bltzal, bgezall, or bltzall - al (or all) when this bit is set
+		switch ((value & 0x1F0000) >> 16) {
+		case 0x00: // bltz
+		case 0x01: // bgez
+		case 0x02: // bltzl
+		case 0x03: // bgezl
+			offset = (s16)(value & 0x0000FFFF);
+			return offset > 0;
+		default:
+			return false;
+		}
+	case 0x10: // beq
+	case 0x14: // bne
+	case 0x18: // blez
+	case 0x1C: // bgtz
+	case 0x50: // beql
+	case 0x54: // bnel
+	case 0x58: // blezl
+	case 0x5C: // bgtzl
+		offset = (s16)(value & 0x0000FFFF);
+		return offset > 0;
+	case 0x44: // floating point
+		if ((value & 0xFFE00000) == 0x450) { // bc1f, bc1t, bc1fl, bc1tl
+			offset = (s16)(value & 0x0000FFFF);
+			return offset > 0;
+		}
+		return false;
+	default:
+		return false;
+	}
+}
+
+// branches in Mips can be "likely", which nullifies the next instruction if falling through
+bool isMipsLikely(u32 value)
+{
+	switch ((value & 0xFC000000) >> 24) {
+	case 0x04: // bgez, bltz, bgezl, bltzl, bgezal, bltzal, bgezall, or bltzall
+		switch ((value & 0x1F0000) >> 16) {
+		case 0x02: // bltzl
+		case 0x03: // bgezl
+			return true;
+		default:
+			return false;
+		}
+	case 0x50: // beql
+	case 0x54: // bnel
+	case 0x58: // blezl
+	case 0x5C: // bgtzl
+		return true;
+	case 0x44: // floating point
+		if ((value & 0xFFE00000) == 0x450) // bc1f, bc1t, bc1fl, bc1tl
+			return (value & 0x20000) != 0; // bc1fl or bc1tl
+		return false;
+	default:
+		return false;
+	}
+}
+
+void MakeMipsFunctionReturn(u32 addr, u32 size, s16 result)
+{
+	addr &= ~3;
+	if (size < 12) {
+		currentMIPS->InvalidateICache(addr, 8);
+		Memory::Write_U32(0x03E00008, addr);     // jr ra    // return
+		Memory::Write_U32(0x20020000 | (result & 0xFFFF), addr + 4); // li v0, result // int_result = result
+	} else if (result==0) {
+		currentMIPS->InvalidateICache(addr, 12);
+		Memory::Write_U32(0x44800000, addr);     // mtc1 zero, f0 // float_result = 0.0f
+		Memory::Write_U32(0x03E00008, addr + 4);     // jr ra    // return
+		Memory::Write_U32(0x20020000 | (result & 0xFFFF), addr + 8); // li v0, result // int_result = result
+	} else if (size < 16) {
+		currentMIPS->InvalidateICache(addr, 12);
+		Memory::Write_U32(0x449F0000, addr);     // mtc1 ra, f0 // float_result = a very small positive non-zero value
+		Memory::Write_U32(0x03E00008, addr + 4);     // jr ra    // return
+		Memory::Write_U32(0x20020000 | (result & 0xFFFF), addr + 8); // li v0, result // int_result = result
+	} else {
+		currentMIPS->InvalidateICache(addr, 16);
+		Memory::Write_U32(0x3C01447A, addr);     // lui at, 0x447a // at = 1000.0f
+		Memory::Write_U32(0x44810000, addr + 4); // mtc1 at, f0    // float_result = at
+		Memory::Write_U32(0x03E00008, addr + 8); // jr ra          // return
+		Memory::Write_U32(0x20020000 | (result & 0xFFFF), addr + 12); // li v0, result // int_result = result
+	}
+}
+
+void MakeMipsIfAlways(u32 addr, u32 value, bool doif)
+{
+	addr &= ~3;
+	if (doif) {
+		s32 offset = (s32)((s16)(value & 0x0000FFFF)) << 2;
+		u32 target = addr + 4 + offset;
+		value = 0x08000000 | ((target >> 2) & 0x00FFFFFF); // j addr
+		currentMIPS->InvalidateICache(addr, 4);
+		Memory::Write_U32(value, addr);
+	} else {
+		// In MIPS, the next instruction is usually executed before the jump
+		// But for a branch likely we also should nop out the next instruction because it is said to be nullified when we fall through
+		if (isMipsLikely(value)) {
+			currentMIPS->InvalidateICache(addr, 8);
+			Memory::Write_U64(0, addr); // nop, nop (do nothing)
+		} else {
+			currentMIPS->InvalidateICache(addr, 4);
+			Memory::Write_U32(0, addr); // nop, nop (do nothing)
+		}
+	}
+}
 
 void VR_BruteForceResume()
 {
@@ -1015,17 +1127,36 @@ void VR_BruteForceResume()
 	int count = 0;
 	for (auto it = symbolMap.activeFunctions.begin(), end = symbolMap.activeFunctions.end(); it != end; ++it) {
 		const SymbolMap::FunctionEntry& entry = it->second;
+		// skip functions with length 4, which are probably just a return and nothing else, and are impossible to patch
+		if (entry.size <= 4)
+			continue;
 		const char* name = symbolMap.GetLabelName(it->first);
 		char temp[2048];
 		if (name != NULL)
 			sprintf(temp, "%s", name);
 		else
 			sprintf(temp, "0x%08X", it->first);
-		if (strncmp(temp, "sce", 3) && strncmp(temp, "zz_sce", 6) && strncmp(temp, "zz__sce", 7) && strncmp(temp, "zz___sce", 7) && strncmp(temp, "_malloc", 7) && strncmp(temp, "str", 3)) {
+		// only add this function to the list if it isn't a known system function
+		if (strncmp(temp, "sce", 3) && strncmp(temp, "zz_sce", 6) && strncmp(temp, "zz__sce", 7) && strncmp(temp, "zz___sce", 7)
+			&& strncmp(temp, "_malloc", 7) && strncmp(temp, "str", 3) && strncmp(temp, "memset", 6) && strncmp(temp, "memcpy", 6)) {
 			NOTICE_LOG(VR, "Func[%d]: %s at %8X", count, temp, it->first);
 			function_names.push_back(temp);
 			function_addrs.push_back(it->first);
+			function_sizes.push_back(entry.size);
 			++count;
+			if (g_Config.bBruteForceIfs) {
+				// go through every instruction, except the last three which have to be a non-jump, ja $ra, and a non-jump,
+				// looking for conditional branches we could force to always true or false
+				for (u32 addr = it->first; addr < it->first + entry.size - 12; addr += 4) {
+					u32 value = Memory::Read_U32(addr);
+					if (isMipsIf(value)) {
+						function_names.push_back("if");
+						function_addrs.push_back(addr);
+						function_sizes.push_back(0);
+						++count;
+					}
+				}
+			}
 		}
 	}
 	NOTICE_LOG(VR, "Func Count = %d", count);
@@ -1034,7 +1165,7 @@ void VR_BruteForceResume()
 	BruteForceInitialised = true;
 }
 
-void VR_BruteForceStart()
+void VR_BruteForceStart(bool TestIfs)
 {
 	BruteForceInitialised = false;
 	if (g_Config.bBruteForcing)
@@ -1045,6 +1176,7 @@ void VR_BruteForceStart()
 
 	for (int i = 0; i < 3; ++i)
 		g_Config.BruteForceFreeLook[i] = s_fViewTranslationVector[i];
+	g_Config.bBruteForceIfs = TestIfs;
 	g_Config.BruteForce_bEnableVR = g_Config.bEnableVR;
 	g_Config.BruteForce_bEnableLogging = g_Config.bEnableLogging;
 	g_Config.BruteForce_bVSync = g_Config.bVSync;
@@ -1131,13 +1263,17 @@ void VR_BruteForceBeginFrame()
 				VR_BruteForceResume();
 			}
 
-			if (g_Config.BruteForceCurrentFunctionIndex >= 0)
-			{
-				// PatchFunction(BruteForceCurrentFunctionIndex, BruteForceReturnCode);
+			if (g_Config.BruteForceCurrentFunctionIndex < 0) {
+				// Don't patch anything when doing the original state
+			} else if (function_sizes[g_Config.BruteForceCurrentFunctionIndex]==0) {
+				// Patch if statement
 				u32 addr = function_addrs[g_Config.BruteForceCurrentFunctionIndex];
-				currentMIPS->InvalidateICache(addr & ~3, 8);
-				Memory::Write_U32(0x03E00008, addr);     // jr ra    // return
-				Memory::Write_U32(0x20020000 | (g_Config.BruteForceReturnCode & 0xFFFF), addr + 4); // li v0, g_Config.BruteForceReturnCode // result = g_Config.BruteForceReturnCode
+				u32 value = Memory::Read_U32(addr);
+				MakeMipsIfAlways(addr, value, g_Config.BruteForceReturnCode != 0);
+			} else {
+				// Patch function
+				u32 addr = function_addrs[g_Config.BruteForceCurrentFunctionIndex];
+				MakeMipsFunctionReturn(addr, function_sizes[g_Config.BruteForceCurrentFunctionIndex], g_Config.BruteForceReturnCode);
 			}
 			g_Config.BruteForceFramesLeft = g_Config.BruteForceFramesToRunFor;
 		}
@@ -1162,7 +1298,7 @@ void VR_BruteForceEndFrame()
 		return;
 	--g_Config.BruteForceFramesLeft;
 	// if end of function
-	if (g_Config.BruteForceFramesLeft == 0 && g_Config.BruteForceCurrentFunctionIndex != -2) {
+	if (g_Config.BruteForceFramesLeft == 0 && g_Config.BruteForceCurrentFunctionIndex > -2) {
 		// count how many draw calls
 		isDifferent = false;
 		if (g_Config.BruteForceCurrentFunctionIndex == -1)
@@ -1201,7 +1337,6 @@ void VR_BruteForceEndFrame()
 			prev_verts = verts;
 		}
 	}
-
 }
 
 void VR_BruteForceCrash(bool outofmemory)

@@ -65,14 +65,11 @@ IDB_IMAGE_PSP           IMAGE                   "pspmode.png"
 IDR_ACCELS ACCELERATORS
 BEGIN
     "O",            ID_FILE_LOAD,           VIRTKEY, CONTROL, NOINVERT
-    "W",            ID_EMULATION_STOP,      VIRTKEY, CONTROL, NOINVERT
-    "B",            ID_EMULATION_RESET,     VIRTKEY, CONTROL, NOINVERT
     "T",            ID_EMULATION_CHEATS,    VIRTKEY, CONTROL, NOINVERT
-    "D",            ID_DEBUG_DISASSEMBLY,   VIRTKEY, CONTROL, NOINVERT
     "G",            ID_DEBUG_GEDEBUGGER,    VIRTKEY, CONTROL, NOINVERT
+    "F",            ID_DEBUG_BRUTEFORCE,    VIRTKEY, CONTROL, NOINVERT
     "L",            ID_DEBUG_LOG,           VIRTKEY, CONTROL, NOINVERT
     "M",            ID_DEBUG_MEMORYVIEW,    VIRTKEY, CONTROL, NOINVERT
-    "R",            ID_DEBUG_REGISTERS,     VIRTKEY, CONTROL, NOINVERT
     VK_F3,          ID_FILE_SAVESTATE_NEXT_SLOT_HC, VIRTKEY, NOINVERT
     VK_F2,          ID_FILE_QUICKSAVESTATE_HC, VIRTKEY, NOINVERT
     VK_F4,          ID_FILE_QUICKLOADSTATE_HC, VIRTKEY, NOINVERT
@@ -424,7 +421,8 @@ BEGIN
         MENUITEM "Dump Next Frame to Log",                  ID_DEBUG_DUMPNEXTFRAME
         MENUITEM "Take Screenshot",                         ID_DEBUG_TAKESCREENSHOT
         MENUITEM SEPARATOR
-		MENUITEM "Bruteforce Culling Codes",                ID_DEBUG_BRUTEFORCE
+		MENUITEM "Bruteforce Functions",                    ID_DEBUG_BRUTEFORCE
+		MENUITEM "Bruteforce Functions+ifs",                ID_DEBUG_BRUTEFORCEIFS
 		MENUITEM SEPARATOR
 		MENUITEM "Show Debug Statistics", ID_DEBUG_SHOWDEBUGSTATISTICS
         MENUITEM "Ignore Illegal Reads/Writes",             ID_DEBUG_IGNOREILLEGALREADS

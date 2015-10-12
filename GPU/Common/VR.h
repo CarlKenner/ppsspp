@@ -183,7 +183,7 @@ void RotateView(float x, float y);
 void ScaleView(float scale);
 void ResetView();
 
-void VR_BruteForceStart();
+void VR_BruteForceStart(bool TestIfs);
 void VR_BruteForceBeginFrame();
 void VR_BruteForceEndFrame();
 void VR_BruteForceCancel();
