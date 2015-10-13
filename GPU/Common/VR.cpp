@@ -24,6 +24,7 @@
 #include "Windows/W32Util/Misc.h"
 #endif
 
+#include "base/logging.h"
 #include "Common/Common.h"
 #include "Common/StringUtils.h"
 #include "Core/Config.h"
@@ -1345,7 +1346,9 @@ void VR_BruteForceEndFrame()
 							snprintf(g_change_screenshot_name, sizeof(g_change_screenshot_name), "hide test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode - 1, function_names[i].c_str(), prev_verts, function_addrs[i] - 0x8800000 + 0x20000000);
 						}
 						if (!prev_name.empty()) {
-							rename(prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str());
+							if (rename(prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str())) {
+								ELOG("RENAME FAILED: '%s' to '%s'", prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str());
+							}
 						}
 					} else {
 						isDifferent = false;
