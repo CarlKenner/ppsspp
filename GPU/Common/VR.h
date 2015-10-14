@@ -34,6 +34,11 @@ const int DEFAULT_VR_EXTRA_VIDEO_LOOPS_DIVIDER = 0;
 #define HAVE_OSVR
 #endif
 
+#ifdef _WIN32
+#include <windows.h>
+#undef max
+#endif
+
 #ifdef HAVE_OCULUSSDK
 #include "OVR_Version.h"
 #if OVR_MAJOR_VERSION <= 4
@@ -99,7 +104,6 @@ extern "C"
 #include "math/lin/matrix4x4.h"
 #include "math/math_util.h"
 
-#include "Common/StdMutex.h"
 #include "GPU/Math3D.h"
 
 typedef Matrix4x4 Matrix44;
@@ -219,7 +223,6 @@ extern bool g_opcode_replay_frame;
 extern bool g_opcode_replay_log_frame;
 extern int skipped_opcode_replay_count;
 
-extern std::mutex g_vr_lock;
 extern std::atomic<unsigned> g_drawn_vr;
 
 extern bool debug_nextScene;

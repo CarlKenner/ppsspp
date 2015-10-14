@@ -944,7 +944,6 @@ void VR_RenderToEyebuffer(int eye)
 
 void PresentFrameSDK6()
 {
-	GL_CHECK();
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
@@ -986,26 +985,26 @@ void PresentFrameSDK6()
 				LayerList[count-1] = &lg.Header;
 			}
 			ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, LayerList, count);
-			GL_CHECK();
 		}
 	}
 #endif 
 }
 
+int reals = 1;
+int timewarps = 0;
+int denominator = 1;
+int tcount = 0;
+
 void VR_DoPresentHMDFrame(bool valid)
 {
 	if (g_asyc_timewarp_active)
 		return;
-	GL_CHECK();
 #ifdef HAVE_OPENVR
 	if (m_pCompositor)
 	{
 		m_pCompositor->Submit(vr::Eye_Left, vr::API_OpenGL, (void*)(size_t)m_left_texture, nullptr);
-		GL_CHECK();
 		m_pCompositor->Submit(vr::Eye_Right, vr::API_OpenGL, (void*)(size_t)m_right_texture, nullptr);
-		GL_CHECK();
 		m_pCompositor->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);
-		GL_CHECK();
 		uint32_t unSize = m_pCompositor->GetLastError(NULL, 0);
 		if (unSize > 1)
 		{
@@ -1017,20 +1016,15 @@ void VR_DoPresentHMDFrame(bool valid)
 		if (!g_Config.bNoMirrorToWindow)
 		{
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-			GL_CHECK();
 			// Blit mirror texture to back buffer
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, m_eyeFramebuffer[0]);
-			GL_CHECK();
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-			GL_CHECK();
 			GLint w = PSP_CoreParameter().renderWidth;  //Renderer::GetTargetWidth();
 			GLint h = PSP_CoreParameter().renderHeight; //Renderer::GetTargetHeight();
 			glBlitFramebuffer(0, 0, w, h,
 				0, 0, PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight,
 				GL_COLOR_BUFFER_BIT, GL_NEAREST);
-			GL_CHECK();
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-			GL_CHECK();
 			//GL_SwapBuffers();
 		}
 	}
@@ -1043,27 +1037,31 @@ void VR_DoPresentHMDFrame(bool valid)
 #if OVR_MAJOR_VERSION <= 5
 		// Let OVR do distortion rendering, Present and flush/sync.
 		ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
-		GL_CHECK();
 #else
 		RecreateMirrorTextureIfNeeded();
-		GL_CHECK();
 		PresentFrameSDK6();
-		GL_CHECK();
+		if (g_Config.bSynchronousTimewarp)
+		{
+			tcount += timewarps;
+			while (tcount >= reals) {
+				PresentFrameSDK6();
+				tcount -= reals;
+			}
+		} else {
+			tcount = 0;
+		}
+
 		if (!g_Config.bNoMirrorToWindow && mirrorTexture)
 		{
 			// Blit mirror texture to back buffer
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, mirrorFBO);
-			GL_CHECK();
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-			GL_CHECK();
 			GLint w = mirrorTexture->OGL.Header.TextureSize.w;
 			GLint h = mirrorTexture->OGL.Header.TextureSize.h;
 			glBlitFramebuffer(0, h, w, 0,
 				0, 0, w, h,
 				GL_COLOR_BUFFER_BIT, GL_NEAREST);
-			GL_CHECK();
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-			GL_CHECK();
 			//GL_SwapBuffers();
 		}
 #endif
@@ -1072,8 +1070,104 @@ void VR_DoPresentHMDFrame(bool valid)
 	has_gui = false;
 }
 
-void VR_PresentHMDFrame(bool valid)
+void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses)
 {
+	float vps, f_fps, actual_fps;
+	__DisplayGetFPS(&vps, &f_fps, &actual_fps);
+
+	static int oldfps = 0;
+	static int refresh = 75; // todo: hmd's refresh rate
+	int newfps = (int)(f_fps + 0.5f);
+	int fps;
+	if (g_asyc_timewarp_active) {
+		oldfps = 0;
+		reals = 1;
+		timewarps = 0;
+		denominator = 1;
+	} else if (abs(newfps - oldfps) > 2) {
+		// fps has changed!
+		bool nonstandard = false;
+		fps = newfps;
+		// I haven't implemented frameskipping yet, so if going faster than the hmd, lock it to the hmd's refresh rate
+		if (fps >= refresh) {
+			fps = refresh;
+			reals = 1;
+			timewarps = 0;
+		}
+		else if (fps >= 118 && fps <= 122) {
+			fps = 120;
+			nonstandard = true;
+		}
+		else if (fps >= 88 && fps <= 92) {
+			fps = 90;
+			switch (refresh) {
+			case 120: reals = 3; timewarps = 1; break;
+			default: nonstandard = true;
+			}
+		}
+		else if (fps >= 73 && fps <= 77) {
+			fps = 75;
+			switch (refresh) {
+			case 120: reals = 5; timewarps = 3; break;
+			case 90: reals = 5; timewarps = 1; break;
+			default: nonstandard = true;
+			}
+		}
+		else if (fps >= 58 && fps <= 62) {
+			fps = 60;
+			switch (refresh) {
+			case 120: reals = 1; timewarps = 1; break;
+			case 90: reals = 2; timewarps = 1; break;
+			case 75: reals = 4; timewarps = 1; break;
+			default: nonstandard = true;
+			}
+		}
+		else if (fps >= 28 && fps <= 32) {
+			fps = 30;
+			switch (refresh) {
+			case 120: reals = 1; timewarps = 3; break;
+			case 90: reals = 1; timewarps = 2; break;
+			case 75: reals = 2; timewarps = 3; break;
+			case 60: reals = 1; timewarps = 1; break;
+			default: nonstandard = true;
+			}
+		}
+		else if (fps >= 18 && fps <= 22) {
+			fps = 20;
+			switch (refresh) {
+			case 120: reals = 1; timewarps = 5; break;
+			case 90: reals = 2; timewarps = 7; break;
+			case 75: reals = 4; timewarps = 11; break;
+			case 60: reals = 1; timewarps = 2; break;
+			default: nonstandard = true;
+			}
+		}
+		else if (fps <= 17) {
+			fps = 15;
+			switch (refresh) {
+			case 120: reals = 1; timewarps = 7; break;
+			case 105: reals = 1; timewarps = 6; break;
+			case 90: reals = 1; timewarps = 5; break;
+			case 75: reals = 1; timewarps = 4; break;
+			case 60: reals = 1; timewarps = 3; break;
+			default: nonstandard = true;
+			}
+		}
+		else {
+			fps = fps;
+			nonstandard = true;
+		}
+		if (fps != oldfps) {
+			oldfps = fps;
+			if (nonstandard) {
+				// todo: calculate lowest common denominator
+				reals = 1; timewarps = 0;
+			}
+			denominator = reals + timewarps;
+			tcount = 0;
+		}
+	}
+
 	if (valid)
 	{
 		vr_drew_frame = true;
@@ -1086,12 +1180,26 @@ void VR_PresentHMDFrame(bool valid)
 			{
 				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet) {
 					eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
-					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+					if (frame_eye_poses)
+						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
+					else
+						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
 				}
 				eyeRenderTexture[eye]->UnsetRenderSurface();
 			}
 			has_gui = false;
 			return;
+		} else {
+			for (int eye = 0; eye < 2; eye++)
+			{
+				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet) {
+					if (frame_eye_poses)
+						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
+					else
+						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+				}
+				eyeRenderTexture[eye]->UnsetRenderSurface();
+			}
 		}
 	}
 	else
@@ -1100,6 +1208,12 @@ void VR_PresentHMDFrame(bool valid)
 	}
 
 	VR_DoPresentHMDFrame(valid);
+	//VR_DrawTimewarpFrame();
+	//tcount += timewarps;
+	//while (tcount >= reals) {
+	//	VR_DrawTimewarpFrame();
+	//	tcount -= reals;
+	//}
 }
 
 
@@ -1140,25 +1254,10 @@ void VR_DrawTimewarpFrame()
 		GL_CHECK();
 #else
 		++g_ovr_frameindex;
-		// On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture 
+		// On Oculus SDK 0.6.0 and above, we get the frame timing manually
 		frameTime = ovrHmd_GetFrameTiming(hmd, 0);
-
-		//ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
 		Sleep(1);
-
-		ovrLayerEyeFov ld;
-		ld.Header.Type = ovrLayerType_EyeFov;
-		ld.Header.Flags = (g_Config.bFlipVertical?0:ovrLayerFlag_TextureOriginAtBottomLeft) | (g_Config.bHqDistortion?ovrLayerFlag_HighQuality:0);
-		for (int eye = 0; eye < 2; eye++)
-		{
-			ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureSet;
-			ld.Viewport[eye] = eyeRenderViewport[eye];
-			ld.Fov[eye] = g_eye_fov[eye];
-			ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex];
-		}
-		ovrLayerHeader* layers = &ld.Header;
-		ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
-		GL_CHECK();
+		PresentFrameSDK6();
 #endif
 	}
 #endif

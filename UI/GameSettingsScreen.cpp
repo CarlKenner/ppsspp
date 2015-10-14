@@ -379,6 +379,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
 	vrSettings->Add(new CheckBox(&g_Config.bNoMirrorToWindow, gr->T("No mirror window")));
 	vrSettings->Add(new CheckBox(&g_Config.bDisableNearClipping, gr->T("Disable Near Clipping")));
+	vrSettings->Add(new CheckBox(&g_Config.bSynchronousTimewarp, gr->T("Synchronous timewarp")));
 	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 
 	// VR Game

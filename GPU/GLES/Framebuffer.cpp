@@ -51,6 +51,8 @@
 
 extern int g_iNumVideos;
 
+FramebufferManager *g_framebufferManager;
+
 static const char tex_fs[] =
 	"#version 150\n"
 #ifdef USING_GLES2
@@ -359,6 +361,7 @@ FramebufferManager::FramebufferManager() :
 	pixelBufObj_(nullptr),
 	currentPBO_(0)
 {
+	g_framebufferManager = this;
 }
 
 void FramebufferManager::Init() {
@@ -391,6 +394,7 @@ FramebufferManager::~FramebufferManager() {
 
 	delete [] pixelBufObj_;
 	delete [] convBuf_;
+	g_framebufferManager = nullptr;
 }
 
 void FramebufferManager::MakePixelTexture(const u8 *srcPixels, GEBufferFormat srcPixelFormat, int srcStride, int width, int height) {
@@ -550,7 +554,7 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 			DrawActiveTexture(0, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
 		}
 	}
-	OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
+	OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr);
 }
 
 void FramebufferManager::DrawPlainColor(u32 color) {
@@ -1388,7 +1392,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
 				ClearBuffer();
-				OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
+				OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr);
 				//ELOG("==end==");
 			}
 			return;
@@ -1529,7 +1533,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 		}
 
 		//ELOG("==end==");
-		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid);
+		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, vfb->vr_eye_poses);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		if (g_has_hmd && g_Config.bEnableVR && !g_Config.bDontClearScreen) {
 			fbo_bind_as_render_target(vfb->fbo);
@@ -2353,4 +2357,12 @@ bool FramebufferManager::GetStencilbuffer(u32 fb_address, int fb_stride, GPUDebu
 #else
 	return false;
 #endif
+}
+
+void FramebufferManager::UpdateHeadTrackingIfNeeded() {
+	::UpdateHeadTrackingIfNeeded();
+	if (currentRenderVfb_) {
+		currentRenderVfb_->vr_eye_poses[0] = g_eye_poses[0];
+		currentRenderVfb_->vr_eye_poses[1] = g_eye_poses[1];
+	}
 }

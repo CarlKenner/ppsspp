@@ -614,10 +614,7 @@ static ConfigSetting vrSettings[] = {
 	ReportedConfigSetting("OpcodeWarningDisable", &g_Config.bOpcodeWarningDisable, false),
 	ReportedConfigSetting("ReplayVertexData", &g_Config.bReplayVertexData, false),
 	ReportedConfigSetting("ReplayOtherData", &g_Config.bReplayOtherData, false),
-	ReportedConfigSetting("PullUp20fpsTimewarp", &g_Config.bPullUp20fpsTimewarp, false),
-	ReportedConfigSetting("PullUp30fpsTimewarp", &g_Config.bPullUp30fpsTimewarp, false),
-	ReportedConfigSetting("PullUp60fpsTimewarp", &g_Config.bPullUp60fpsTimewarp, false),
-	ReportedConfigSetting("SynchronousTimewarp", &g_Config.bSynchronousTimewarp, false),
+	ReportedConfigSetting("SynchronousTimewarp", &g_Config.bSynchronousTimewarp, true),
 
 	ConfigSetting(false),
 };

@@ -36,6 +36,7 @@
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
 #include "GPU/Common/VR.h"
+#include "GPU/GLES/Framebuffer.h"
 #include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/GLES/TransformPipeline.h"
@@ -44,6 +45,8 @@
 #include "i18n/i18n.h"
 
 #define HACK_LOG NOTICE_LOG
+
+FramebufferManager* _framebufferManager = nullptr;
 
 //VR Virtual Reality debugging variables
 static float s_locked_skybox[3 * 4];
@@ -1382,7 +1385,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		// head tracking
 		if (g_Config.bOrientationTracking)
 		{
-			UpdateHeadTrackingIfNeeded();
+			g_framebufferManager->UpdateHeadTrackingIfNeeded();
 			rotation_matrix = g_head_tracking_matrix.transpose();
 		}
 		else

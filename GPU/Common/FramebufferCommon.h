@@ -23,7 +23,12 @@
 #include "Common/CommonTypes.h"
 #include "Core/MemMap.h"
 #include "GPU/GPU.h"
+#include "GPU/Common/VR.h"
 #include "GPU/ge_constants.h"
+
+#ifndef OVR_MAJOR_VERSION
+typedef int ovrPosef;
+#endif
 
 enum {
 	FB_USAGE_DISPLAYED_FRAMEBUFFER = 1,
@@ -89,6 +94,10 @@ struct VirtualFramebuffer {
 
 	bool dirtyAfterDisplay;
 	bool reallyDirtyAfterDisplay;  // takes frame skipping into account
+
+	// We need to record what angle the framebuffer was rendered from so timewarp can work correctly,
+	// even if this framebuffer was last rendered to several frames ago.
+	ovrPosef vr_eye_poses[2];
 };
 
 struct FramebufferHeuristicParams {

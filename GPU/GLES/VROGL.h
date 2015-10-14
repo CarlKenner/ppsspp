@@ -18,6 +18,10 @@
 #else
 #endif
 
+#ifndef OVR_MAJOR_VERSION
+typedef int ovrPosef;
+#endif
+
 namespace OGL
 {
 
@@ -32,7 +36,7 @@ void VR_RenderToGUI();
 void VR_BeginFrame();
 void VR_BeginGUI();
 void VR_EndGUI();
-void VR_PresentHMDFrame(bool valid);
+void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses);
 void VR_DrawTimewarpFrame();
 void VR_DrawAsyncTimewarpFrame();
 

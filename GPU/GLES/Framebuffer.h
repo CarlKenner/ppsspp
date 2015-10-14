@@ -30,13 +30,14 @@
 #include "Globals.h"
 #include "GPU/GPUCommon.h"
 #include "GPU/GLES/FBO.h"
+#include "GPU/GLES/ShaderManager.h"
 #include "GPU/Common/FramebufferCommon.h"
+#include "GPU/Common/VR.h"
 #include "Core/Config.h"
 
 struct GLSLProgram;
 class TextureCache;
 class TransformDrawEngine;
-class ShaderManager;
 
 // Simple struct for asynchronous PBO readbacks
 struct AsyncPBO {
@@ -123,6 +124,7 @@ public:
 	// Cardboard Settings Calculator
 	struct CardboardSettings * GetCardboardSettings(struct CardboardSettings * cardboardSettings);
 
+	void UpdateHeadTrackingIfNeeded();
 	virtual void ClearBuffer() override;
 protected:
 	virtual void DisableState() override;
@@ -189,3 +191,5 @@ private:
 	AsyncPBO *pixelBufObj_; //this isn't that large
 	u8 currentPBO_;
 };
+
+extern FramebufferManager *g_framebufferManager;

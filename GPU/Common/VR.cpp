@@ -27,6 +27,7 @@
 #include "base/logging.h"
 #include "Common/Common.h"
 #include "Common/StringUtils.h"
+#include "Common/StdMutex.h"
 #include "Core/Config.h"
 #include "Core/CoreParameter.h"
 #include "Core/Debugger/SymbolMap.h"
@@ -1331,19 +1332,19 @@ void VR_BruteForceEndFrame()
 			int verts = gpuStats.numVertsSubmitted;
 			int i = g_Config.BruteForceCurrentFunctionIndex;
 			if (i<0)
-				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "A original v%d", verts);
+				snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "original %dv", verts);
 			else {
 				if (g_Config.BruteForceReturnCode>0) {
 					if (verts != prev_verts) {
 						// our best results are where the return code matters
 						// todo: first rename the original screenshot
 						if (verts > g_Config.BruteForceOriginalVertexCount || prev_verts > g_Config.BruteForceOriginalVertexCount) {
-							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "draw test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts, function_addrs[i] - 0x8800000 + 0x20000000);
-							snprintf(g_change_screenshot_name, sizeof(g_change_screenshot_name), "draw test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode - 1, function_names[i].c_str(), prev_verts, function_addrs[i] - 0x8800000 + 0x20000000);
+							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "show test %8x %d %s %dv _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts, function_addrs[i] - 0x8800000 + 0x20000000);
+							snprintf(g_change_screenshot_name, sizeof(g_change_screenshot_name), "show test %8x %d %s %dv _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode - 1, function_names[i].c_str(), prev_verts, function_addrs[i] - 0x8800000 + 0x20000000);
 						}
 						else {
-							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "hide test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts, function_addrs[i] - 0x8800000 + 0x20000000);
-							snprintf(g_change_screenshot_name, sizeof(g_change_screenshot_name), "hide test %8x %d %s v%d _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode - 1, function_names[i].c_str(), prev_verts, function_addrs[i] - 0x8800000 + 0x20000000);
+							snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "hide test %8x %d %s %dv _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), verts, function_addrs[i] - 0x8800000 + 0x20000000);
+							snprintf(g_change_screenshot_name, sizeof(g_change_screenshot_name), "hide test %8x %d %s %dv _L 0x%8x", function_addrs[i], g_Config.BruteForceReturnCode - 1, function_names[i].c_str(), prev_verts, function_addrs[i] - 0x8800000 + 0x20000000);
 						}
 						if (!prev_name.empty()) {
 							if (rename(prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str())) {
@@ -1355,11 +1356,11 @@ void VR_BruteForceEndFrame()
 					}
 				}
 				else if (verts == 0)
-					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "zero %8x %d %s", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str());
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "blank %8x %d %s", function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str());
 				else if (verts > g_Config.BruteForceOriginalVertexCount)
-					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "draw v%d %8x %d %s _L 0x%8X", verts, function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), function_addrs[i] - 0x8800000 + 0x20000000);
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "show %dv %8x %d %s _L 0x%8X", verts, function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), function_addrs[i] - 0x8800000 + 0x20000000);
 				else
-					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "hide v%d %8x %d %s _L 0x%8X", verts, function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), function_addrs[i] - 0x8800000 + 0x20000000);
+					snprintf(g_ScreenshotName, sizeof(g_ScreenshotName), "hide %dv %8x %d %s _L 0x%8X", verts, function_addrs[i], g_Config.BruteForceReturnCode, function_names[i].c_str(), function_addrs[i] - 0x8800000 + 0x20000000);
 			}
 			if (verts > 0 || prev_verts > 0) {
 				prev_name = (path + "/") + g_ScreenshotName + ext;

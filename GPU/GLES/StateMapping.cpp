@@ -20,6 +20,8 @@
 // https://github.com/hrydgard/ppsspp/issues/3768
 
 
+#include <algorithm>
+
 #include "StateMapping.h"
 #include "profiler/profiler.h"
 
