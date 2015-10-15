@@ -779,6 +779,19 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 	}
 	if (dirty & DIRTY_VIEWMATRIX) {
 		SetMatrix4x3(u_view, gstate.viewMatrix);
+		Vec3 pos;
+		for (int i = 0; i < 3; ++i)
+			pos[i] = -gstate.viewMatrix[9 + i];
+		if (pos.x == 0 && pos.y == 0 && pos.z == 0) {
+			//NOTICE_LOG(VR, "Camera at origin");
+			//ELOG("Camera at origin");
+			if (g_Config.bDetectSkybox) g_is_skybox = true;
+		} else {
+			//NOTICE_LOG(VR, "Camera at %g, %g, %g", pos.x, pos.y, pos.z);
+			//ELOG("Camera at %g, %g, %g; angle= %5.2f, %5.2f, %5.2f", pos.x, pos.y, pos.z, gstate.viewMatrix[0], gstate.viewMatrix[1], gstate.viewMatrix[2]);
+			g_is_skybox = false;
+		}
+		position_changed = true;
 	}
 	if (dirty & DIRTY_TEXMATRIX) {
 		SetMatrix4x3(u_texmtx, gstate.tgenMatrix);
@@ -798,7 +811,7 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 
 	if (position_changed && temp_skybox)
 	{
-		g_is_skybox = false;
+		//g_is_skybox = false;
 		temp_skybox = false;
 		skybox_changed = true;
 	}
@@ -825,7 +838,6 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 	}
 	if (position_changed && g_Config.bDetectSkybox && !g_is_skybox)
 	{
-		//CheckSkybox();
 		if (g_is_skybox)
 		{
 			temp_skybox = true;
@@ -1268,10 +1280,9 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		// Find the game's camera angle and position by looking at the view/model matrix of the first real 3D object drawn.
 		// This won't work for all games.
 		if (!g_vr_had_3D_already) {
-			//CheckOrientationConstants();
+			CheckOrientationConstants();
 			g_vr_had_3D_already = true;
 		}
-		//ELOG("3D");
 	}
 	// 2D layer we will turn into a 3D scene
 	// or 3D HUD element that we will treat like a part of the 2D HUD 
@@ -1407,25 +1418,23 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		// leaning back
 		float extra_pitch = -g_Config.fLeanBackAngle;
 		lean_back_matrix.setRotationX(-DEGREES_TO_RADIANS(extra_pitch));
-		// camera pitch
+		// camera pitch + camera stabilsation
 		if ((g_Config.bStabilizePitch || g_Config.bStabilizeRoll || g_Config.bStabilizeYaw) && g_Config.bCanReadCameraAngles && (g_Config.iMotionSicknessSkybox != 2 || !isSkybox))
 		{
 			if (!g_Config.bStabilizePitch)
 			{
 				Matrix44 user_pitch44;
-				Matrix44 roll_and_yaw_matrix;
 
 				if (isPerspective || vr_widest_3d_HFOV > 0)
 					extra_pitch = g_Config.fCameraPitch;
 				else
 					extra_pitch = g_Config.fScreenPitch;
 				user_pitch44.setRotationX(-DEGREES_TO_RADIANS(extra_pitch));
-				Matrix44::Set(roll_and_yaw_matrix, g_game_camera_rotmat.data);
-				camera_pitch_matrix = roll_and_yaw_matrix * user_pitch44; // or vice versa?
+				camera_pitch_matrix = g_game_camera_rotmat * user_pitch44; // or vice versa?
 			}
 			else
 			{
-				Matrix44::Set(camera_pitch_matrix, g_game_camera_rotmat.data);
+				camera_pitch_matrix = g_game_camera_rotmat;
 			}
 		}
 		else
@@ -1765,6 +1774,131 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	glUniform4fv(u_StereoParams, 1, stereoparams);
 	return final_matrix_left;
 }
+
+void LinkedShader::CheckOrientationConstants()
+{
+#define sqr(a) ((a)*(a))
+	if (g_Config.bCanReadCameraAngles && (g_Config.bStabilizePitch || g_Config.bStabilizeRoll || g_Config.bStabilizeYaw || g_Config.bStabilizeX || g_Config.bStabilizeY || g_Config.bStabilizeZ))
+	{
+		float *p = gstate.viewMatrix;
+		//Vec3 pos;
+		//for (int i = 0; i < 3; ++i)
+		//	pos[i] = gstate.viewMatrix[9 + i];
+		Matrix3x3 rot;
+		rot.setIdentity();
+		memcpy(&rot.data[0 * 3], &p[0 * 3], 3 * sizeof(float));
+		memcpy(&rot.data[1 * 3], &p[1 * 3], 3 * sizeof(float));
+		memcpy(&rot.data[2 * 3], &p[2 * 3], 3 * sizeof(float));
+
+		float scale = sqrt(sqr(rot.data[0 * 3 + 0]) + sqr(rot.data[0 * 3 + 1]) + sqr(rot.data[0 * 3 + 2]));
+		for (int r = 0; r < 3; ++r)
+			for (int c = 0; c < 3; ++c)
+				rot.data[r * 3 + c] /= scale;
+
+		// add pitch to rotation matrix
+		if (g_Config.fReadPitch != 0)
+		{
+			Matrix3x3 rp;
+			rp.setRotationX(DEGREES_TO_RADIANS(g_Config.fReadPitch));
+			rot = rp * rot;
+		}
+
+		rot = rot.transpose();
+
+		// extract yaw, pitch, and roll in RADIANS from rotation matrix
+		float yaw, pitch, roll;
+		Matrix33::GetPieYawPitchRollR(rot, yaw, pitch, roll);
+
+		// if it thinks the camera is upside down, it's probably just a menu and we shouldn't use stabilisation
+		if (fabs(roll) > 160) {
+			g_game_camera_rotmat.setIdentity();
+			memset(g_game_camera_pos, 0, 3 * sizeof(float));
+			return;
+		}
+		if (g_Config.bKeyhole)
+		{
+			static float keyhole_center = 0;
+			float keyhole_snap = 0;
+
+			if (g_Config.bKeyholeSnap)
+				keyhole_snap = DEGREES_TO_RADIANS(g_Config.fKeyholeSnapSize);
+
+			float keyhole_width = DEGREES_TO_RADIANS(g_Config.fKeyholeWidth / 2);
+			float keyhole_left_bound = keyhole_center + keyhole_width;
+			float keyhole_right_bound = keyhole_center - keyhole_width;
+
+			// Correct left and right bounds if they calculated incorrectly and are out of the range of -PI to PI.
+			if (keyhole_left_bound > (float)(M_PI))
+				keyhole_left_bound -= (2 * (float)(M_PI));
+			else if (keyhole_right_bound < -(float)(M_PI))
+				keyhole_right_bound += (2 * (float)(M_PI));
+
+			// Crossing from positive to negative half, counter-clockwise
+			if (yaw < 0 && keyhole_left_bound > 0 && keyhole_right_bound > 0 && yaw < keyhole_width - (float)(M_PI))
+			{
+				keyhole_center = yaw - keyhole_width + keyhole_snap;
+			}
+			// Crossing from negative to positive half, clockwise
+			else if (yaw > 0 && keyhole_left_bound < 0 && keyhole_right_bound < 0 && yaw >(float)(M_PI)-keyhole_width)
+			{
+				keyhole_center = yaw + keyhole_width - keyhole_snap;
+			}
+			// Already within the negative and positive range
+			else if (keyhole_left_bound < 0 && keyhole_right_bound > 0)
+			{
+				if (yaw < keyhole_right_bound && yaw > 0)
+					keyhole_center = yaw + keyhole_width - keyhole_snap;
+				else if (yaw > keyhole_left_bound && yaw < 0)
+					keyhole_center = yaw - keyhole_width + keyhole_snap;
+			}
+			// Anywhere within the normal range
+			else
+			{
+				if (yaw < keyhole_right_bound)
+					keyhole_center = yaw + keyhole_width - keyhole_snap;
+				else if (yaw > keyhole_left_bound)
+					keyhole_center = yaw - keyhole_width + keyhole_snap;
+			}
+
+			yaw -= keyhole_center;
+		} 
+		// if we are stabilising everything, just use the transpose, don't use the extracted angles (which are probably buggy)
+		if (g_Config.bStabilizePitch && g_Config.bStabilizeRoll && g_Config.bStabilizeYaw && !g_Config.bKeyhole) {
+			g_game_camera_rotmat = rot;
+		} else if (g_Config.bStabilizeYaw) {
+			Matrix3x3 matrix_yaw;
+			matrix_yaw.setRotationY(yaw);
+			if (g_Config.bStabilizeRoll) {
+				Matrix3x3 matrix_roll;
+				matrix_roll.setRotationZ(-roll);
+				g_game_camera_rotmat = matrix_roll * matrix_yaw;
+			} else if (g_Config.bStabilizePitch) {
+				Matrix3x3 matrix_pitch;
+				matrix_pitch.setRotationX(-pitch);
+				g_game_camera_rotmat = matrix_pitch * matrix_yaw;
+			} else {
+				g_game_camera_rotmat = matrix_yaw;
+			}
+		} else if (g_Config.bStabilizeRoll && g_Config.bStabilizePitch) {
+			Matrix3x3 matrix_roll, matrix_pitch;
+			matrix_roll.setRotationZ(-roll);
+			matrix_pitch.setRotationX(-pitch);
+			g_game_camera_rotmat = matrix_roll * matrix_pitch;
+		} else if (g_Config.bStabilizeRoll) {
+			g_game_camera_rotmat.setRotationZ(-roll);
+		} else if (g_Config.bStabilizePitch) {
+			g_game_camera_rotmat.setRotationX(-pitch);
+		}
+		memset(g_game_camera_pos, 0, 3 * sizeof(float));
+	}
+	else
+	{
+		Matrix44::LoadIdentity(g_game_camera_rotmat);
+		memset(g_game_camera_pos, 0, 3 * sizeof(float));
+	}
+}
+
+
 
 ShaderManager::ShaderManager()
 		: lastShader_(nullptr), globalDirty_(0xFFFFFFFF), shaderSwitchDirty_(0) {

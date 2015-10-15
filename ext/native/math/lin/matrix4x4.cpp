@@ -16,6 +16,7 @@
 // no wait. http://code.google.com/p/math-neon/
 
 Matrix4x4 &Matrix4x4::operator= (const Matrix3x3 &other) {
+	setIdentity();
 	xx = other.xx; xy = other.xy; xz = other.xz;
 	yx = other.yx; yy = other.yy; yz = other.yz;
 	zx = other.zx; zy = other.zy; zz = other.zz;
@@ -568,7 +569,7 @@ void Matrix3x3::Multiply(const Matrix3x3 &a, const float vec[3], float result[3]
 	}
 }
 
-// GlovePIE function for extracting yaw, pitch, and roll from a rotation matrix
+// GlovePIE function for extracting yaw, pitch, and roll in RADIANS from a rotation matrix
 void Matrix3x3::GetPieYawPitchRollR(const Matrix3x3 &m, float &yaw, float &pitch, float &roll)
 {
 	float s, c, cp;

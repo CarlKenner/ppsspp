@@ -123,6 +123,11 @@ void VR_NewVRFrame()
 {
 	INFO_LOG(VR, "-- NewVRFrame --");
 	//g_new_tracking_frame = true;
+	if (!g_vr_had_3D_already)
+	{
+		Matrix44::LoadIdentity(g_game_camera_rotmat);
+	}
+	g_vr_had_3D_already = false;
 	ClearDebugProj();
 }
 

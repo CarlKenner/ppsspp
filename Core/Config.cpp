@@ -641,6 +641,7 @@ static ConfigSetting vrGameSettings[] = {
 	ReportedConfigSetting("HudOnTop", &g_Config.bHudOnTop, false, true, true),
 	ReportedConfigSetting("DontClearScreen", &g_Config.bDontClearScreen, false, true, true),
 	ReportedConfigSetting("CanReadCameraAngles", &g_Config.bCanReadCameraAngles, false, true, true),
+	ReportedConfigSetting("ReadPitch", &g_Config.fReadPitch, 0.0f, true, true),
 	ReportedConfigSetting("DetectSkybox", &g_Config.bDetectSkybox, false, true, true),
 	ReportedConfigSetting("DontDrawScreenSpace", &g_Config.bDontDrawScreenSpace, true, true, true),
 	ReportedConfigSetting("Before3DIsBackground", &g_Config.bBefore3DIsBackground, true, true, true),

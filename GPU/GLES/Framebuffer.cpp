@@ -788,16 +788,14 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 		if (!g_Config.bStabilizePitch)
 		{
 			Matrix44 user_pitch44;
-			Matrix44 roll_and_yaw_matrix;
 
 			extra_pitch = g_Config.fScreenPitch;
 			user_pitch44.setRotationX(-DEGREES_TO_RADIANS(extra_pitch));
-			Matrix44::Set(roll_and_yaw_matrix, g_game_camera_rotmat.data);
-			camera_pitch_matrix = roll_and_yaw_matrix * user_pitch44; // or vice versa?
+			camera_pitch_matrix = g_game_camera_rotmat * user_pitch44; // or vice versa?
 		}
 		else
 		{
-			Matrix44::Set(camera_pitch_matrix, g_game_camera_rotmat.data);
+			camera_pitch_matrix = g_game_camera_rotmat;
 		}
 	}
 	else

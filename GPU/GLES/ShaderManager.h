@@ -134,6 +134,7 @@ public:
 	void stop();
 	u32 UpdateUniforms(u32 vertType, bool isClear);
 	Matrix4x4 SetProjectionConstants(float input_proj_matrix[], bool shouldLog, bool isThrough);
+	void CheckOrientationConstants();
 
 	Shader *vs_, *gs_;
 	// Set to false if the VS failed, happens on Mali-400 a lot for complex shaders.
