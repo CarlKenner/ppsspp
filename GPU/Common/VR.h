@@ -201,7 +201,7 @@ extern unsigned skip_objects_count;
 extern Matrix44 g_head_tracking_matrix;
 extern float g_head_tracking_position[3];
 extern float g_left_hand_tracking_position[3], g_right_hand_tracking_position[3];
-extern int g_hmd_window_width, g_hmd_window_height, g_hmd_window_x, g_hmd_window_y;
+extern int g_hmd_window_width, g_hmd_window_height, g_hmd_window_x, g_hmd_window_y, g_hmd_refresh_rate;
 extern const char *g_hmd_device_name;
 extern bool g_fov_changed, g_vr_black_screen;
 extern bool g_vr_had_3D_already;

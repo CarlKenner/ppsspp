@@ -83,6 +83,7 @@ Matrix44 g_head_tracking_matrix;
 float g_head_tracking_position[3];
 float g_left_hand_tracking_position[3], g_right_hand_tracking_position[3];
 int g_hmd_window_width = 0, g_hmd_window_height = 0, g_hmd_window_x = 0, g_hmd_window_y = 0;
+int g_hmd_refresh_rate = 75;
 const char *g_hmd_device_name = nullptr;
 float g_vr_speed = 0;
 float vr_freelook_speed = 0;
@@ -219,8 +220,11 @@ bool InitSteamVR()
 		std::string m_strDisplay = "No Display";
 		m_strDriver = GetTrackedDeviceString(m_pHMD, vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_TrackingSystemName_String);
 		m_strDisplay = GetTrackedDeviceString(m_pHMD, vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SerialNumber_String);
+		vr::TrackedPropertyError error;
+		g_hmd_refresh_rate = (int)(0.5f + m_pHMD->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float, &error));
 		NOTICE_LOG(VR, "SteamVR strDriver = '%s'", m_strDriver.c_str());
 		NOTICE_LOG(VR, "SteamVR strDisplay = '%s'", m_strDisplay.c_str());
+		NOTICE_LOG(VR, "SteamVR refresh rate = %d Hz", g_hmd_refresh_rate);
 
 		if (m_bUseCompositor)
 		{
@@ -289,12 +293,19 @@ bool InitOculusHMD()
 			g_eye_fov[0] = g_best_eye_fov[0];
 			g_eye_fov[1] = g_best_eye_fov[1];
 			g_last_eye_fov[0] = g_eye_fov[0];
-			g_last_eye_fov[1] = g_eye_fov[1];
+			g_last_eye_fov[1] = g_eye_fov[1];			
 #if OVR_MAJOR_VERSION < 6
 			g_hmd_window_x = hmdDesc.WindowsPos.x;
 			g_hmd_window_y = hmdDesc.WindowsPos.y;
 			g_is_direct_mode = !(hmdDesc.HmdCaps & ovrHmdCap_ExtendDesktop);
+			if (hmdDesc.ProductId < 6)
+				g_hmd_refresh_rate = 60;
+			else if (hmdDesc.ProductId > 6)
+				g_hmd_refresh_rate = 90;
+			else
+				g_hmd_refresh_rate = 75;
 #else
+			g_hmd_refresh_rate = (int)(1.0f / ovrHmd_GetFloat(hmd, "VsyncToNextVsync", 0.f) + 0.5f);
 			g_hmd_window_x = 0;
 			g_hmd_window_y = 0;
 			g_is_direct_mode = true;
@@ -370,6 +381,7 @@ bool InitVR920VR()
 		g_hmd_window_x = 0;
 		g_hmd_window_y = 0;
 		g_can_async_timewarp = false;
+		g_hmd_refresh_rate = 60; // or 30, depending on how we implement it
 		return true;
 	}
 #endif

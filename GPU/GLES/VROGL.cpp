@@ -1076,7 +1076,7 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses)
 	__DisplayGetFPS(&vps, &f_fps, &actual_fps);
 
 	static int oldfps = 0;
-	static int refresh = 75; // todo: hmd's refresh rate
+	int refresh = g_hmd_refresh_rate;
 	int newfps = (int)(f_fps + 0.5f);
 	int fps;
 	if (g_asyc_timewarp_active) {

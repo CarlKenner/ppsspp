@@ -197,7 +197,7 @@ void Core_RunLoop() {
 		double diffTime = time_now_d() - startTime;
 		int sleepTime = (int)(1000.0 / 60.0) - (int)(diffTime * 1000.0);
 		if (g_has_hmd)
-			sleepTime = (int)(1000.0 / 75.0) - (int)(diffTime * 1000.0);
+			sleepTime = (int)(1000.0 / g_hmd_refresh_rate) - (int)(diffTime * 1000.0);
 		if (sleepTime > 0)
 			Sleep(sleepTime);
 		if (!windowHidden) {
