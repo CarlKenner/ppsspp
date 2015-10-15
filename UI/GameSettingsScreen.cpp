@@ -352,16 +352,16 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fFreeLookSensitivity, 0.001f, 100.0f, gr->T("FreeLook Sensitivity"), 0.01f, screenManager(), "x normal"));
 	vrSettings->Add(new CheckBox(&g_Config.bScaleFreeLook, gr->T("Scale FreeLook Speed")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fLeanBackAngle, -180.0f, 180.0f, gr->T("Lean back angle"), 1.0f, screenManager(), "degrees"));
-	vrSettings->Add(new CheckBox(&g_Config.bStabilizePitch, gr->T("Stabilize Pitch")));
-	vrSettings->Add(new CheckBox(&g_Config.bStabilizeRoll, gr->T("Stabilize Roll")));
-	vrSettings->Add(new CheckBox(&g_Config.bStabilizeYaw, gr->T("Stabilize Yaw")));
-	vrSettings->Add(new CheckBox(&g_Config.bStabilizeX, gr->T("Stabilize X")));
-	vrSettings->Add(new CheckBox(&g_Config.bStabilizeY, gr->T("Stabilize Y")));
-	vrSettings->Add(new CheckBox(&g_Config.bStabilizeZ, gr->T("Stabilize Z")));
-	vrSettings->Add(new CheckBox(&g_Config.bKeyhole, gr->T("Stabilize Keyhole")));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeWidth, 10.0f, 175.0f, gr->T("Keyhole Width"), 1.0f, screenManager(), "degrees"));
-	vrSettings->Add(new CheckBox(&g_Config.bKeyholeSnap, gr->T("Keyhole Snap")));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeSnapSize, 10.0f, 120.0f, gr->T("Keyhole Snap Size"), 1.0f, screenManager(), "degrees"));
+	//vrSettings->Add(new CheckBox(&g_Config.bStabilizePitch, gr->T("Stabilize Pitch")));
+	//vrSettings->Add(new CheckBox(&g_Config.bStabilizeRoll, gr->T("Stabilize Roll")));
+	//vrSettings->Add(new CheckBox(&g_Config.bStabilizeYaw, gr->T("Stabilize Yaw")));
+	//vrSettings->Add(new CheckBox(&g_Config.bStabilizeX, gr->T("Stabilize X")));
+	//vrSettings->Add(new CheckBox(&g_Config.bStabilizeY, gr->T("Stabilize Y")));
+	//vrSettings->Add(new CheckBox(&g_Config.bStabilizeZ, gr->T("Stabilize Z")));
+	//vrSettings->Add(new CheckBox(&g_Config.bKeyhole, gr->T("Stabilize Keyhole")));
+	//vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeWidth, 10.0f, 175.0f, gr->T("Keyhole Width"), 1.0f, screenManager(), "degrees"));
+	//vrSettings->Add(new CheckBox(&g_Config.bKeyholeSnap, gr->T("Keyhole Snap")));
+	//vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeSnapSize, 10.0f, 120.0f, gr->T("Keyhole Snap Size"), 1.0f, screenManager(), "degrees"));
 
 	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
 	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
@@ -372,7 +372,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bChromatic, gr->T("Chromatic aberration")));
 	vrSettings->Add(new CheckBox(&g_Config.bTimewarp, gr->T("Timewarp")));
 	vrSettings->Add(new CheckBox(&g_Config.bVignette, gr->T("Vignette")));
-	vrSettings->Add(new CheckBox(&g_Config.bNoRestore, gr->T("Don't restore")));
+	//vrSettings->Add(new CheckBox(&g_Config.bNoRestore, gr->T("Don't restore")));
 	vrSettings->Add(new CheckBox(&g_Config.bFlipVertical, gr->T("Flip vertical")));
 	vrSettings->Add(new CheckBox(&g_Config.bSRGB, gr->T("sRGB")));
 	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
