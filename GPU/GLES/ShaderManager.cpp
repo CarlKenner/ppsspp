@@ -1171,7 +1171,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	//	bHide = true;
 
 	// VR: in split-screen, only draw VR player TODO: fix offscreen to render to a separate texture in VR 
-	bHide = bHide || (g_has_hmd && (g_viewport_type == VIEW_OFFSCREEN || (g_viewport_type >= VIEW_PLAYER_1 && g_viewport_type <= VIEW_PLAYER_4 && g_Config.iVRPlayer != g_viewport_type - VIEW_PLAYER_1)));
+	bHide = bHide || (g_has_hmd && g_Config.bEnableVR && (g_viewport_type == VIEW_OFFSCREEN || (g_viewport_type >= VIEW_PLAYER_1 && g_viewport_type <= VIEW_PLAYER_4 && g_Config.iVRPlayer != g_viewport_type - VIEW_PLAYER_1)));
 	// flash selected layer for debugging
 	bHide = bHide || (bFlashing && g_Config.iFlashState > 5);
 	// hide skybox or everything to reduce motion sickness
@@ -1184,7 +1184,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	if (iTelescopeHack < 0 && g_Config.iTelescopeEye && vr_widest_3d_VFOV <= g_Config.fTelescopeMaxFOV && vr_widest_3d_VFOV > 1
 		&& (g_Config.fTelescopeMaxFOV <= g_Config.fMinFOV || (g_Config.fTelescopeMaxFOV > g_Config.fMinFOV && vr_widest_3d_VFOV > g_Config.fMinFOV)))
 		iTelescopeHack = g_Config.iTelescopeEye;
-	if (g_has_hmd && iTelescopeHack > 0)
+	if (g_has_hmd && g_Config.bEnableVR && iTelescopeHack > 0)
 	{
 		bNoForward = true;
 		// Calculate telescope scale

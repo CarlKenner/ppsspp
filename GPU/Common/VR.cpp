@@ -952,7 +952,7 @@ void TranslateView(float left_metres, float forward_metres, float down_metres)
 	float vector[3] = { left_metres, down_metres, forward_metres };
 
 	// use scaled metres in VR, or real metres otherwise
-	if (g_has_hmd && g_Config.bScaleFreeLook)
+	if (g_has_hmd && g_Config.bEnableVR && g_Config.bScaleFreeLook)
 		for (int i = 0; i < 3; ++i)
 			vector[i] *= g_Config.fScale;
 

@@ -1318,14 +1318,15 @@ void FramebufferManager::CopyDisplayToOutput() {
 		if (g_Config.bEnableVR) {
 			OGL::VR_BeginFrame();
 			OGL::VR_RenderToEyebuffer(0);
-		} else {
+			GL_CHECK();
+			glClear(GL_COLOR_BUFFER_BIT);
+			GL_CHECK();
+			glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
+			GL_CHECK();
+		}
+		else {
 			OGL::VR_BeginGUI();
 		}
-		GL_CHECK();
-		glClear(GL_COLOR_BUFFER_BIT);
-		GL_CHECK();
-		glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
-		GL_CHECK();
 	}
 	else
 	{
