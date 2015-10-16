@@ -523,13 +523,15 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 		else {
 			DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
 		}
-		// Right Eye Image
-		OGL::VR_RenderToEyebuffer(1);
-		if (applyPostShader && usePostShader_ && useBufferedRendering_) {
-			DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, postShaderProgram_, uvRotation);
-		}
-		else {
-			DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
+		if (g_Config.bEnableVR) {
+			// Right Eye Image
+			OGL::VR_RenderToEyebuffer(1);
+			if (applyPostShader && usePostShader_ && useBufferedRendering_) {
+				DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, postShaderProgram_, uvRotation);
+			}
+			else {
+				DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
+			}
 		}
 	}
 	else if (cardboardSettings.enabled) {
@@ -557,7 +559,8 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 			DrawActiveTexture(0, x, y, w, h, (float)pixelWidth_, (float)pixelHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
 		}
 	}
-	OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr);
+	if (g_Config.bEnableVR)
+		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr);
 }
 
 void FramebufferManager::DrawPlainColor(u32 color) {
@@ -1312,8 +1315,12 @@ void FramebufferManager::CopyDisplayToOutput() {
 			VR_ConfigureHMDPrediction();
 			VR_ConfigureHMDTracking();
 		}
-		OGL::VR_BeginFrame();
-		OGL::VR_RenderToEyebuffer(0);
+		if (g_Config.bEnableVR) {
+			OGL::VR_BeginFrame();
+			OGL::VR_RenderToEyebuffer(0);
+		} else {
+			OGL::VR_BeginGUI();
+		}
 		GL_CHECK();
 		glClear(GL_COLOR_BUFFER_BIT);
 		GL_CHECK();
@@ -1394,7 +1401,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 			// No framebuffer to display! Clear to black.
 			// Left Eye Image
 			ClearBuffer();
-			if (g_has_hmd)
+			if (g_has_hmd && g_Config.bEnableVR)
 			{
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
@@ -1452,12 +1459,14 @@ void FramebufferManager::CopyDisplayToOutput() {
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 0);
 				//GLenum err = glGetError();
 				//OGL::vr_frame_valid = (err == GL_NO_ERROR);
-				// Right Eye Image
-				OGL::VR_RenderToEyebuffer(1);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
-				//err = glGetError();
-				//OGL::vr_frame_valid = OGL::vr_frame_valid && (err == GL_NO_ERROR);
-				GL_CHECK();
+				if (g_Config.bEnableVR) {
+					// Right Eye Image
+					OGL::VR_RenderToEyebuffer(1);
+					DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
+					//err = glGetError();
+					//OGL::vr_frame_valid = OGL::vr_frame_valid && (err == GL_NO_ERROR);
+					GL_CHECK();
+				}
 			}
 			else if (cardboardSettings.enabled) {
 				// Left Eye Image
@@ -1494,9 +1503,11 @@ void FramebufferManager::CopyDisplayToOutput() {
 				glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
 				// Left Eye Image
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 0);
-				// Right Eye Image
-				OGL::VR_RenderToEyebuffer(1);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
+				if (g_Config.bEnableVR) {
+					// Right Eye Image
+					OGL::VR_RenderToEyebuffer(1);
+					DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, NULL, uvRotation, 1);
+				}
 			} else if (g_Config.bEnableCardboard) {
 				// Left Eye Image
 				glstate.viewport.set(cardboardSettings.leftEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
@@ -1521,9 +1532,11 @@ void FramebufferManager::CopyDisplayToOutput() {
 				glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
 				// Left Eye Image
 				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, postShaderProgram_, uvRotation, 0);
-				// Right Eye Image
-				OGL::VR_RenderToEyebuffer(1);
-				DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, postShaderProgram_, uvRotation, 1);
+				if (g_Config.bEnableVR) {
+					// Right Eye Image
+					OGL::VR_RenderToEyebuffer(1);
+					DrawActiveTexture(colorTexture, x, y, w, h, (float)renderWidth_, (float)renderHeight_, true, u0, v0, u1, v1, postShaderProgram_, uvRotation, 1);
+				}
 			} else if (g_Config.bEnableCardboard) {
 				// Left Eye Image
 				glstate.viewport.set(cardboardSettings.leftEyeXPosition, cardboardSettings.screenYPosition, cardboardSettings.screenWidth, cardboardSettings.screenHeight);
@@ -1540,7 +1553,8 @@ void FramebufferManager::CopyDisplayToOutput() {
 		}
 
 		//ELOG("==end==");
-		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, vfb->vr_eye_poses);
+		if (g_Config.bEnableVR)
+		  OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, vfb->vr_eye_poses);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		if (g_has_hmd && g_Config.bEnableVR && !g_Config.bDontClearScreen) {
 			fbo_bind_as_render_target(vfb->fbo);

@@ -851,6 +851,11 @@ static bool began_gui = false, has_gui = false;
 
 void VR_BeginGUI()
 {
+	if (began_gui) {
+		lock_guard guard(AsyncTimewarpLock);
+		VR_RenderToGUI();
+		return;
+	}
 	began_gui = true;
 	GL_CHECK();
 #ifdef OVR_MAJOR_VERSION
@@ -1211,8 +1216,8 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses)
 						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
 					else
 						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+					eyeRenderTexture[eye]->UnsetRenderSurface();
 				}
-				eyeRenderTexture[eye]->UnsetRenderSurface();
 			}
 		}
 	}

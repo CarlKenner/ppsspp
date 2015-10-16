@@ -351,6 +351,10 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fGuiDistance, 0.1f, 5.0f, gr->T("GUI Distance"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fGuiWidth, 0.1f, 20.0f, gr->T("GUI Width"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new ItemHeader(gr->T("All games")));
+	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
+	vrSettings->Add(new CheckBox(&g_Config.bSynchronousTimewarp, gr->T("Synchronous timewarp")));
+	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
+	vrSettings->Add(new CheckBox(&g_Config.bDisableNearClipping, gr->T("Disable Near Clipping")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gr->T("Scale"), 0.01f, screenManager(), "x lifesize"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fFreeLookSensitivity, 0.001f, 100.0f, gr->T("FreeLook Sensitivity"), 0.01f, screenManager(), "x normal"));
 	vrSettings->Add(new CheckBox(&g_Config.bScaleFreeLook, gr->T("Scale FreeLook Speed")));
@@ -366,7 +370,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bKeyholeSnap, gr->T("Keyhole Snap")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeSnapSize, 10.0f, 120.0f, gr->T("Keyhole Snap Size"), 1.0f, screenManager(), "degrees"));
 
-	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
+	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 6
 	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
 	vrSettings->Add(new CheckBox(&g_Config.bDynamicPrediction, gr->T("Dynamic prediction")));
@@ -383,11 +387,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
 #endif
 	vrSettings->Add(new CheckBox(&g_Config.bFlipVertical, gr->T("Flip vertical")));
-	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
 	vrSettings->Add(new CheckBox(&g_Config.bNoMirrorToWindow, gr->T("No mirror window")));
-	vrSettings->Add(new CheckBox(&g_Config.bDisableNearClipping, gr->T("Disable Near Clipping")));
-	vrSettings->Add(new CheckBox(&g_Config.bSynchronousTimewarp, gr->T("Synchronous timewarp")));
-	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 
 	// VR Game
 	//vrSettingsScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
