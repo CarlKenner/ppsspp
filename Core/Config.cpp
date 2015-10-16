@@ -1324,6 +1324,27 @@ void Config::RestoreDefaults() {
 	Load();
 }
 
+void Config::RestoreVRDefaults() {
+	for (ConfigSetting* setting = vrGameSettings; setting->HasMore(); ++setting) {
+		if (setting->perGame_) {
+			switch (setting->type_) {
+			case ConfigSetting::TYPE_BOOL:
+				*(setting->ptr_.b) = setting->default_.b;
+				break;
+			case ConfigSetting::TYPE_INT:
+				*(setting->ptr_.i) = setting->default_.i;
+				break;
+			case ConfigSetting::TYPE_FLOAT:
+				*(setting->ptr_.f) = setting->default_.f;
+				break;
+			case ConfigSetting::TYPE_STRING:
+				*(setting->ptr_.s) = setting->default_.s;
+				break;
+			}
+		}
+	}
+}
+
 bool Config::getVRInfo(const std::string &pGameId, int &stars, std::string &issues)
 {
 	stars = 0;

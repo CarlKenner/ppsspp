@@ -523,7 +523,8 @@ public:
 	void Load(const char *iniFileName = nullptr, const char *controllerIniFilename = nullptr);
 	void Save();
 	void RestoreDefaults();
-	
+	void RestoreVRDefaults();
+
 	//per game config managment, should maybe be in it's own class
 	void changeGameSpecific(bool isSpecific = false);
 	bool createGameConfig(const std::string &game_id);

@@ -389,6 +389,8 @@ void GameSettingsScreen::CreateViews() {
 	//vrSettingsScroll->Add(vrSettings);
 	//tabHolder->AddTab(ms->T("VR Game"), vrSettingsScroll);
 	vrSettings->Add(new ItemHeader(gr->T("For This Game Only")));
+	Choice *resetVR = vrSettings->Add(new Choice(gr->T("Reset to Defaults")));
+	resetVR->OnClick.Handle(this, &GameSettingsScreen::OnResetToDefaults);
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fUnitsPerMetre, 0.001f, 1000.0f, gr->T("Units Per Metre"), 0.01f, screenManager(), "units per metre"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudDistance, 0.0f, 500.0f, gr->T("HUD Distance"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudThickness, 0.0f, 500.0f, gr->T("HUD Thickness"), 0.1f, screenManager(), "metres"));
@@ -402,16 +404,16 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenUp, -500.0f, 500.0f, gr->T("2D Screen Up"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenPitch, -180.0f, 180.0f, gr->T("Screen Pitch"), 1.0f, screenManager(), "degrees"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fMinFOV, 0.0f, 179.0f, gr->T("Min HFOV"), 1.0f, screenManager(), "degrees"));
+	//vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fTelescopeMaxFOV, 0.0f, 90.0f, gr->T("Telescope Max FOV"), 1.0f, screenManager(), "degrees"));
+	vrSettings->Add(new CheckBox(&g_Config.bCanReadCameraAngles, gr->T("Read Camera Angles")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fReadPitch, -180.0f, 180.0f, gr->T("Camera Read Pitch"), 1.0f, screenManager(), "degrees"));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fTelescopeMaxFOV, 0.0f, 90.0f, gr->T("Telescope Max FOV"), 1.0f, screenManager(), "degrees"));
 	vrSettings->Add(new CheckBox(&g_Config.bHudOnTop, gr->T("HUD on Top")));
 	vrSettings->Add(new CheckBox(&g_Config.bDontClearScreen, gr->T("Don't Clear Screen")));
-	vrSettings->Add(new CheckBox(&g_Config.bCanReadCameraAngles, gr->T("Read Camera Angles")));
 	vrSettings->Add(new CheckBox(&g_Config.bDetectSkybox, gr->T("Detect Skybox")));
 	vrSettings->Add(new CheckBox(&g_Config.bDontDrawScreenSpace, gr->T("Dont Draw Screen-Space Effects")));
 	vrSettings->Add(new CheckBox(&g_Config.bBefore3DIsBackground, gr->T("Before 3D is Background")));
-	vrSettings->Add(new PopupARGBChoice(&g_Config.iBackgroundColor, gr->T("Background Colour (AARRGGBB)"), screenManager()));
 	vrSettings->Add(new CheckBox(&g_Config.bOverrideClearColor, gr->T("Override Clear Color")));
+	vrSettings->Add(new PopupARGBChoice(&g_Config.iBackgroundColor, gr->T("Background Colour (AARRGGBB)"), screenManager()));
 	vrSettings->Add(new PopupSliderChoice(&g_Config.iVRCPUSpeed, 0, 1000, sy->T("Change CPU Clock", "Change CPU Clock (0 = default) (unstable)"), screenManager()));
 
 	// Audio
@@ -1120,6 +1122,12 @@ void GameSettingsScreen::CallbackRestoreDefaults(bool yes) {
 	host->UpdateUI();
 }
 
+void GameSettingsScreen::CallbackRestoreVRDefaults(bool yes) {
+	if (yes)
+		g_Config.RestoreVRDefaults();
+	host->UpdateUI();
+}
+
 UI::EventReturn GameSettingsScreen::OnRestoreDefaultSettings(UI::EventParams &e) {
 	I18NCategory *dev = GetI18NCategory("Developer");
 	I18NCategory *di = GetI18NCategory("Dialog");
@@ -1136,6 +1144,15 @@ UI::EventReturn GameSettingsScreen::OnRestoreDefaultSettings(UI::EventParams &e)
 			std::bind(&GameSettingsScreen::CallbackRestoreDefaults, this, placeholder::_1)));
 	}
 
+	return UI::EVENT_DONE;
+}
+
+UI::EventReturn GameSettingsScreen::OnResetToDefaults(UI::EventParams &e) {
+	I18NCategory *gr = GetI18NCategory("Graphics");
+
+	screenManager()->push(
+		new PromptScreen(gr->T("ResetToDefaults", "Are you sure you want to reset VR game settings for this game to the defaults?\n"), gr->T("OK"), gr->T("Cancel"),
+		std::bind(&GameSettingsScreen::CallbackRestoreVRDefaults, this, placeholder::_1)));
 	return UI::EVENT_DONE;
 }
 
