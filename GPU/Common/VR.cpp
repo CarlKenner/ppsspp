@@ -527,7 +527,7 @@ void VR_ConfigureHMDPrediction()
 	if (g_has_rift)
 	{
 #if OVR_MAJOR_VERSION <= 5
-		int caps = ovrHmd_GetEnabledCaps(hmd) & ~(ovrHmdCap_DynamicPrediction | ovrHmdCap_LowPersistence | ovrHmdCap_NoMirrorToWindow);
+		int caps = ovrHmd_GetEnabledCaps(hmd) & ~(ovrHmdCap_DynamicPrediction | ovrHmdCap_LowPersistence | ovrHmdCap_MagYawCorrection);
 #else
 #if OVR_MAJOR_VERSION >= 7
 		int caps = ovrHmd_GetEnabledCaps(hmd) & ~(0);
@@ -541,8 +541,8 @@ void VR_ConfigureHMDPrediction()
 		if (g_Config.bDynamicPrediction)
 			caps |= ovrHmdCap_DynamicPrediction;
 #if OVR_MAJOR_VERSION <= 5
-		if (g_Config.bNoMirrorToWindow)
-			caps |= ovrHmdCap_NoMirrorToWindow;
+		if (g_Config.bMagYawCorrection)
+			caps |= ovrHmdCap_MagYawCorrection;
 #endif
 #endif
 		ovrHmd_SetEnabledCaps(hmd, caps);

@@ -48,6 +48,7 @@
 #include "android/jni/TestRunner.h"
 #include "GPU/GPUInterface.h"
 #include "GPU/GLES/Framebuffer.h"
+#include "GPU/Common/VR.h"
 
 #if defined(_WIN32)
 #pragma warning(disable:4091)  // workaround bug in VS2015 headers
@@ -346,7 +347,9 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->SetSpacing(0);
 	vrSettingsScroll->Add(vrSettings);
 	tabHolder->AddTab(ms->T("VR"), vrSettingsScroll);
-
+	vrSettings->Add(new ItemHeader(gr->T("These PPSSPP menus")));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fGuiDistance, 0.1f, 5.0f, gr->T("GUI Distance"), 0.1f, screenManager(), "metres"));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fGuiWidth, 0.1f, 20.0f, gr->T("GUI Width"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new ItemHeader(gr->T("All games")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gr->T("Scale"), 0.01f, screenManager(), "x lifesize"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fFreeLookSensitivity, 0.001f, 100.0f, gr->T("FreeLook Sensitivity"), 0.01f, screenManager(), "x normal"));
@@ -364,18 +367,22 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeSnapSize, 10.0f, 120.0f, gr->T("Keyhole Snap Size"), 1.0f, screenManager(), "degrees"));
 
 	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 6
 	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
 	vrSettings->Add(new CheckBox(&g_Config.bDynamicPrediction, gr->T("Dynamic prediction")));
+#endif
 	vrSettings->Add(new CheckBox(&g_Config.bOrientationTracking, gr->T("Orientation tracking")));
 	vrSettings->Add(new CheckBox(&g_Config.bMagYawCorrection, gr->T("Magnetic yaw")));
 	vrSettings->Add(new CheckBox(&g_Config.bPositionTracking, gr->T("Position tracking")));
+#if OVR_MAJOR_VERSION <= 5
 	vrSettings->Add(new CheckBox(&g_Config.bChromatic, gr->T("Chromatic aberration")));
 	vrSettings->Add(new CheckBox(&g_Config.bTimewarp, gr->T("Timewarp")));
 	vrSettings->Add(new CheckBox(&g_Config.bVignette, gr->T("Vignette")));
 	//vrSettings->Add(new CheckBox(&g_Config.bNoRestore, gr->T("Don't restore")));
-	vrSettings->Add(new CheckBox(&g_Config.bFlipVertical, gr->T("Flip vertical")));
 	vrSettings->Add(new CheckBox(&g_Config.bSRGB, gr->T("sRGB")));
 	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
+#endif
+	vrSettings->Add(new CheckBox(&g_Config.bFlipVertical, gr->T("Flip vertical")));
 	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
 	vrSettings->Add(new CheckBox(&g_Config.bNoMirrorToWindow, gr->T("No mirror window")));
 	vrSettings->Add(new CheckBox(&g_Config.bDisableNearClipping, gr->T("Disable Near Clipping")));
@@ -395,23 +402,23 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudDistance, 0.0f, 500.0f, gr->T("HUD Distance"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudThickness, 0.0f, 500.0f, gr->T("HUD Thickness"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHud3DCloser, 0.0f, 1.0f, gr->T("HUD 3D Closer"), 0.1f, screenManager(), "/ 1.000"));
+	vrSettings->Add(new CheckBox(&g_Config.bHudOnTop, gr->T("HUD on Top")));
+	vrSettings->Add(new CheckBox(&g_Config.bBefore3DIsBackground, gr->T("Before 3D is Background")));
+	vrSettings->Add(new CheckBox(&g_Config.bDontDrawScreenSpace, gr->T("Dont Draw Screen-Space Effects")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fCameraForward, -100.0f, 100.0f, gr->T("Permanent Camera Forward"), 0.1f, screenManager(), "metres"));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fCameraPitch, -180.0f, 180.0f, gr->T("Camera Pitch"), 1.0f, screenManager(), "degrees"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fAimDistance, 0.1f, 500.0f, gr->T("Aim Distance"), 0.1f, screenManager(), "metres"));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fMinFOV, 0.0f, 179.0f, gr->T("Min HFOV"), 1.0f, screenManager(), "degrees"));
+	//vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fTelescopeMaxFOV, 0.0f, 90.0f, gr->T("Telescope Max FOV"), 1.0f, screenManager(), "degrees"));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fCameraPitch, -180.0f, 180.0f, gr->T("Camera Pitch"), 1.0f, screenManager(), "degrees"));
+	vrSettings->Add(new CheckBox(&g_Config.bCanReadCameraAngles, gr->T("Read Camera Angles")));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fReadPitch, -180.0f, 180.0f, gr->T("Camera Read Pitch"), 1.0f, screenManager(), "degrees"));
+	vrSettings->Add(new CheckBox(&g_Config.bDetectSkybox, gr->T("Detect Skybox")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenDistance, 0.0f, 500.0f, gr->T("2D Screen Distance"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenHeight, 0.0f, 500.0f, gr->T("2D Screen Height"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenThickness, 0.0f, 500.0f, gr->T("2D Screen Thickness"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenUp, -500.0f, 500.0f, gr->T("2D Screen Up"), 0.1f, screenManager(), "metres"));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenPitch, -180.0f, 180.0f, gr->T("Screen Pitch"), 1.0f, screenManager(), "degrees"));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fMinFOV, 0.0f, 179.0f, gr->T("Min HFOV"), 1.0f, screenManager(), "degrees"));
-	//vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fTelescopeMaxFOV, 0.0f, 90.0f, gr->T("Telescope Max FOV"), 1.0f, screenManager(), "degrees"));
-	vrSettings->Add(new CheckBox(&g_Config.bCanReadCameraAngles, gr->T("Read Camera Angles")));
-	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fReadPitch, -180.0f, 180.0f, gr->T("Camera Read Pitch"), 1.0f, screenManager(), "degrees"));
-	vrSettings->Add(new CheckBox(&g_Config.bHudOnTop, gr->T("HUD on Top")));
+	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScreenPitch, -180.0f, 180.0f, gr->T("2D Screen Pitch"), 1.0f, screenManager(), "degrees"));
 	vrSettings->Add(new CheckBox(&g_Config.bDontClearScreen, gr->T("Don't Clear Screen")));
-	vrSettings->Add(new CheckBox(&g_Config.bDetectSkybox, gr->T("Detect Skybox")));
-	vrSettings->Add(new CheckBox(&g_Config.bDontDrawScreenSpace, gr->T("Dont Draw Screen-Space Effects")));
-	vrSettings->Add(new CheckBox(&g_Config.bBefore3DIsBackground, gr->T("Before 3D is Background")));
 	vrSettings->Add(new CheckBox(&g_Config.bOverrideClearColor, gr->T("Override Clear Color")));
 	vrSettings->Add(new PopupARGBChoice(&g_Config.iBackgroundColor, gr->T("Background Colour (AARRGGBB)"), screenManager()));
 	vrSettings->Add(new PopupSliderChoice(&g_Config.iVRCPUSpeed, 0, 1000, sy->T("Change CPU Clock", "Change CPU Clock (0 = default) (unstable)"), screenManager()));

@@ -973,11 +973,11 @@ void PresentFrameSDK6()
 				lg.Header.Flags = ld.Header.Flags;
 				lg.ColorTexture = guiRenderTexture->TextureSet;
 				lg.Viewport = guiRenderViewport;
-				lg.QuadSize.x = 1.6f / 2.0f; // metres
-				lg.QuadSize.y = 0.9f / 2.0f; // metres
+				lg.QuadSize.x = g_Config.fGuiWidth; // metres
+				lg.QuadSize.y = g_Config.fGuiWidth * 9.0f/16.0f; // metres
 				lg.QuadPoseCenter.Position.x = 0; // metres
 				lg.QuadPoseCenter.Position.y = 0; // metres
-				lg.QuadPoseCenter.Position.z = -0.7; // metres (negative means in front of us)
+				lg.QuadPoseCenter.Position.z = -g_Config.fGuiDistance; // metres (negative means in front of us)
 				lg.QuadPoseCenter.Orientation.w = 1;
 				lg.QuadPoseCenter.Orientation.x = 0;
 				lg.QuadPoseCenter.Orientation.y = 0;
@@ -997,6 +997,20 @@ int tcount = 0;
 
 void VR_DoPresentHMDFrame(bool valid)
 {
+	static bool oldLowPersistence = false, oldDynamicPrediction = false, oldNoMirrorToWindow = false;
+	if (g_Config.bLowPersistence != oldLowPersistence || g_Config.bDynamicPrediction != oldDynamicPrediction || g_Config.bNoMirrorToWindow != oldNoMirrorToWindow) {
+		VR_ConfigureHMDPrediction();
+		oldDynamicPrediction = g_Config.bDynamicPrediction;
+		oldLowPersistence = g_Config.bLowPersistence;
+		oldNoMirrorToWindow = g_Config.bNoMirrorToWindow;
+	}
+	static bool oldOrientationTracking = false, oldPositionTracking = false, oldMagYawCorrection = false;
+	if (g_Config.bOrientationTracking != oldOrientationTracking || g_Config.bPositionTracking != oldPositionTracking || g_Config.bMagYawCorrection != oldMagYawCorrection) {
+		VR_ConfigureHMDTracking();
+		oldPositionTracking = g_Config.bPositionTracking;
+		oldOrientationTracking = g_Config.bOrientationTracking;
+		oldMagYawCorrection = g_Config.bMagYawCorrection;
+	}
 	if (g_asyc_timewarp_active)
 		return;
 #ifdef HAVE_OPENVR

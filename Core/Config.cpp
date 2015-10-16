@@ -616,6 +616,8 @@ static ConfigSetting vrSettings[] = {
 	ReportedConfigSetting("ReplayVertexData", &g_Config.bReplayVertexData, false),
 	ReportedConfigSetting("ReplayOtherData", &g_Config.bReplayOtherData, false),
 	ReportedConfigSetting("SynchronousTimewarp", &g_Config.bSynchronousTimewarp, true),
+	ConfigSetting("GuiDistance", &g_Config.fGuiDistance, 0.7f),
+	ConfigSetting("GuiWidth", &g_Config.fGuiWidth, 0.8f),
 
 	ConfigSetting(false),
 };
@@ -1325,6 +1327,13 @@ void Config::RestoreDefaults() {
 }
 
 void Config::RestoreVRDefaults() {
+	IniFile iniFile;
+	if (!gameId_.empty()) {
+		std::string iniDefaultFileNameFull = getGameDefaultConfigFile(gameId_);
+		if (File::Exists(iniDefaultFileNameFull))
+			bGameDefaults = iniFile.Load(iniDefaultFileNameFull, true);
+	}
+	IniFile::Section *section = iniFile.GetOrCreateSection("VR");
 	for (ConfigSetting* setting = vrGameSettings; setting->HasMore(); ++setting) {
 		if (setting->perGame_) {
 			switch (setting->type_) {
@@ -1341,6 +1350,7 @@ void Config::RestoreVRDefaults() {
 				*(setting->ptr_.s) = setting->default_.s;
 				break;
 			}
+			setting->GetIfExists(section);
 		}
 	}
 }

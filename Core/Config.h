@@ -230,6 +230,8 @@ public:
 	// VR global
 	float fScale;
 	float fLeanBackAngle;
+	float fGuiDistance;
+	float fGuiWidth;
 	bool bStabilizeRoll;
 	bool bStabilizePitch;
 	bool bStabilizeYaw;
