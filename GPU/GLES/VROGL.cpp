@@ -828,7 +828,9 @@ void VR_BeginFrame()
 #if OVR_MAJOR_VERSION >= 6
 		++g_ovr_frameindex;
 		// On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture 
+#if OVR_MAJOR_VERSION <= 7
 		g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
+#endif
 		if (!g_asyc_timewarp_active) {
 			lock_guard guard(AsyncTimewarpLock);
 			for (int eye = 0; eye < 2; eye++)
@@ -865,7 +867,9 @@ void VR_BeginGUI()
 		if (!g_asyc_timewarp_active) {
 			guiRenderTexture->TextureSet->CurrentIndex = (guiRenderTexture->TextureSet->CurrentIndex + 1) % guiRenderTexture->TextureSet->TextureCount;
 		}
+#if OVR_MAJOR_VERSION <= 7
 		g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
+#endif
 		lock_guard guard(AsyncTimewarpLock);
 		GL_CHECK();
 		// Switch to eye render target
@@ -974,7 +978,11 @@ void PresentFrameSDK6()
 			ovrLayerQuad lg;
 			if (guiRenderTexture && has_gui) {
 				++count;
+#if OVR_MAJOR_VERSION >= 8
+				lg.Header.Type = ovrLayerType_Quad;
+#else
 				lg.Header.Type = ovrLayerType_QuadInWorld;
+#endif
 				lg.Header.Flags = ld.Header.Flags;
 				lg.ColorTexture = guiRenderTexture->TextureSet;
 				lg.Viewport = guiRenderViewport;
@@ -1262,8 +1270,8 @@ void VR_DrawTimewarpFrame()
 #ifdef OVR_MAJOR_VERSION
 	if (g_has_rift)
 	{
-		ovrFrameTiming frameTime;
 #if OVR_MAJOR_VERSION <= 5
+		ovrFrameTiming frameTime;
 		frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
 		GL_CHECK();
 
@@ -1272,9 +1280,12 @@ void VR_DrawTimewarpFrame()
 		ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
 		GL_CHECK();
 #else
+#if OVR_MAJOR_VERSION <= 7
+		ovrFrameTiming frameTime;
 		++g_ovr_frameindex;
 		// On Oculus SDK 0.6.0 and above, we get the frame timing manually
 		frameTime = ovrHmd_GetFrameTiming(hmd, 0);
+#endif
 		Sleep(1);
 		PresentFrameSDK6();
 #endif
