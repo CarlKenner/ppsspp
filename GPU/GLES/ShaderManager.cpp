@@ -1862,13 +1862,16 @@ void LinkedShader::CheckOrientationConstants()
 
 			yaw -= keyhole_center;
 		} 
-		// if we are stabilising everything, just use the transpose, don't use the extracted angles (which are probably buggy)
-		if (g_Config.bStabilizePitch && g_Config.bStabilizeRoll && g_Config.bStabilizeYaw && !g_Config.bKeyhole) {
-			g_game_camera_rotmat = rot;
-		} else if (g_Config.bStabilizeYaw) {
+
+		if (g_Config.bStabilizeYaw) {
 			Matrix3x3 matrix_yaw;
 			matrix_yaw.setRotationY(yaw);
-			if (g_Config.bStabilizeRoll) {
+			if (g_Config.bStabilizePitch && g_Config.bStabilizeRoll) {
+				Matrix3x3 matrix_roll, matrix_pitch;
+				matrix_roll.setRotationZ(-roll);
+				matrix_pitch.setRotationX(-pitch);
+				g_game_camera_rotmat = matrix_roll * matrix_pitch * matrix_yaw;
+			} else if (g_Config.bStabilizeRoll) {
 				Matrix3x3 matrix_roll;
 				matrix_roll.setRotationZ(-roll);
 				g_game_camera_rotmat = matrix_roll * matrix_yaw;
