@@ -248,7 +248,7 @@ extern ovrEyeRenderDesc g_eye_render_desc[2];
 extern ovrFrameTiming g_rift_frame_timing;
 #endif
 extern ovrPosef g_eye_poses[2], g_front_eye_poses[2];
-extern int g_ovr_frameindex;
+extern long long g_ovr_frameindex;
 #endif
 
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 7

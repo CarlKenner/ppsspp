@@ -560,7 +560,7 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 		}
 	}
 	if (g_Config.bEnableVR)
-		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr);
+		OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr, 0);
 }
 
 void FramebufferManager::DrawPlainColor(u32 color) {
@@ -1407,7 +1407,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 				// Right Eye Image
 				OGL::VR_RenderToEyebuffer(1);
 				ClearBuffer();
-				OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr);
+				OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, nullptr, 0);
 				//ELOG("==end==");
 			}
 			return;
@@ -1555,7 +1555,7 @@ void FramebufferManager::CopyDisplayToOutput() {
 
 		//ELOG("==end==");
 		if (g_Config.bEnableVR)
-		  OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, vfb->vr_eye_poses);
+		  OGL::VR_PresentHMDFrame(OGL::vr_frame_valid, vfb->vr_eye_poses, vfb->vr_frame_index);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 		if (g_has_hmd && g_Config.bEnableVR && !g_Config.bDontClearScreen) {
 			fbo_bind_as_render_target(vfb->fbo);
@@ -2395,5 +2395,6 @@ void FramebufferManager::UpdateHeadTrackingIfNeeded() {
 	if (currentRenderVfb_) {
 		currentRenderVfb_->vr_eye_poses[0] = g_eye_poses[0];
 		currentRenderVfb_->vr_eye_poses[1] = g_eye_poses[1];
+		currentRenderVfb_->vr_frame_index = g_ovr_frameindex;
 	}
 }

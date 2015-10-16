@@ -63,7 +63,7 @@ ovrEyeRenderDesc g_eye_render_desc[2];
 ovrFrameTiming g_rift_frame_timing;
 #endif
 ovrPosef g_eye_poses[2], g_front_eye_poses[2];
-int g_ovr_frameindex;
+long long g_ovr_frameindex;
 #if OVR_MAJOR_VERSION >= 7
 ovrGraphicsLuid luid;
 #endif
@@ -312,7 +312,11 @@ bool InitOculusHMD()
 			else
 				g_hmd_refresh_rate = 75;
 #else
+#if OVR_MAJOR_VERSION == 6
 			g_hmd_refresh_rate = (int)(1.0f / ovrHmd_GetFloat(hmd, "VsyncToNextVsync", 0.f) + 0.5f);
+#else
+			g_hmd_refresh_rate = (int)(hmdDesc.DisplayRefreshRate + 0.5f);
+#endif
 			g_hmd_window_x = 0;
 			g_hmd_window_y = 0;
 			g_is_direct_mode = true;
@@ -616,6 +620,7 @@ void ProcessVREvent(const vr::VREvent_t & event)
 #ifdef OVR_MAJOR_VERSION
 void UpdateOculusHeadTracking()
 {
+	++g_ovr_frameindex;
 	// we can only call GetEyePose between BeginFrame and EndFrame
 #ifdef OCULUSSDK042
 	g_vr_lock.lock();
@@ -625,8 +630,10 @@ void UpdateOculusHeadTracking()
 #else
 	ovrVector3f useHmdToEyeViewOffset[2] = { g_eye_render_desc[0].HmdToEyeViewOffset, g_eye_render_desc[1].HmdToEyeViewOffset };
 #if OVR_MAJOR_VERSION >= 8
-	ovr_GetEyePoses(hmd, 0 /*g_ovr_frameindex*/, false, useHmdToEyeViewOffset, g_eye_poses, nullptr);
-	OVR::Posef pose = g_eye_poses[ovrEye_Left];
+	double display_time = ovr_GetPredictedDisplayTime(hmd, g_ovr_frameindex);
+	ovrTrackingState state = ovr_GetTrackingState(hmd, display_time, false);
+	ovr_CalcEyePoses(state.HeadPose.ThePose, useHmdToEyeViewOffset, g_eye_poses);
+	OVR::Posef pose = state.HeadPose.ThePose;
 #elif OVR_MAJOR_VERSION >= 7
 	ovr_GetEyePoses(hmd, g_ovr_frameindex, useHmdToEyeViewOffset, g_eye_poses, nullptr);
 	OVR::Posef pose = g_eye_poses[ovrEye_Left];

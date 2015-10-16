@@ -97,6 +97,7 @@ struct TextureBuffer
 	GLuint        fboId[8];
 	ovrSizei      texSize;
  	ovrPosef      eyePose[8];
+	long long     frame_index[8];
 
 	TextureBuffer(ovrHmd hmd, bool rendertarget, bool displayableOnHmd, OVR::Sizei size, int mipLevels, unsigned char * data, int sampleCount)
 	{
@@ -956,6 +957,7 @@ void PresentFrameSDK6()
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
+		long long frame_index = 0;
 		int count = 0;
 		ovrLayerHeader* LayerList[2] = { nullptr, nullptr };
 		ovrLayerEyeFov ld;
@@ -973,6 +975,7 @@ void PresentFrameSDK6()
 					ld.Fov[eye] = g_eye_fov[eye];
 					ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex];
 				}
+				frame_index = eyeRenderTexture[0]->frame_index[eyeRenderTexture[0]->TextureSet->CurrentIndex];
 				LayerList[count-1] = &ld.Header;
 			}
 			ovrLayerQuad lg;
@@ -997,7 +1000,7 @@ void PresentFrameSDK6()
 				lg.QuadPoseCenter.Orientation.z = 0;
 				LayerList[count-1] = &lg.Header;
 			}
-			ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, LayerList, count);
+			ovrResult result = ovrHmd_SubmitFrame(hmd, frame_index, nullptr, LayerList, count);
 		}
 	}
 #endif 
@@ -1097,7 +1100,7 @@ void VR_DoPresentHMDFrame(bool valid)
 	has_gui = false;
 }
 
-void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses)
+void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 {
 	float vps, f_fps, actual_fps;
 	__DisplayGetFPS(&vps, &f_fps, &actual_fps);
@@ -1211,8 +1214,9 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses)
 						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
 					else
 						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+					eyeRenderTexture[eye]->frame_index[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_index;
+					eyeRenderTexture[eye]->UnsetRenderSurface();
 				}
-				eyeRenderTexture[eye]->UnsetRenderSurface();
 			}
 			has_gui = false;
 			return;
@@ -1224,6 +1228,7 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses)
 						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
 					else
 						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+					eyeRenderTexture[eye]->frame_index[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_index;
 					eyeRenderTexture[eye]->UnsetRenderSurface();
 				}
 			}
