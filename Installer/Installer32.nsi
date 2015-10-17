@@ -1,5 +1,5 @@
-!define PPSSPP_ARCH x64
-!define BASE_INSTALL_DIR "$PROGRAMFILES64"
+!define PPSSPP_ARCH Win32
+!define BASE_INSTALL_DIR "$PROGRAMFILES"
 !define PRODUCT_NAME "PPSSPP VR"
 
 !define PRODUCT_VERSION 1.1.1
@@ -182,7 +182,7 @@ Section "Base" SEC01
   ; TODO: Make a nice subsection-ized display
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
-  File "${BASE_DIR}\PPSSPPWindows64.exe"
+  File "${BASE_DIR}\PPSSPPWindows.exe"
   File /oname=LICENSE.TMP "${BASE_DIR}\LICENSE.TXT"
   Push "$INSTDIR\LICENSE.TMP"
   Push "$INSTDIR\LICENSE.TXT"
@@ -198,10 +198,10 @@ Section "Base" SEC01
   File /r /x unix-icons /x *.icns /x .git /x android /x ios "${BASE_DIR}\assets"
   File /nonfatal /r /x .git "${BASE_DIR}\Sys"
   
-  ; This needs to be done after PPSSPPWindows64.exe is copied
+  ; This needs to be done after PPSSPPWindows.exe is copied
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\PPSSPPWindows64.exe"
-  CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\PPSSPPWindows64.exe"
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\PPSSPPWindows.exe"
+  CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\PPSSPPWindows.exe"
 SectionEnd
 
 Section -AdditionalIcons
@@ -210,10 +210,10 @@ SectionEnd
 
 Section -Post
   WriteUninstaller "$INSTDIR\uninst.exe"
-  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\PPSSPPWindows64.exe"
+  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\PPSSPPWindows.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName" "$(^Name)"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\PPSSPPWindows64.exe"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\PPSSPPWindows.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
@@ -234,7 +234,7 @@ Section Uninstall
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\installed.txt"
   Delete "$INSTDIR\*.dll"
-  Delete "$INSTDIR\PPSSPPWindows64.exe"
+  Delete "$INSTDIR\PPSSPPWindows.exe"
 
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${UN_NAME}.lnk"
   Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
