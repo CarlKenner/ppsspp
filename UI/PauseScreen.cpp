@@ -330,9 +330,9 @@ void GamePauseScreen::CreateViews() {
 		rightColumnItems->Add(new Choice(pa->T("VR Hacks")))->OnClick.Handle(this, &GamePauseScreen::OnCwCheat);
 	}
 	//if (info->hasDefaults)
-	//	rightColumnItems->Add(new Choice(pa->T("Show Defaults")))->OnClick.Handle(this, &GamePauseScreen::OnShowDefaults);
+		rightColumnItems->Add(new Choice(pa->T("Show Defaults")))->OnClick.Handle(this, &GamePauseScreen::OnShowDefaults);
 	//else
-		rightColumnItems->Add(new Choice(pa->T("Create Defaults")))->OnClick.Handle(this, &GamePauseScreen::OnShowDefaults);
+	//	rightColumnItems->Add(new Choice(pa->T("Create Defaults")))->OnClick.Handle(this, &GamePauseScreen::OnShowDefaults);
 
 	// TODO, also might be nice to show overall compat rating here?
 	// Based on their platform or even cpu/gpu/config.  Would add an API for it.
