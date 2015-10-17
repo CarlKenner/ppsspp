@@ -629,6 +629,7 @@ static ConfigSetting vrGameSettings[] = {
 	ReportedConfigSetting("CameraForward", &g_Config.fCameraForward, 0.0f, true, true),
 	ReportedConfigSetting("CameraPitch", &g_Config.fCameraPitch, 0.0f, true, true),
 	ReportedConfigSetting("AimDistance", &g_Config.fAimDistance, 7.0f, true, true),
+	ReportedConfigSetting("MinFOV", &g_Config.fMinFOV, 0, true, true),
 	ReportedConfigSetting("ScreenHeight", &g_Config.fScreenHeight, 2.0f, true, true),
 	ReportedConfigSetting("ScreenThickness", &g_Config.fScreenThickness, 0.5f, true, true),
 	ReportedConfigSetting("ScreenDistance", &g_Config.fScreenDistance, 1.5f, true, true),
