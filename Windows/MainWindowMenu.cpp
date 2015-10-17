@@ -902,14 +902,24 @@ namespace MainWindow {
 
 		case ID_DEBUG_BRUTEFORCE:
 			// bruteforce functions
-			SetCursor(LoadCursor(0, IDC_WAIT));
-			VR_BruteForceStart(false);
+#ifdef _WIN64
+			if (g_Config.bBruteForcing || PanicYesNo("Bruteforcing frequently crashes on x64. The Win32 version is recommended. Are you sure you want to bruteforce on x64?"))
+#endif
+			{
+				SetCursor(LoadCursor(0, IDC_WAIT));
+				VR_BruteForceStart(false);
+			}
 			break;
 
 		case ID_DEBUG_BRUTEFORCEIFS:
 			// bruteforce functions and ifs
-			SetCursor(LoadCursor(0, IDC_WAIT));
-			VR_BruteForceStart(true);
+#ifdef _WIN64
+			if (g_Config.bBruteForcing || PanicYesNo("Bruteforcing frequently crashes on x64. The Win32 version is recommended. Are you sure you want to bruteforce on x64?"))
+#endif
+			{
+				SetCursor(LoadCursor(0, IDC_WAIT));
+				VR_BruteForceStart(true);
+			}
 			break;
 
 		default:

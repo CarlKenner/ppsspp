@@ -1191,7 +1191,8 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 			oldfps = fps;
 			if (nonstandard) {
 				// todo: calculate lowest common denominator
-				reals = 1; timewarps = 0;
+				reals = fps;
+				timewarps = refresh - fps;
 			}
 			denominator = reals + timewarps;
 			tcount = 0;

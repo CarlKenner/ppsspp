@@ -116,7 +116,7 @@ void ClearDebugProj() { //VR
 	debug_newScene = debug_nextScene;
 	if (debug_newScene)
 	{
-		HACK_LOG(VR, "***** New scene *****");
+		//HACK_LOG(VR, "***** New scene *****");
 		// General VR hacks
 		vr_widest_3d_projNum = -1;
 		//ELOG("********* New scene *********");
@@ -152,8 +152,8 @@ void ClearDebugProj() { //VR
 }
 
 void DoLogProj(int j, float p[], const char *s) { //VR
-	if (j == g_Config.iSelectedLayer)
-		HACK_LOG(VR, "** SELECTED LAYER:");
+	//if (j == g_Config.iSelectedLayer)
+	//	HACK_LOG(VR, "** SELECTED LAYER:");
 	if (p[6] != -1) { // orthographic projection
 		//float right = p[0]-(p[0]*p[1]);
 		//float left = right - 2/p[0];
@@ -164,21 +164,21 @@ void DoLogProj(int j, float p[], const char *s) { //VR
 		float top = bottom + 2 / p[2];
 		float zfar = p[5] / p[4];
 		float znear = (1 + p[4] * zfar) / p[4];
-		HACK_LOG(VR, "%d: 2D: %s (%g, %g) to (%g, %g); z: %g to %g  [%g, %g]", j, s, left, top, right, bottom, znear, zfar, p[4], p[5]);
+		//HACK_LOG(VR, "%d: 2D: %s (%g, %g) to (%g, %g); z: %g to %g  [%g, %g]", j, s, left, top, right, bottom, znear, zfar, p[4], p[5]);
 	}
 	else if (p[0] != 0 || p[2] != 0) { // perspective projection
 		float f = p[5] / p[4];
 		float n = f*p[4] / (p[4] - 1);
 		if (p[1] != 0.0f || p[3] != 0.0f) {
-			HACK_LOG(VR, "%d: %s OFF-AXIS Perspective: 2n/w=%.2f A=%.2f; 2n/h=%.2f B=%.2f; n=%.2f f=%.2f", j, s, p[0], p[1], p[2], p[3], p[4], p[5]);
-			HACK_LOG(VR, "	HFOV: %.2f    VFOV: %.2f   Aspect Ratio: 16:%.1f", 2 * atan(1.0f / p[0])*180.0f / 3.1415926535f, 2 * atan(1.0f / p[2])*180.0f / 3.1415926535f, 16 / (2 / p[0])*(2 / p[2]));
+			//HACK_LOG(VR, "%d: %s OFF-AXIS Perspective: 2n/w=%.2f A=%.2f; 2n/h=%.2f B=%.2f; n=%.2f f=%.2f", j, s, p[0], p[1], p[2], p[3], p[4], p[5]);
+			//HACK_LOG(VR, "	HFOV: %.2f    VFOV: %.2f   Aspect Ratio: 16:%.1f", 2 * atan(1.0f / p[0])*180.0f / 3.1415926535f, 2 * atan(1.0f / p[2])*180.0f / 3.1415926535f, 16 / (2 / p[0])*(2 / p[2]));
 		}
 		else {
-			HACK_LOG(VR, "%d: %s HFOV: %.2fdeg; VFOV: %.2fdeg; Aspect Ratio: 16:%.1f; near:%f, far:%f", j, s, 2 * atan(1.0f / p[0])*180.0f / 3.1415926535f, 2 * atan(1.0f / p[2])*180.0f / 3.1415926535f, 16 / (2 / p[0])*(2 / p[2]), n, f);
+			//HACK_LOG(VR, "%d: %s HFOV: %.2fdeg; VFOV: %.2fdeg; Aspect Ratio: 16:%.1f; near:%f, far:%f", j, s, 2 * atan(1.0f / p[0])*180.0f / 3.1415926535f, 2 * atan(1.0f / p[2])*180.0f / 3.1415926535f, 16 / (2 / p[0])*(2 / p[2]), n, f);
 		}
 	}
 	else { // invalid
-		HACK_LOG(VR, "%d: %s ZERO", j, s);
+		//HACK_LOG(VR, "%d: %s ZERO", j, s);
 	}
 }
 
@@ -217,14 +217,14 @@ void LogProj(const Matrix4x4 & m) { //VR
 		}
 
 		if (debug_newScene && h > vr_widest_3d_HFOV && h <= 125 && (fabs(m.yy) != fabs(m.xx))) {
-			DEBUG_LOG(VR, "***** New Widest 3D *****");
+			//DEBUG_LOG(VR, "***** New Widest 3D *****");
 
 			vr_widest_3d_projNum = debug_projNum;
 			vr_widest_3d_HFOV = h;
 			vr_widest_3d_VFOV = fabs(vfov);
 			vr_widest_3d_zNear = fabs(znear);
 			vr_widest_3d_zFar = fabs(zfar);
-			DEBUG_LOG(VR, "%d: %g x %g deg, n=%g f=%g, p4=%g p5=%g; xs=%g ys=%g", vr_widest_3d_projNum, vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar, m.zz, m.wz, m.xx, m.yy);
+			//DEBUG_LOG(VR, "%d: %g x %g deg, n=%g f=%g, p4=%g p5=%g; xs=%g ys=%g", vr_widest_3d_projNum, vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar, m.zz, m.wz, m.xx, m.yy);
 			//ELOG("** widening: H=%g, V=%g, n=%g, f=%g **", vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar);
 		}
 	}
@@ -260,8 +260,8 @@ void LogProj(const Matrix4x4 & m) { //VR
 	else
 	{
 		debug_nextScene = false;
-		INFO_LOG(VR, "%f Units Per Metre", g_Config.fUnitsPerMetre);
-		INFO_LOG(VR, "HUD is %.1fm away and %.1fm thick", g_Config.fHudDistance, g_Config.fHudThickness);
+		//INFO_LOG(VR, "%f Units Per Metre", g_Config.fUnitsPerMetre);
+		//INFO_LOG(VR, "HUD is %.1fm away and %.1fm thick", g_Config.fHudDistance, g_Config.fHudThickness);
 		DoLogProj(debug_projNum, debug_projList[debug_projNum], "unknown");
 	}
 	debug_projNum++;
@@ -928,7 +928,7 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 	{
 		Matrix4x4 proj_through;
 		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0.0f, 1.0f);
-		DEBUG_LOG(VR, "proj_through: (%d, %d) to (%d, %d), %g to %g", 0, 0, gstate_c.curRTWidth, gstate_c.curRTHeight, 0.0f, 1.0f);
+		//DEBUG_LOG(VR, "proj_through: (%d, %d) to (%d, %d), %g to %g", 0, 0, gstate_c.curRTWidth, gstate_c.curRTHeight, 0.0f, 1.0f);
 		if (g_Config.bEnableVR && g_has_hmd)
 		{
 			Matrix4x4 flippedMatrix = SetProjectionConstants(proj_through.m, false, true);
@@ -1059,8 +1059,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	memcpy(&flippedMatrix, input_proj_matrix, 16 * sizeof(float));
 
 	if (debug_newScene) {
-		flippedMatrix.toOpenGL(s, 1024);
-		NOTICE_LOG(VR, "input: %s", s);
+		//flippedMatrix.toOpenGL(s, 1024);
+		//NOTICE_LOG(VR, "input: %s", s);
 	}
 
 	bool isPerspective = flippedMatrix.zw == -1.0f || flippedMatrix.zw == 1.0f;
@@ -1114,8 +1114,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 		}
 	}
 	if (debug_newScene) {
-		flippedMatrix.toOpenGL(s, 1024);
-		NOTICE_LOG(VR, "flipped: %s", s);
+		//flippedMatrix.toOpenGL(s, 1024);
+		//NOTICE_LOG(VR, "flipped: %s", s);
 	}
 	if (shouldLog)
 		LogProj(flippedMatrix);
@@ -1150,14 +1150,14 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 
 	if (g_Config.bBefore3DIsBackground && last_frame_had_3d && !isPerspective && !this_frame_has_3d)
 	{
-		NOTICE_LOG(VR, "Before 3D: Background");
+		//HACK_LOG(VR, "Before 3D: Background");
 		g_is_skyplane = true;
 	}
 	else if (g_Config.bBefore3DIsBackground) {
 		g_is_skyplane = false;
 	}
 
-	bool isSkybox = g_is_skybox || g_is_skyplane;
+	bool isSkybox = (g_is_skybox && isPerspective) || g_is_skyplane;
 
 	//if (isThrough) {
 	//	flippedMatrix.toOpenGL(s, 1024);
@@ -1311,8 +1311,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 				hfov = vr_widest_3d_HFOV;
 				vfov = vr_widest_3d_VFOV;
 			}
-			if (debug_newScene)
-				NOTICE_LOG(VR, "2D to fit 3D world: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, znear, zfar);
+			//if (debug_newScene)
+			//	NOTICE_LOG(VR, "2D to fit 3D world: hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov, vfov, znear, zfar);
 			zNearBetter = GetBetterZNear(znear);
 		}
 		else
@@ -1349,15 +1349,15 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	float znear2 = (1 + hmd_left.zz * zfar) / hmd_left.zz;
 	if (debug_newScene)
 	{
-		hmd_left.toOpenGL(s, 1024);
-		WARN_LOG(VR, "hmd_left: %s", s);
+		//hmd_left.toOpenGL(s, 1024);
+		//WARN_LOG(VR, "hmd_left: %s", s);
 
 		// yellow = HMD's suggestion
-		WARN_LOG(VR, "O hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov2, vfov2, znear2, zfar2);
-		WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[0 * 4 + 0], hmd_left.data[0 * 4 + 1], hmd_left.data[0 * 4 + 2], hmd_left.data[0 * 4 + 3]);
-		WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[1 * 4 + 0], hmd_left.data[1 * 4 + 1], hmd_left.data[1 * 4 + 2], hmd_left.data[1 * 4 + 3]);
-		WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[2 * 4 + 0], hmd_left.data[2 * 4 + 1], hmd_left.data[2 * 4 + 2], hmd_left.data[2 * 4 + 3]);
-		WARN_LOG(VR, "O {%8.4f %8.4f %8.4f   %8.4f}", hmd_left.data[3 * 4 + 0], hmd_left.data[3 * 4 + 1], hmd_left.data[3 * 4 + 2], hmd_left.data[3 * 4 + 3]);
+		//WARN_LOG(VR, "O hfov=%8.4f    vfov=%8.4f      znear=%8.4f   zfar=%8.4f", hfov2, vfov2, znear2, zfar2);
+		//WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[0 * 4 + 0], hmd_left.data[0 * 4 + 1], hmd_left.data[0 * 4 + 2], hmd_left.data[0 * 4 + 3]);
+		//WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[1 * 4 + 0], hmd_left.data[1 * 4 + 1], hmd_left.data[1 * 4 + 2], hmd_left.data[1 * 4 + 3]);
+		//WARN_LOG(VR, "O [%8.4f %8.4f %8.4f   %8.4f]", hmd_left.data[2 * 4 + 0], hmd_left.data[2 * 4 + 1], hmd_left.data[2 * 4 + 2], hmd_left.data[2 * 4 + 3]);
+		//WARN_LOG(VR, "O {%8.4f %8.4f %8.4f   %8.4f}", hmd_left.data[3 * 4 + 0], hmd_left.data[3 * 4 + 1], hmd_left.data[3 * 4 + 2], hmd_left.data[3 * 4 + 3]);
 		// green = Game's suggestion
 		//INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[0 * 4 + 0], flippedMatrix.data[0 * 4 + 1], flippedMatrix.data[0 * 4 + 2], flippedMatrix.data[0 * 4 + 3]);
 		//INFO_LOG(VR, "G [%8.4f %8.4f %8.4f   %8.4f]", flippedMatrix.data[1 * 4 + 0], flippedMatrix.data[1 * 4 + 1], flippedMatrix.data[1 * 4 + 2], flippedMatrix.data[1 * 4 + 3]);
@@ -1380,16 +1380,16 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	}
 
 	if (debug_newScene) {
-		proj_left.toOpenGL(s, 1024);
-		ERROR_LOG(VR, "mine: %s", s);
+		//proj_left.toOpenGL(s, 1024);
+		//ERROR_LOG(VR, "mine: %s", s);
 	}
 
 	if (debug_newScene)
 	{
-		DEBUG_LOG(VR, "VR [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[0 * 4 + 0], proj_left.data[0 * 4 + 1], proj_left.data[0 * 4 + 2], proj_left.data[0 * 4 + 3]);
-		DEBUG_LOG(VR, "VR [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[1 * 4 + 0], proj_left.data[1 * 4 + 1], proj_left.data[1 * 4 + 2], proj_left.data[1 * 4 + 3]);
-		DEBUG_LOG(VR, "VR [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[2 * 4 + 0], proj_left.data[2 * 4 + 1], proj_left.data[2 * 4 + 2], proj_left.data[2 * 4 + 3]);
-		DEBUG_LOG(VR, "VR {%8.4f %8.4f %8.4f   %8.4f}", proj_left.data[3 * 4 + 0], proj_left.data[3 * 4 + 1], proj_left.data[3 * 4 + 2], proj_left.data[3 * 4 + 3]);
+		//DEBUG_LOG(VR, "VR [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[0 * 4 + 0], proj_left.data[0 * 4 + 1], proj_left.data[0 * 4 + 2], proj_left.data[0 * 4 + 3]);
+		//DEBUG_LOG(VR, "VR [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[1 * 4 + 0], proj_left.data[1 * 4 + 1], proj_left.data[1 * 4 + 2], proj_left.data[1 * 4 + 3]);
+		//DEBUG_LOG(VR, "VR [%8.4f %8.4f %8.4f   %8.4f]", proj_left.data[2 * 4 + 0], proj_left.data[2 * 4 + 1], proj_left.data[2 * 4 + 2], proj_left.data[2 * 4 + 3]);
+		//DEBUG_LOG(VR, "VR {%8.4f %8.4f %8.4f   %8.4f}", proj_left.data[3 * 4 + 0], proj_left.data[3 * 4 + 1], proj_left.data[3 * 4 + 2], proj_left.data[3 * 4 + 3]);
 	}
 
 	//VR Headtracking and leaning back compensation
@@ -1626,7 +1626,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			float zNear2D = (-1 - flippedMatrix.wz) / flippedMatrix.zz;
 			float zObj = zNear2D + (zFar2D - zNear2D) * g_Config.fHud3DCloser;
 
-			HACK_LOG(VR, "3D HUD: (%g, %g) to (%g, %g); z: %g to %g, %g", left2D, top2D, right2D, bottom2D, zNear2D, zFar2D, zObj);
+			//HACK_LOG(VR, "3D HUD: (%g, %g) to (%g, %g); z: %g to %g, %g", left2D, top2D, right2D, bottom2D, zNear2D, zFar2D, zObj);
 
 
 			left2D *= zObj;
@@ -1701,8 +1701,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			}
 			else {
 				scale[2] = HudThickness / (zFar2D - zNear2D); // Scale 2D z values into 3D game units so it is the right thickness
-				//if (isThrough)
-					//scale[2] = -scale[2];
+				if (isThrough && g_Config.bInvertHudThroughDepth)
+					scale[2] = -scale[2];
 			}
 			position[0] = scale[0] * (-(right2D + left2D) / 2.0f) + viewport_offset[0] * HudWidth; // shift it right into the centre of the view
 			position[1] = scale[1] * (-(top2D + bottom2D) / 2.0f) + viewport_offset[1] * HudHeight + HudUp; // shift it up into the centre of the view;
@@ -1711,7 +1711,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 				position[2] = -HudDistance;
 			else
 				position[2] = -HudDistance; // - CameraForward;
-			NOTICE_LOG(VR, "2D: Scale: [x%g, x%g, x%g]; Pos: (%g, %g, %g)", scale[0], scale[1], scale[2], position[0], position[1], position[2]);
+			//NOTICE_LOG(VR, "2D: Scale: [x%g, x%g, x%g]; Pos: (%g, %g, %g)", scale[0], scale[1], scale[2], position[0], position[1], position[2]);
 		}
 
 		Matrix44 scale_matrix, position_matrix;
@@ -1765,8 +1765,8 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	final_matrix_left = view_matrix_left * proj_left;
 
 	if (debug_newScene) {
-		final_matrix_left.toOpenGL(s, 1024);
-		INFO_LOG(VR, "final: %s", s);
+		//final_matrix_left.toOpenGL(s, 1024);
+		//INFO_LOG(VR, "final: %s", s);
 	}
 
 	if (!isThrough)

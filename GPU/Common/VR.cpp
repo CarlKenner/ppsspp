@@ -123,7 +123,7 @@ static char hmd_device_name[MAX_PATH] = "";
 
 void VR_NewVRFrame()
 {
-	INFO_LOG(VR, "-- NewVRFrame --");
+	//INFO_LOG(VR, "-- NewVRFrame --");
 	//g_new_tracking_frame = true;
 	if (!g_vr_had_3D_already)
 	{
@@ -811,7 +811,7 @@ void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float zne
 			flags |= ovrProjection_ClipRangeOpenGL;
 		if (isinf(zfar))
 			flags |= ovrProjection_FarClipAtInfinity;
-		INFO_LOG(VR, "GetProjectionMatrices(%g, %g, %d)", znear, zfar, flags);
+		//INFO_LOG(VR, "GetProjectionMatrices(%g, %g, %d)", znear, zfar, flags);
 		ovrMatrix4f rift_left = ovrMatrix4f_Projection(g_eye_fov[0], znear, zfar, flags);
 		ovrMatrix4f rift_right = ovrMatrix4f_Projection(g_eye_fov[1], znear, zfar, flags);
 		Matrix44::Set(left_eye, rift_left.M[0]);
@@ -1381,7 +1381,7 @@ void VR_BruteForceEndFrame()
 						}
 						if (!prev_name.empty()) {
 							if (rename(prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str())) {
-								ELOG("RENAME FAILED: '%s' to '%s'", prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str());
+								ERROR_LOG(VR, "RENAME FAILED: '%s' to '%s'", prev_name.c_str(), ((path + "/") + g_change_screenshot_name + ext).c_str());
 							}
 						}
 					} else {
