@@ -401,9 +401,9 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fUnitsPerMetre, 0.001f, 1000.0f, gr->T("Units Per Metre"), 0.01f, screenManager(), "units per metre"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudDistance, 0.0f, 500.0f, gr->T("HUD Distance"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudThickness, 0.0f, 500.0f, gr->T("HUD Thickness"), 0.1f, screenManager(), "metres"));
-	vrSettings->Add(new CheckBox(&g_Config.bInvertHudThroughDepth, gr->T("Invert HUD Through Depth")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHud3DCloser, 0.0f, 1.0f, gr->T("HUD 3D Closer"), 0.1f, screenManager(), "/ 1.000"));
 	vrSettings->Add(new CheckBox(&g_Config.bHudOnTop, gr->T("HUD on Top")));
+	vrSettings->Add(new CheckBox(&g_Config.bInvert2DThroughDepth, gr->T("Invert 2D Through Depth")));
 	vrSettings->Add(new CheckBox(&g_Config.bBefore3DIsBackground, gr->T("Before 3D is Background")));
 	vrSettings->Add(new CheckBox(&g_Config.bDontDrawScreenSpace, gr->T("Dont Draw Screen-Space Effects")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fCameraForward, -100.0f, 100.0f, gr->T("Permanent Camera Forward"), 0.1f, screenManager(), "metres"));
