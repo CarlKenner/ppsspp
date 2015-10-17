@@ -2,8 +2,10 @@
 ================================================================
 
 Virtual Reality support by Carl Kenner
+Also Dolphin VR code from Cegli, Penkamaster, and Feilin
 
 PPSSPP Created by Henrik Rydgård
+Also uses some code from Dolphin
 
 Additional code by many contributors, see the Credits screen
 
@@ -12,7 +14,7 @@ Originally released under the GPL 2.0 (and later) in November 2012
 VR Branch:
 https://github.com/CarlKenner/ppsspp/tree/VR
 
-Official website:
+Official PPSSPP website:
 http://www.ppsspp.org/
 
 No BIOS file required to play, PPSSPP is in many ways a "HLE" emulator.
@@ -25,11 +27,11 @@ Building
 --------
 You need Visual Studio 2013 (at least Update 3), Visual Studio 2015 won't work yet.
 Update the submodules in Git.
-Extract the LibOVR folder from the Oculus SDK 0.6 into the /ext folder, other versions might work but aren't tested.
+Extract the LibOVR folder from the Oculus SDK 0.6 or later into the /ext folder.
 Open /Windows/PPSSPP.sln in Visual Studio 2013.
-Use the Build > Configuration Manager menu to choose Release and x64.
+Use the Build > Configuration Manager menu to choose Release and Win32.
 Build or run it.
-To make an installer, install NSIS (for free), build the Release x64 of PPSSPP VR, and right click the file in the installer folder and choose compile.
+To make an installer, install NSIS (for free), build the Release Win32 of PPSSPP VR, and right click the file in the installer folder and choose compile.
 
 The bruteforcer only works in Release Win32! x64 can't catch CPU exceptions! You need to rebuild for Win32 to use the bruteforcer!
 
