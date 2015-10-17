@@ -403,6 +403,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHudThickness, 0.0f, 500.0f, gr->T("HUD Thickness"), 0.1f, screenManager(), "metres"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fHud3DCloser, 0.0f, 1.0f, gr->T("HUD 3D Closer"), 0.1f, screenManager(), "/ 1.000"));
 	vrSettings->Add(new CheckBox(&g_Config.bHudOnTop, gr->T("HUD on Top")));
+	vrSettings->Add(new CheckBox(&g_Config.bInvert2DOrthoDepth, gr->T("Invert 2D Ortho Depth")));
 	vrSettings->Add(new CheckBox(&g_Config.bInvert2DThroughDepth, gr->T("Invert 2D Through Depth")));
 	vrSettings->Add(new CheckBox(&g_Config.bBefore3DIsBackground, gr->T("Before 3D is Background")));
 	vrSettings->Add(new CheckBox(&g_Config.bDontDrawScreenSpace, gr->T("Dont Draw Screen-Space Effects")));

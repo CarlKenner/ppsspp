@@ -1696,12 +1696,12 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			else {
 				scale[1] = viewport_scale[1] * HudHeight / (top2D - bottom2D); // note that positive means up in 3D
 			}
-			if (flippedMatrix.zz == 0 || zFar2D == zNear2D) {
+			if (zFar2D == zNear2D) {
 				scale[2] = 0; // The 2D layer was flat, so we make it flat instead of a box to avoid dividing by zero
 			}
 			else {
 				scale[2] = HudThickness / (zFar2D - zNear2D); // Scale 2D z values into 3D game units so it is the right thickness
-				if (isThrough && g_Config.bInvert2DThroughDepth)
+				if ((isThrough && g_Config.bInvert2DThroughDepth) || (!isThrough && g_Config.bInvert2DOrthoDepth))
 					scale[2] = -scale[2];
 			}
 			position[0] = scale[0] * (-(right2D + left2D) / 2.0f) + viewport_offset[0] * HudWidth; // shift it right into the centre of the view

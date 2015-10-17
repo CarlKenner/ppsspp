@@ -641,6 +641,7 @@ static ConfigSetting vrGameSettings[] = {
 	ReportedConfigSetting("TelescopeEye", &g_Config.iTelescopeEye, 0, true, true),
 	ReportedConfigSetting("MetroidPrime", &g_Config.iMetroidPrime, 0, true, true),
 	ReportedConfigSetting("HudOnTop", &g_Config.bHudOnTop, false, true, true),
+	ReportedConfigSetting("Invert2DOrthoDepth", &g_Config.bInvert2DOrthoDepth, false, true, true),
 	ReportedConfigSetting("Invert2DThroughDepth", &g_Config.bInvert2DThroughDepth, false, true, true),
 	ReportedConfigSetting("DontClearScreen", &g_Config.bDontClearScreen, false, true, true),
 	ReportedConfigSetting("CanReadCameraAngles", &g_Config.bCanReadCameraAngles, false, true, true),

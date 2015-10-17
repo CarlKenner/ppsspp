@@ -316,6 +316,7 @@ public:
 	bool bDisable3D;
 	bool bHudFullscreen;
 	bool bHudOnTop;
+	bool bInvert2DOrthoDepth;
 	bool bInvert2DThroughDepth;
 	bool bDontClearScreen;
 	bool bCanReadCameraAngles;

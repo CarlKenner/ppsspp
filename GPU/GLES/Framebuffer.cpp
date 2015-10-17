@@ -868,11 +868,16 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	zNear2D = 0;
 	scale[0] = viewport_scale[0] * HudWidth / (right2D - left2D);
 	scale[1] = viewport_scale[1] * HudHeight / (top2D - bottom2D); // note that positive means up in 3D
-	scale[2] = HudThickness / (zFar2D - zNear2D); // Scale 2D z values into 3D game units so it is the right thickness
+	scale[2] = 0; // it's a virtual screen made of pixels, so its completely flat
+	// unlike other 2D screens with variable depth, we can make this bigger to compensate for making it further away
+	float sc = (HudDistance + HudThickness*1.1f) / HudDistance;
+	scale[0] *= sc;
+	scale[1] *= sc;
+
 	position[0] = scale[0] * (-(right2D + left2D) / 2.0f) + viewport_offset[0] * HudWidth; // shift it right into the centre of the view
 	position[1] = scale[1] * (-(top2D + bottom2D) / 2.0f) + viewport_offset[1] * HudHeight + HudUp; // shift it up into the centre of the view;
-	// Shift it from the zero plane to the HUD distance, and shift the camera forward
-	position[2] = -HudDistance;
+	// Generally, this should be behind everything else as it overwrites whatever pixels were there before.
+	position[2] = -(HudDistance + HudThickness*1.1f);
 
 	Matrix44 scale_matrix, position_matrix;
 	scale_matrix.setScaling(scale);
@@ -883,14 +888,11 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	Matrix44 eye_pos_matrix_left, eye_pos_matrix_right;
 	float posLeft[3] = { 0, 0, 0 };
 	float posRight[3] = { 0, 0, 0 };
-	if (!g_is_skybox)
+	VR_GetEyePos(posLeft, posRight);
+	for (int i = 0; i < 3; ++i)
 	{
-		VR_GetEyePos(posLeft, posRight);
-		for (int i = 0; i < 3; ++i)
-		{
-			posLeft[i] *= UnitsPerMetre;
-			posRight[i] *= UnitsPerMetre;
-		}
+		posLeft[i] *= UnitsPerMetre;
+		posRight[i] *= UnitsPerMetre;
 	}
 	stereoparams[0] *= posLeft[0];
 	stereoparams[1] *= posRight[0];
@@ -903,6 +905,11 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	}
 	Matrix44 final_matrix_left, final_matrix_right;
 	final_matrix_left = view_matrix_left * proj_left;
+
+	int u_StereoParams = glGetUniformLocation(program->program_, "u_StereoParams");
+	glUniform4fv(u_StereoParams, 1, stereoparams);
+
+
 	glstate.depthWrite.set(GL_FALSE);
 
 	glstate.arrayBuffer.unbind();
