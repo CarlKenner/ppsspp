@@ -794,7 +794,8 @@ rotateVBO:
 				case GE_COMP_GEQUAL:
 					glstate.depthRange.set(gstate.getDepthRangeMin() / 65535.0, gstate.getDepthRangeMin() / 65535.0);
 					break;
-				default:
+				case GE_COMP_LESS:
+				case GE_COMP_LEQUAL:
 					glstate.depthRange.set(gstate.getDepthRangeMax() / 65535.0, gstate.getDepthRangeMax() / 65535.0);
 					break;
 				}
@@ -811,8 +812,12 @@ rotateVBO:
 			else {
 				glDrawArrays(glprim[prim], 0, vertexCount);
 			}
-			if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd && !g_Config.bDisableNearClipping)
-				glDisable(GL_DEPTH_CLAMP);
+			if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd) {
+				if (!g_Config.bDisableNearClipping)
+					glDisable(GL_DEPTH_CLAMP);
+				glstate.depthRange.restore();
+				glstate.depthFunc.restore();
+			}
 		}
 	} else {
 		DecodeVerts();
@@ -891,8 +896,12 @@ rotateVBO:
 				else {
 					glDrawArrays(glprim[prim], 0, numTrans);
 				}
-				if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd && !g_Config.bDisableNearClipping)
-					glDisable(GL_DEPTH_CLAMP);
+				if (g_is_skyplane && g_Config.bEnableVR && g_has_hmd) {
+					if (!g_Config.bDisableNearClipping)
+						glDisable(GL_DEPTH_CLAMP);
+					glstate.depthRange.restore();
+					glstate.depthFunc.restore();
+				}
 			}
 		} else if (result.action == SW_CLEAR) {
 			u32 clearColor = result.color;

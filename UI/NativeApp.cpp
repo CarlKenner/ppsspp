@@ -770,9 +770,15 @@ void NativeRender() {
 		DrawDownloadsOverlay(*screenManager->getUIContext());
 		GL_CHECK();
 	} catch (std::bad_alloc) {
-		VR_BruteForceCrash(true);
+		if (g_Config.bBruteForcing)
+			VR_BruteForceCrash(true);
+		else
+			throw;
 	} catch (...) {
-		VR_BruteForceCrash(false);
+		if (g_Config.bBruteForcing)
+			VR_BruteForceCrash(false);
+		else
+			throw;
 	}
 
 	if (GetUIState() == UISTATE_INGAME)

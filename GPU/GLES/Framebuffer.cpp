@@ -165,11 +165,34 @@ void FramebufferManager::ClearBuffer() {
 	else
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClearStencil(0);
+	if (g_Config.bEnableVR && g_has_hmd) {
+		// check which way around the depth buffer is
+		switch (gstate.getDepthTestFunction()) {
+		case GE_COMP_LESS:
+		case GE_COMP_LEQUAL:
 #ifdef USING_GLES2
-	glClearDepthf(0.0f);
+			glClearDepthf(1.0f);
 #else
-	glClearDepth(0.0);
+			glClearDepth(1.0);
 #endif
+			break;
+		case GE_COMP_GREATER:
+		case GE_COMP_GEQUAL:
+		default:
+#ifdef USING_GLES2
+			glClearDepthf(0.0f);
+#else
+			glClearDepth(0.0);
+#endif
+			break;
+		}
+	} else {
+#ifdef USING_GLES2
+		glClearDepthf(0.0f);
+#else
+		glClearDepth(0.0);
+#endif
+	}
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 

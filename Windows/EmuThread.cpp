@@ -190,9 +190,15 @@ unsigned int WINAPI TheThread(void *)
 		}
 	} 
 	catch (std::bad_alloc) {
-		VR_BruteForceCrash(true);
+		if (g_Config.bBruteForcing)
+			VR_BruteForceCrash(true);
+		else
+			throw;
 	} catch (...) {
-		VR_BruteForceCrash(false);
+		if (g_Config.bBruteForcing)
+			VR_BruteForceCrash(false);
+		else
+			throw;
 	}
 shutdown:
 	_InterlockedExchange(&emuThreadReady, THREAD_SHUTDOWN);
