@@ -76,6 +76,7 @@ static const DefMappingStruct defaultQwertyKeyboardKeyMap[] = {
 	{VIRTKEY_PAUSE       , NKCODE_ESCAPE},
 	{VIRTKEY_REWIND      , NKCODE_DEL},
 	{VIRTKEY_ANALOG_LIGHTLY, NKCODE_SHIFT_RIGHT},
+	{VIRTKEY_FREELOOK_RESET, NKCODE_R},
 };
 
 static const DefMappingStruct defaultAzertyKeyboardKeyMap[] = {
@@ -106,6 +107,7 @@ static const DefMappingStruct defaultAzertyKeyboardKeyMap[] = {
 	{VIRTKEY_PAUSE       , NKCODE_ESCAPE},
 	{VIRTKEY_REWIND      , NKCODE_DEL},
 	{VIRTKEY_ANALOG_LIGHTLY, NKCODE_SHIFT_RIGHT},
+	{ VIRTKEY_FREELOOK_RESET, NKCODE_R },
 };
 
 static const DefMappingStruct defaultQwertzKeyboardKeyMap[] = {
@@ -136,6 +138,7 @@ static const DefMappingStruct defaultQwertzKeyboardKeyMap[] = {
 	{VIRTKEY_PAUSE       , NKCODE_ESCAPE},
 	{VIRTKEY_REWIND      , NKCODE_DEL},
 	{VIRTKEY_ANALOG_LIGHTLY, NKCODE_SHIFT_RIGHT},
+	{VIRTKEY_FREELOOK_RESET, NKCODE_R},
 };
 
 static const DefMappingStruct default360KeyMap[] = {
@@ -157,7 +160,7 @@ static const DefMappingStruct default360KeyMap[] = {
 	{CTRL_RTRIGGER       , NKCODE_BUTTON_R1},
 	{VIRTKEY_UNTHROTTLE  , JOYSTICK_AXIS_RTRIGGER, +1},
 	{VIRTKEY_SPEED_TOGGLE, NKCODE_BUTTON_THUMBR},
-	{VIRTKEY_PAUSE       , JOYSTICK_AXIS_LTRIGGER, +1},
+	{VIRTKEY_FREELOOK_RESET, JOYSTICK_AXIS_LTRIGGER, +1 },
 	{VIRTKEY_PAUSE,        NKCODE_HOME},
 };
 
