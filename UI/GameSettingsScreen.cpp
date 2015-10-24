@@ -371,15 +371,19 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bKeyholeSnap, gr->T("Keyhole Snap")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeSnapSize, 10.0f, 120.0f, gr->T("Keyhole Snap Size"), 1.0f, screenManager(), "degrees"));
 
+#ifdef OVR_MAJOR_VERSION
+#if	OVR_MAJOR_VERSION >= 5 || (OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION >= 2)
 	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
-#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 6
+#endif
+#if OVR_MAJOR_VERSION <= 6
 	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
 	vrSettings->Add(new CheckBox(&g_Config.bDynamicPrediction, gr->T("Dynamic prediction")));
+#endif
 #endif
 	vrSettings->Add(new CheckBox(&g_Config.bOrientationTracking, gr->T("Orientation tracking")));
 	vrSettings->Add(new CheckBox(&g_Config.bMagYawCorrection, gr->T("Magnetic yaw")));
 	vrSettings->Add(new CheckBox(&g_Config.bPositionTracking, gr->T("Position tracking")));
-#if OVR_MAJOR_VERSION <= 5
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 5
 	vrSettings->Add(new CheckBox(&g_Config.bChromatic, gr->T("Chromatic aberration")));
 	vrSettings->Add(new CheckBox(&g_Config.bTimewarp, gr->T("Timewarp")));
 	vrSettings->Add(new CheckBox(&g_Config.bVignette, gr->T("Vignette")));

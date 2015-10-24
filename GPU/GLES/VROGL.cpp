@@ -565,8 +565,10 @@ void VR_ConfigureHMD()
 			caps |= ovrDistortionCap_SRGB;
 		if (g_Config.bOverdrive)
 			caps |= ovrDistortionCap_Overdrive;
+#if	OVR_MAJOR_VERSION >= 5 || (OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION >= 2)
 		if (g_Config.bHqDistortion)
 			caps |= ovrDistortionCap_HqDistortion;
+#endif
 		ovrHmd_ConfigureRendering(hmd, &cfg.Config, caps,
 			g_eye_fov, g_eye_render_desc);
 		GL_CHECK();

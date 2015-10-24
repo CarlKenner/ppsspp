@@ -57,6 +57,7 @@
 
 #include "Common/StringUtils.h"
 #include "Windows/main.h"
+#include "GPU/Common/VR.h"
 
 static const int numCPUs = 1;
 
@@ -128,7 +129,7 @@ void WindowsHost::ShutdownGraphics() {
 }
 
 void WindowsHost::SetWindowTitle(const char *message) {
-	std::wstring winTitle = ConvertUTF8ToWString(std::string("PPSSPP ") + PPSSPP_GIT_VERSION);
+	std::wstring winTitle = ConvertUTF8ToWString((std::string("PPSSPP ") + PPSSPP_GIT_VERSION) + SCM_OCULUS_STR);
 	if (message != nullptr) {
 		winTitle.append(ConvertUTF8ToWString(" - "));
 		winTitle.append(ConvertUTF8ToWString(message));
