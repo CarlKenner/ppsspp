@@ -682,6 +682,7 @@ namespace MainWindow
 					WindowsRawInput::LoseFocus();
 					InputDevice::LoseFocus();
 				}
+				return DefWindowProc(hWnd, message, wParam, lParam);
 			}
 			break;
 

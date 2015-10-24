@@ -65,6 +65,8 @@
 ovrGLTexture g_eye_texture[2];
 #endif
 
+int lost_focus_framecount = 0;
+
 namespace OGL
 {
 
@@ -533,7 +535,7 @@ void VR_ConfigureHMD()
 		if (g_is_direct_mode) //If in Direct Mode
 		{
 			ovrHmd_AttachToWindow(hmd, cfg.OGL.Window, nullptr, nullptr); //Attach to Direct Mode.
-			GL_CHECK();
+			//lost_focus_framecount = g_hmd_refresh_rate; // we will lose keyboard focus soon, so wait a second then reclaim it
 		}
 #endif
 #endif
@@ -860,7 +862,6 @@ void VR_BeginGUI()
 		return;
 	}
 	began_gui = true;
-	GL_CHECK();
 #ifdef OVR_MAJOR_VERSION
 #if OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
@@ -890,9 +891,7 @@ void VR_EndGUI()
 	if (!began_gui)
 		return;
 	began_gui = false;
-	GL_CHECK();
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	GL_CHECK();
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
@@ -907,14 +906,23 @@ void VR_EndGUI()
 		}
 		vr_drew_frame = false;
 	}
+#else
+	if (g_is_direct_mode && lost_focus_framecount)
+	{
+		--lost_focus_framecount;
+		if (lost_focus_framecount <= 0) {
+			SetForegroundWindow(MainWindow::GetHWND());
+			SetActiveWindow(MainWindow::GetHWND());
+		}
+	}
 #endif
 	has_gui = true;
 }
 
 void VR_RenderToGUI()
 {
-	GL_CHECK();
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
+	GL_CHECK();
 	if (g_has_rift)
 	{
 		guiRenderTexture->UnsetRenderSurface();
@@ -1013,6 +1021,9 @@ int timewarps = 0;
 int denominator = 1;
 int tcount = 0;
 
+ovrPosef *s_frame_eye_poses = nullptr;
+int s_frame_index = 0;
+
 void VR_DoPresentHMDFrame(bool valid)
 {
 	static bool oldLowPersistence = false, oldDynamicPrediction = false, oldNoMirrorToWindow = false;
@@ -1068,7 +1079,20 @@ void VR_DoPresentHMDFrame(bool valid)
 		//ovrHmd_EndEyeRender(hmd, ovrEye_Right, g_right_eye_pose, &FramebufferManager::m_eye_texture[ovrEye_Right].Texture);
 #if OVR_MAJOR_VERSION <= 5
 		// Let OVR do distortion rendering, Present and flush/sync.
-		ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+		if (s_frame_eye_poses)
+			ovrHmd_EndFrame(hmd, s_frame_eye_poses, &g_eye_texture[0].Texture);
+		else
+			ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+		if (g_Config.bSynchronousTimewarp)
+		{
+			tcount += timewarps;
+			while (tcount >= reals) {
+				VR_DrawTimewarpFrame();
+				tcount -= reals;
+			}
+		} else {
+			tcount = 0;
+		}
 #else
 		RecreateMirrorTextureIfNeeded();
 		PresentFrameSDK6();
@@ -1237,6 +1261,9 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 				}
 			}
 		}
+#else
+		// this could become invalid by the end of the function, but so far we are only using it inside this function
+		s_frame_eye_poses = frame_eye_poses;
 #endif
 	}
 	else
@@ -1283,12 +1310,13 @@ void VR_DrawTimewarpFrame()
 #if OVR_MAJOR_VERSION <= 5
 		ovrFrameTiming frameTime;
 		frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
-		GL_CHECK();
 
-		ovr_WaitTillTime(frameTime.NextFrameSeconds - g_Config.fTimeWarpTweak);
+		ovr_WaitTillTime(frameTime.TimewarpPointSeconds - g_Config.fTimeWarpTweak);
 
-		ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
-		GL_CHECK();
+		if (s_frame_eye_poses)
+			ovrHmd_EndFrame(hmd, s_frame_eye_poses, &g_eye_texture[0].Texture);
+		else
+			ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
 #else
 #if OVR_MAJOR_VERSION <= 7
 		ovrFrameTiming frameTime;

@@ -49,6 +49,11 @@
 
 HDC hDC = NULL;
 HWND hWnd = NULL;
+namespace MainWindow {
+	HWND GetHWND() {
+		return NULL;
+	}
+}
 
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 int System_GetPropertyInt(SystemProperty prop) { return -1; }

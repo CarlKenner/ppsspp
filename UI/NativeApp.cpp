@@ -714,9 +714,7 @@ void DrawDownloadsOverlay(UIContext &dc) {
 }
 
 void NativeRender() {
-	GL_CHECK();
 	g_GameManager.Update();
-	GL_CHECK();
 
 	if (GetUIState() == UISTATE_INGAME)
 		VR_BruteForceBeginFrame();
@@ -725,7 +723,6 @@ void NativeRender() {
 			OGL::VR_BeginGUI();
 		}
 		thin3d->Clear(T3DClear::COLOR | T3DClear::DEPTH | T3DClear::STENCIL, 0xFF000000, 0.0f, 0);
-		GL_CHECK(); // error 1286 (0506)
 
 		T3DViewport viewport;
 		viewport.TopLeftX = 0;
@@ -735,9 +732,7 @@ void NativeRender() {
 		viewport.MaxDepth = 1.0;
 		viewport.MinDepth = 0.0;
 		thin3d->SetViewports(1, &viewport);
-		GL_CHECK();
 		thin3d->SetTargetSize(pixel_xres, pixel_yres);
-		GL_CHECK();
 
 		float xres = dp_xres;
 		float yres = dp_yres;
@@ -752,23 +747,17 @@ void NativeRender() {
 		}
 		else {
 			ortho.setOrtho(0.0f, xres, yres, 0.0f, -1.0f, 1.0f);
-			GL_CHECK();
 		}
 
 		ui_draw2d.SetDrawMatrix(ortho);
-		GL_CHECK();
 		ui_draw2d_front.SetDrawMatrix(ortho);
-		GL_CHECK();
 
 		screenManager->render();
-		GL_CHECK(); // error 1286 (0506)
 		if (screenManager->getUIContext()->Text()) {
 			screenManager->getUIContext()->Text()->OncePerFrame();
-			GL_CHECK();
 		}
 
 		DrawDownloadsOverlay(*screenManager->getUIContext());
-		GL_CHECK();
 	} catch (std::bad_alloc) {
 		if (g_Config.bBruteForcing)
 			VR_BruteForceCrash(true);
@@ -786,7 +775,6 @@ void NativeRender() {
 
 	if (g_TakeScreenshot) {
 		TakeScreenshot();
-		GL_CHECK();
 	}
 
 	if (resized) {

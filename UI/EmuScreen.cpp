@@ -1155,15 +1155,12 @@ void EmuScreen::render() {
 
 	if (!osm.IsEmpty() || g_Config.bShowDebugStats || g_Config.iShowFPSCounter || g_Config.bShowTouchControls || g_Config.bShowDeveloperMenu || g_Config.bShowAudioDebug || saveStatePreview_->GetVisibility() != UI::V_GONE || g_Config.bShowFrameProfiler) {
 		if (g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
-			GL_CHECK();
 			OGL::VR_BeginGUI();
 		}
 		Thin3DContext *thin3d = screenManager()->getThin3DContext();
-		GL_CHECK();
 
 		// This sets up some important states but not the viewport.
 		screenManager()->getUIContext()->Begin();
-		GL_CHECK();
 
 		T3DViewport viewport;
 		viewport.TopLeftX = 0;

@@ -88,11 +88,15 @@ volatile CoreState coreState = CORE_STEPPING;
 volatile bool coreStatePending = false;
 static volatile CPUThreadState cpuThreadState = CPU_THREAD_NOT_RUNNING;
 
+extern int lost_focus_framecount;
+
 void UpdateUIState(GlobalUIState newState) {
 	// Never leave the EXIT state.
 	if (globalUIState != newState && globalUIState != UISTATE_EXIT) {
 		globalUIState = newState;
 		host->UpdateDisassembly();
+		// we are about to lose keyboard focus on the Oculus Rift SDK 0.5, so wait to reclaim it
+		lost_focus_framecount = 30;
 	}
 }
 

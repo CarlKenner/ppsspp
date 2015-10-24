@@ -30,6 +30,11 @@
 #include "WindowsHeadlessHostDx9.h"
 HDC hDC = NULL;
 HWND hWnd = NULL;
+namespace MainWindow {
+	HWND GetHWND() {
+		return NULL;
+	}
+}
 #endif
 
 // https://github.com/richq/android-ndk-profiler
