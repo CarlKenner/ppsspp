@@ -810,12 +810,16 @@ void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float zne
 #ifdef OVR_MAJOR_VERSION
 	if (g_has_rift)
 	{
+#if OVR_MAJOR_VERSION >= 5
 		unsigned flags = ovrProjection_None;
 		flags |= ovrProjection_RightHanded; // is this right for Dolphin VR?
 		if (isOpenGL)
 			flags |= ovrProjection_ClipRangeOpenGL;
 		if (isinf(zfar))
 			flags |= ovrProjection_FarClipAtInfinity;
+#else
+		bool flags = true; // right handed
+#endif
 		//INFO_LOG(VR, "GetProjectionMatrices(%g, %g, %d)", znear, zfar, flags);
 		ovrMatrix4f rift_left = ovrMatrix4f_Projection(g_eye_fov[0], znear, zfar, flags);
 		ovrMatrix4f rift_right = ovrMatrix4f_Projection(g_eye_fov[1], znear, zfar, flags);
