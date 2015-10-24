@@ -523,14 +523,14 @@ void VR_ConfigureHMD()
 		cfg.OGL.Header.BackBufferSize.w = PSP_CoreParameter().renderWidth;
 		cfg.OGL.Header.BackBufferSize.h = PSP_CoreParameter().renderHeight;
 #else
-		cfg.OGL.Header.RTSize.w = Renderer::GetBackbufferWidth();
-		cfg.OGL.Header.RTSize.h = Renderer::GetBackbufferHeight();
+		cfg.OGL.Header.RTSize.w = PSP_CoreParameter().renderWidth;
+		cfg.OGL.Header.RTSize.h = PSP_CoreParameter().renderHeight;
 #endif
 		cfg.OGL.Header.Multisample = 0;
 #ifdef _WIN32
 		cfg.OGL.Window = (HWND)hWnd;
 		cfg.OGL.DC = GetDC(cfg.OGL.Window);
-#ifndef OCULUSSDK042
+//#ifndef OCULUSSDK042
 #if OVR_MAJOR_VERSION <= 5
 		if (g_is_direct_mode) //If in Direct Mode
 		{
@@ -538,7 +538,7 @@ void VR_ConfigureHMD()
 			//lost_focus_framecount = g_hmd_refresh_rate; // we will lose keyboard focus soon, so wait a second then reclaim it
 		}
 #endif
-#endif
+//#endif
 #else
 		cfg.OGL.Disp = (Display*)((cInterfaceGLX*)GLInterface)->getDisplay();
 #ifdef OCULUSSDK043

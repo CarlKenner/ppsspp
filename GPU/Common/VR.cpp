@@ -632,6 +632,7 @@ void UpdateOculusHeadTracking()
 	g_eye_poses[ovrEye_Left] = ovrHmd_GetEyePose(hmd, ovrEye_Left);
 	g_eye_poses[ovrEye_Right] = ovrHmd_GetEyePose(hmd, ovrEye_Right);
 	g_vr_lock.unlock();
+	OVR::Posef pose = g_eye_poses[ovrEye_Left];
 #else
 	ovrVector3f useHmdToEyeViewOffset[2] = { g_eye_render_desc[0].HmdToEyeViewOffset, g_eye_render_desc[1].HmdToEyeViewOffset };
 #if OVR_MAJOR_VERSION >= 8
