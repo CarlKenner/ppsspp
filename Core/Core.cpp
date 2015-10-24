@@ -175,7 +175,10 @@ void UpdateRunLoop() {
 void GPU_SwapBuffers() {
 	switch (g_Config.iGPUBackend) {
 	case GPU_BACKEND_OPENGL:
-		GL_SwapBuffers();
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 5
+		if (!g_has_rift || GetUIState() != UISTATE_INGAME)
+#endif
+			GL_SwapBuffers();
 		break;
 	case GPU_BACKEND_DIRECT3D9:
 		D3D9_SwapBuffers();

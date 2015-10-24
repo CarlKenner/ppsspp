@@ -33,6 +33,7 @@
 
 #include "base/NativeApp.h"
 #include "base/logging.h"
+#include "Common/CommonWindows.h"
 #include "Common/CPUDetect.h"
 #include "Common/ArmEmitter.h"
 #include "ext/disarm.h"
@@ -45,6 +46,9 @@
 #include "unittest/JitHarness.h"
 #include "unittest/TestVertexJit.h"
 #include "unittest/UnitTest.h"
+
+HDC hDC = NULL;
+HWND hWnd = NULL;
 
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 int System_GetPropertyInt(SystemProperty prop) { return -1; }

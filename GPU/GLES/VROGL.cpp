@@ -518,15 +518,15 @@ void VR_ConfigureHMD()
 		cfg.OGL.Header.API = ovrRenderAPI_OpenGL;
 #ifdef OCULUSSDK044ORABOVE
 		// Set based on window size, not statically based on rift internals.
-		cfg.OGL.Header.BackBufferSize.w = Renderer::GetBackbufferWidth();
-		cfg.OGL.Header.BackBufferSize.h = Renderer::GetBackbufferHeight();
+		cfg.OGL.Header.BackBufferSize.w = PSP_CoreParameter().renderWidth;
+		cfg.OGL.Header.BackBufferSize.h = PSP_CoreParameter().renderHeight;
 #else
 		cfg.OGL.Header.RTSize.w = Renderer::GetBackbufferWidth();
 		cfg.OGL.Header.RTSize.h = Renderer::GetBackbufferHeight();
 #endif
 		cfg.OGL.Header.Multisample = 0;
 #ifdef _WIN32
-		cfg.OGL.Window = (HWND)((cInterfaceWGL*)GLInterface)->m_window_handle;
+		cfg.OGL.Window = (HWND)hWnd;
 		cfg.OGL.DC = GetDC(cfg.OGL.Window);
 #ifndef OCULUSSDK042
 #if OVR_MAJOR_VERSION <= 5
@@ -740,7 +740,7 @@ void VR_StartFramebuffer(int target_width, int target_height)
 			g_eye_texture[0].OGL.Header.RenderViewport.Size.h = target_height;
 			g_eye_texture[0].OGL.TexId = m_frontBuffer[0];
 			g_eye_texture[1] = g_eye_texture[0];
-			if (g_ActiveConfig.iStereoMode == STEREO_OCULUS)
+			//if (g_ActiveConfig.iStereoMode == STEREO_OCULUS)
 				g_eye_texture[1].OGL.TexId = m_frontBuffer[1];
 		}
 #endif
@@ -893,6 +893,7 @@ void VR_EndGUI()
 	GL_CHECK();
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	GL_CHECK();
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
 		lock_guard guard(AsyncTimewarpLock);
@@ -906,6 +907,7 @@ void VR_EndGUI()
 		}
 		vr_drew_frame = false;
 	}
+#endif
 	has_gui = true;
 }
 
@@ -1206,6 +1208,7 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 		//Sleep(8);
 		lock_guard guard(AsyncTimewarpLock);
 		g_new_tracking_frame = true;
+#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 		if (g_asyc_timewarp_active) {
 			for (int eye = 0; eye < 2; eye++)
 			{
@@ -1234,6 +1237,7 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 				}
 			}
 		}
+#endif
 	}
 	else
 	{
@@ -1281,7 +1285,7 @@ void VR_DrawTimewarpFrame()
 		frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
 		GL_CHECK();
 
-		ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
+		ovr_WaitTillTime(frameTime.NextFrameSeconds - g_Config.fTimeWarpTweak);
 
 		ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
 		GL_CHECK();

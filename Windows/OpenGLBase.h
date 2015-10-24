@@ -11,3 +11,6 @@ void GL_SwapBuffers();
 // not the rendering thread or CPU thread.
 void GL_Pause();
 void GL_Resume();
+
+extern HDC hDC;     // Private GDI Device Context
+extern HWND hWnd;   // Holds Our Window Handle

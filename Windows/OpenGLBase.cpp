@@ -34,9 +34,9 @@
 #include "Windows/OpenGLBase.h"
 
 
-static HDC hDC;     // Private GDI Device Context
+HDC hDC;     // Private GDI Device Context
 static HGLRC hRC;   // Permanent Rendering Context
-static HWND hWnd;   // Holds Our Window Handle
+HWND hWnd;   // Holds Our Window Handle
 static volatile bool pauseRequested;
 static volatile bool resumeRequested;
 static HANDLE pauseEvent;

@@ -28,6 +28,8 @@
 #include "Windows/OpenGLBase.h"
 #include "WindowsHeadlessHost.h"
 #include "WindowsHeadlessHostDx9.h"
+HDC hDC = NULL;
+HWND hWnd = NULL;
 #endif
 
 // https://github.com/richq/android-ndk-profiler

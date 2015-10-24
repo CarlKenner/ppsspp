@@ -302,12 +302,17 @@ bool InitOculusHMD()
 			g_last_eye_fov[0] = g_eye_fov[0];
 			g_last_eye_fov[1] = g_eye_fov[1];			
 #if OVR_MAJOR_VERSION < 6
+			// Before Oculus SDK 0.6 we had to size and position the mirror window (or actual window) correctly, at least for OpenGL.
 			g_hmd_window_x = hmdDesc.WindowsPos.x;
 			g_hmd_window_y = hmdDesc.WindowsPos.y;
+			g_Config.iWindowX = g_hmd_window_x;
+			g_Config.iWindowY = g_hmd_window_y;
+			g_Config.iWindowWidth = g_hmd_window_width;
+			g_Config.iWindowHeight = g_hmd_window_height;
 			g_is_direct_mode = !(hmdDesc.HmdCaps & ovrHmdCap_ExtendDesktop);
-			if (hmdDesc.ProductId < 6)
+			if (hmdDesc.Type < 6)
 				g_hmd_refresh_rate = 60;
-			else if (hmdDesc.ProductId > 6)
+			else if (hmdDesc.Type > 6)
 				g_hmd_refresh_rate = 90;
 			else
 				g_hmd_refresh_rate = 75;
@@ -535,7 +540,7 @@ void VR_ConfigureHMDPrediction()
 	if (g_has_rift)
 	{
 #if OVR_MAJOR_VERSION <= 5
-		int caps = ovrHmd_GetEnabledCaps(hmd) & ~(ovrHmdCap_DynamicPrediction | ovrHmdCap_LowPersistence | ovrHmdCap_MagYawCorrection);
+		int caps = ovrHmd_GetEnabledCaps(hmd) & ~(ovrHmdCap_DynamicPrediction | ovrHmdCap_LowPersistence | ovrHmdCap_NoMirrorToWindow);
 #else
 #if OVR_MAJOR_VERSION >= 7
 		int caps = ovrHmd_GetEnabledCaps(hmd) & ~(0);
@@ -549,8 +554,8 @@ void VR_ConfigureHMDPrediction()
 		if (g_Config.bDynamicPrediction)
 			caps |= ovrHmdCap_DynamicPrediction;
 #if OVR_MAJOR_VERSION <= 5
-		if (g_Config.bMagYawCorrection)
-			caps |= ovrHmdCap_MagYawCorrection;
+		if (g_Config.bNoMirrorToWindow)
+			caps |= ovrHmdCap_NoMirrorToWindow;
 #endif
 #endif
 		ovrHmd_SetEnabledCaps(hmd, caps);
