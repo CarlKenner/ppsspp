@@ -2422,13 +2422,12 @@ bool FramebufferManager::GetStencilbuffer(u32 fb_address, int fb_stride, GPUDebu
 }
 
 void FramebufferManager::UpdateHeadTrackingIfNeeded() {
-	if (::UpdateHeadTrackingIfNeeded()) {
+	::UpdateHeadTrackingIfNeeded();
 #ifdef OVR_MAJOR_VERSION
-		if (currentRenderVfb_) {
-			currentRenderVfb_->vr_eye_poses[0] = g_eye_poses[0];
-			currentRenderVfb_->vr_eye_poses[1] = g_eye_poses[1];
-			currentRenderVfb_->vr_frame_index = g_ovr_frameindex;
-		}
-#endif
+	if (currentRenderVfb_) {
+		currentRenderVfb_->vr_eye_poses[0] = g_eye_poses[0];
+		currentRenderVfb_->vr_eye_poses[1] = g_eye_poses[1];
+		currentRenderVfb_->vr_frame_index = g_ovr_frameindex;
 	}
+#endif
 }
