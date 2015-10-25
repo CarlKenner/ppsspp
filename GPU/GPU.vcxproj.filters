@@ -192,12 +192,11 @@
     <ClInclude Include="GLES\GLStateCache.h">
       <Filter>GLES</Filter>
     </ClInclude>
-    <ClInclude Include="Common\GPUStateUtils.h">
-      <Filter>Common</Filter>
-    </ClInclude>
     <ClInclude Include="Common\ShaderCommon.h">
       <Filter>Common</Filter>
     </ClInclude>
+    <ClInclude Include="Common\ShaderId.h" />
+    <ClInclude Include="Common\GPUStateUtils.h" />
     <ClInclude Include="Common\VR.h">
       <Filter>Common</Filter>
     </ClInclude>
@@ -389,6 +388,8 @@
     <ClCompile Include="GLES\GLStateCache.cpp">
       <Filter>GLES</Filter>
     </ClCompile>
+    <ClCompile Include="Common\ShaderId.cpp" />
+    <ClCompile Include="Common\GPUStateUtils.cpp" />
     <ClCompile Include="Common\VR.cpp">
       <Filter>Common</Filter>
     </ClCompile>

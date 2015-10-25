@@ -23,13 +23,6 @@
 
 struct ShaderID;
 
-bool CanUseHardwareTransform(int prim);
-
 void GenerateVSOutputMembers(char * &p);
 
-void ComputeVertexShaderID(ShaderID *id, u32 vertexType, bool useHWTransform);
 void GenerateVertexShader(const ShaderID &id, char *buffer);
-
-// Generates a compact string that describes the shader. Useful in a list to get an overview
-// of the current flora of shaders.
-std::string VertexShaderDesc(const ShaderID &id);
