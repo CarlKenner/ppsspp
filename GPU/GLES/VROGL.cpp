@@ -884,6 +884,8 @@ void VR_BeginGUI()
 		GLenum err = glGetError();
 		vr_gui_valid = (err == GL_NO_ERROR);
 	}
+#else
+	VR_RenderToGUI();
 #endif
 #endif
 }
@@ -893,8 +895,8 @@ void VR_EndGUI()
 	if (!began_gui)
 		return;
 	began_gui = false;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	if (g_has_rift)
 	{
 		lock_guard guard(AsyncTimewarpLock);
@@ -955,12 +957,10 @@ void VR_RenderToEyebuffer(int eye)
 #if (defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 5)
 	if (g_has_rift)
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_eyeFramebuffer[eye]);
-	GL_CHECK();
 #endif
 #if defined(HAVE_OPENVR)
 	if (g_has_steamvr)
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_eyeFramebuffer[eye]);
-	GL_CHECK();
 #endif
 }
 
