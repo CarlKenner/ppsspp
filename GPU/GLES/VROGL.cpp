@@ -815,10 +815,10 @@ void VR_StopFramebuffer()
 
 void VR_BeginFrame()
 {
-	GL_CHECK();
-	glFlush();
 	//GL_CHECK();
-	glFinish();
+	//glFlush();
+	//GL_CHECK();
+	//glFinish();
 	//GL_CHECK();
 	if (g_Config.bDisableNearClipping)
 		glEnable(GL_DEPTH_CLAMP);
@@ -831,10 +831,10 @@ void VR_BeginFrame()
 	if (g_has_rift)
 	{
 #if OVR_MAJOR_VERSION >= 6
-		++g_ovr_frameindex;
+		//++g_ovr_frameindex;
 		// On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture 
 #if OVR_MAJOR_VERSION <= 7
-		g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
+		//g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
 #endif
 		if (!g_asyc_timewarp_active) {
 			lock_guard guard(AsyncTimewarpLock);

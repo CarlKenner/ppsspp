@@ -156,12 +156,6 @@ typedef enum
 } ControllerStyle;
 
 void InitVR();
-void ShutdownVR();
-void NewVRFrame();
-void ReadHmdOrientation(float *roll, float *pitch, float *yaw, float *x, float *y, float *z);
-void UpdateHeadTrackingIfNeeded();
-
-void InitVR();
 void VR_StopRendering();
 void ShutdownVR();
 void VR_RecenterHMD();
@@ -170,7 +164,7 @@ void VR_ConfigureHMDPrediction();
 void VR_NewVRFrame();
 void VR_GetEyePoses();
 void ReadHmdOrientation(float *roll, float *pitch, float *yaw, float *x, float *y, float *z);
-void UpdateHeadTrackingIfNeeded();
+bool UpdateHeadTrackingIfNeeded();
 void VR_GetProjectionHalfTan(float &hmd_halftan);
 void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar, bool isOpenGL);
 void VR_GetEyePos(float *posLeft, float *posRight);
@@ -266,6 +260,7 @@ extern long long g_ovr_frameindex;
 #define ovrHmd_Destroy ovr_Destroy
 #define ovrHmd_GetFovTextureSize ovr_GetFovTextureSize
 #define ovrHmd_GetFloat ovr_GetFloat
+#define ovrHmd_GetTrackingState ovr_GetTrackingState
 #endif
 
 #ifdef _WIN32

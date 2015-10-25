@@ -627,7 +627,11 @@ void ProcessVREvent(const vr::VREvent_t & event)
 #ifdef OVR_MAJOR_VERSION
 void UpdateOculusHeadTracking()
 {
+	// On Oculus SDK 0.6 and above, we start the next frame the first time we read the head tracking.
+	// On SDK 0.5 and below, this is done in BeginFrame instead.
+#if OVR_MAJOR_VERSION >= 6
 	++g_ovr_frameindex;
+#endif
 	// we can only call GetEyePose between BeginFrame and EndFrame
 #ifdef OCULUSSDK042
 	g_vr_lock.lock();
@@ -642,9 +646,6 @@ void UpdateOculusHeadTracking()
 	ovrTrackingState state = ovr_GetTrackingState(hmd, display_time, false);
 	ovr_CalcEyePoses(state.HeadPose.ThePose, useHmdToEyeViewOffset, g_eye_poses);
 	OVR::Posef pose = state.HeadPose.ThePose;
-#elif OVR_MAJOR_VERSION >= 7
-	ovr_GetEyePoses(hmd, g_ovr_frameindex, useHmdToEyeViewOffset, g_eye_poses, nullptr);
-	OVR::Posef pose = g_eye_poses[ovrEye_Left];
 #elif OVR_MAJOR_VERSION >= 6
 	ovrFrameTiming timing = ovrHmd_GetFrameTiming(hmd, g_ovr_frameindex);
 	ovrTrackingState state = ovrHmd_GetTrackingState(hmd, timing.DisplayMidpointSeconds);
@@ -762,10 +763,9 @@ void UpdateVuzixHeadTracking()
 }
 #endif
 
-void UpdateHeadTrackingIfNeeded()
+bool UpdateHeadTrackingIfNeeded()
 {
-	if (g_new_tracking_frame)
-	{
+	if (g_new_tracking_frame) {
 		g_new_tracking_frame = false;
 #ifdef _WIN32
 		if (g_has_vr920 && Vuzix_GetTracking)
@@ -779,6 +779,9 @@ void UpdateHeadTrackingIfNeeded()
 		if (g_has_rift)
 			UpdateOculusHeadTracking();
 #endif
+		return true;
+	} else {
+		return false;
 	}
 }
 
