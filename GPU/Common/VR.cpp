@@ -366,6 +366,8 @@ bool InitOculusVR()
 	else
 		g_hmd_luid = reinterpret_cast<LUID*>(&luid);
 #endif
+	if (hmd != nullptr)
+		g_can_async_timewarp = true;
 
 #else
 #if OVR_MAJOR_VERSION >= 6

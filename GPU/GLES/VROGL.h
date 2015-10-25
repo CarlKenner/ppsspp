@@ -41,6 +41,7 @@ void VR_DrawTimewarpFrame();
 void VR_DrawAsyncTimewarpFrame();
 
 void VRThread_Start();
+void VRThread_WaitForContextCreation();
 void VRThread_StartLoop();
 void VRThread_Stop();
 bool VRThread_Ready();

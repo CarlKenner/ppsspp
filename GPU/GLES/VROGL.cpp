@@ -78,7 +78,7 @@ volatile long vrThreadReady;
 static std::thread *vrThread;
 volatile long s_stop_vr_thread = false;
 static bool s_vr_thread_failure = false;
-HANDLE start_vr_thread_event = NULL;
+HANDLE start_vr_thread_event = NULL, wait_for_vr_thread_event = NULL;
 bool vr_gui_valid = true;
 bool vr_frame_valid = true;
 bool vr_drew_frame = false; // we are just drawing the GUI if false
@@ -1335,7 +1335,6 @@ void VR_DrawTimewarpFrame()
 
 void VR_DrawAsyncTimewarpFrame()
 {
-	GL_CHECK();
 	PresentFrameSDK6();
 	Sleep(8);
 }
@@ -1364,8 +1363,18 @@ void VRThread_Start()
 	lock_guard guard(vrThreadLock);
 	if (!vrThread && g_can_async_timewarp)
 	{
-		vrThread = new std::thread(VRThread);
 		start_vr_thread_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+		wait_for_vr_thread_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+		vrThread = new std::thread(VRThread);
+	}
+}
+
+void VRThread_WaitForContextCreation()
+{
+	lock_guard guard(vrThreadLock);
+	if (vrThread)
+	{
+		DWORD result = WaitForSingleObject(wait_for_vr_thread_event, INFINITE);
 	}
 }
 
@@ -1507,6 +1516,8 @@ void VRThread()
 
 	// Create our OpenGL context
 	CreateOffscreen();
+
+	SetEvent(wait_for_vr_thread_event);
 
 	_InterlockedExchange(&vrThreadReady, THREAD_WAITING);
 	DWORD result = WaitForSingleObject(start_vr_thread_event, INFINITE);

@@ -121,6 +121,7 @@ unsigned int WINAPI TheThread(void *)
 
 	OGL::VRThread_Start();
 
+	OGL::VRThread_WaitForContextCreation();
 	std::string error_string;
 	if (!host->InitGraphics(&error_string)) {
 		I18NCategory *err = GetI18NCategory("Error");
