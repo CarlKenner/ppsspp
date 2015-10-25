@@ -209,6 +209,9 @@
     <ClInclude Include="GLES\GeometryShaderGenerator.h">
       <Filter>GLES</Filter>
     </ClInclude>
+    <ClInclude Include="Common\OculusSystemLibraryHeader.h">
+      <Filter>Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Math3D.cpp">
@@ -401,6 +404,9 @@
     </ClCompile>
     <ClCompile Include="GLES\GeometryShaderGenerator.cpp">
       <Filter>GLES</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\OculusSystemLibraryHeader.cpp">
+      <Filter>Common</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

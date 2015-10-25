@@ -214,6 +214,7 @@
     <ClInclude Include="Common\GPUDebugInterface.h" />
     <ClInclude Include="Common\GPUStateUtils.h" />
     <ClInclude Include="Common\IndexGenerator.h" />
+    <ClInclude Include="Common\OculusSystemLibraryHeader.h" />
     <ClInclude Include="Common\PostShader.h" />
     <ClInclude Include="Common\ShaderCommon.h" />
     <ClInclude Include="Common\ShaderId.h" />
@@ -284,6 +285,7 @@
     <ClCompile Include="Common\GPUDebugInterface.cpp" />
     <ClCompile Include="Common\GPUStateUtils.cpp" />
     <ClCompile Include="Common\IndexGenerator.cpp" />
+    <ClCompile Include="Common\OculusSystemLibraryHeader.cpp" />
     <ClCompile Include="Common\PostShader.cpp" />
     <ClCompile Include="Common\ShaderId.cpp" />
     <ClCompile Include="Common\SplineCommon.cpp" />

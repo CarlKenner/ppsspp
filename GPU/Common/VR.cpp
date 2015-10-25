@@ -383,6 +383,8 @@ bool InitOculusVR()
 	if (!hmd)
 		WARN_LOG(VR, "Oculus Rift not detected. Oculus Rift support will not be available.");
 	return (hmd != nullptr);
+#else
+	return false;
 #endif
 }
 

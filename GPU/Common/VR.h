@@ -29,9 +29,9 @@ const int DEFAULT_VR_EXTRA_VIDEO_LOOPS = 0;
 const int DEFAULT_VR_EXTRA_VIDEO_LOOPS_DIVIDER = 0;
 
 #ifdef __INTELLISENSE__
-#define HAVE_OCULUSSDK
-#define HAVE_OPENVR
-#define HAVE_OSVR
+//#define HAVE_OCULUSSDK
+//#define HAVE_OPENVR
+//#define HAVE_OSVR
 #endif
 
 #ifdef _WIN32
@@ -79,8 +79,10 @@ extern "C"
 #endif
 #else
 #ifdef _WIN32
-//#include "OculusSystemLibraryHeader.h"
-//#define OCULUSSDK044ORABOVE
+#include "OculusSystemLibraryHeader.h"
+#define OCULUSSDK044ORABOVE
+#endif
+#if defined(_WIN32) && defined(OVR_MAJOR_VERSION)
 #ifdef HAVE_OPENVR
 #define SCM_OCULUS_STR ", for Oculus DLL " OVR_VERSION_STRING " or SteamVR"
 #else
