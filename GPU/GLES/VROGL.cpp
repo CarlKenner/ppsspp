@@ -117,14 +117,14 @@ struct TextureBuffer
 			if (!OVR_SUCCESS(res = ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, size.w, size.h, &TextureSet))) {
 				ovrErrorInfo e;
 				ovr_GetLastErrorInfo(&e);
-				PanicAlert("ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, %d, %d)=%d failed%s\n%s", res, size.w, size.h, SCM_OCULUS_STR, e.ErrorString);
+				PanicAlert("ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, %d, %d)=%d failed%s\n%s", size.w, size.h, res, SCM_OCULUS_STR, e.ErrorString);
 				return;				
 			}
 #else
 			if (!OVR_SUCCESS(res = ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, size.w, size.h, &TextureSet))) {
 				ovrErrorInfo e;
 				ovr_GetLastErrorInfo(&e);
-				PanicAlert("ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, %d, %d)=%d failed%s\n%s", res, size.w, size.h, SCM_OCULUS_STR, e.ErrorString);
+				PanicAlert("ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, %d, %d)=%d failed%s\n%s", size.w, size.h, res, SCM_OCULUS_STR, e.ErrorString);
 				return;
 			}
 #endif
