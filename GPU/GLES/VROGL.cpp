@@ -1405,6 +1405,7 @@ void VRThread_Stop()
 		vrThread = NULL;
 		vrThreadReady = THREAD_NONE;
 		CloseHandle(start_vr_thread_event);
+		CloseHandle(wait_for_vr_thread_event);
 	}
 
 	// finished()
