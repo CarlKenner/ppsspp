@@ -474,13 +474,15 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 			case L'd':
 				debugLogLevel = true;
 				break;
+			case L'-':
+				if (wideArgs[i] == L"--fullscreen")
+					g_Config.bFullScreen = true;
+				else if (wideArgs[i] == L"--windowed")
+					g_Config.bFullScreen = false;
+				else if (wideArgs[i] == L"--noasync")
+					g_Config.bNoAsyncTimewarp = true;
+				break;
 			}
-
-			if (wideArgs[i] == L"--fullscreen")
-				g_Config.bFullScreen = true;
-
-			if (wideArgs[i] == L"--windowed")
-				g_Config.bFullScreen = false;
 
 			if (wideArgs[i].find(gpuBackend) != std::wstring::npos && wideArgs[i].size() > gpuBackend.size()) {
 				const std::wstring restOfOption = wideArgs[i].substr(gpuBackend.size());

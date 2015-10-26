@@ -531,7 +531,8 @@ static ConfigSetting graphicsSettings[] = {
 };
 
 static ConfigSetting vrSettings[] = {
-	ConfigSetting("ForceVR", &g_Config.bForceVR, false),
+	ConfigSetting("ForceVR", &g_Config.bForceVR, false, false, false),
+	ConfigSetting("NoAsyncTimewarp", &g_Config.bNoAsyncTimewarp, false, false, false),
 	ConfigSetting("BruteForcing", &g_Config.bBruteForcing, false),
 	ConfigSetting("BruteForceIfs", &g_Config.bBruteForceIfs, false),
 	ConfigSetting("BruteForceCurrentFunctionIndex", &g_Config.BruteForceCurrentFunctionIndex, -2),

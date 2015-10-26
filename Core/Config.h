@@ -200,6 +200,7 @@ public:
 
 	// VR command line
 	bool bForceVR;
+	bool bNoAsyncTimewarp;
 
 	// Brute forcing
 	bool bBruteForcing;

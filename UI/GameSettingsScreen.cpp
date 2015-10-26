@@ -354,7 +354,8 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new ItemHeader(gr->T("All games")));
 	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
 	vrSettings->Add(new CheckBox(&g_Config.bSynchronousTimewarp, gr->T("Synchronous timewarp")));
-	vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
+	if (g_can_async_timewarp)
+		vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 	vrSettings->Add(new CheckBox(&g_Config.bDisableNearClipping, gr->T("Disable Near Clipping")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gr->T("Scale"), 0.01f, screenManager(), "x lifesize"));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fFreeLookSensitivity, 0.001f, 100.0f, gr->T("FreeLook Sensitivity"), 0.01f, screenManager(), "x normal"));
