@@ -76,6 +76,7 @@ static const char basic_vs[] =
 	"}\n";
 
 static const char geometry_vs[] =
+"#version 150\n"
 "uniform mat4 u_viewproj;\n"
 "attribute vec4 a_position;\n"
 "attribute vec2 a_texcoord0;\n"
