@@ -112,13 +112,21 @@ struct TextureBuffer
 			// This texture isn't necessarily going to be a rendertarget, but it usually is.
 			//OVR_ASSERT(hmd); // No HMD? A little odd.
 			//OVR_ASSERT(sampleCount == 1); // ovrHmd_CreateSwapTextureSetD3D11 doesn't support MSAA.
-
+			ovrResult res;
 #if OVR_MAJOR_VERSION >= 7
-			ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, size.w, size.h, &TextureSet);
-			GL_CHECK();
+			if (!OVR_SUCCESS(res = ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, size.w, size.h, &TextureSet))) {
+				ovrErrorInfo e;
+				ovr_GetLastErrorInfo(&e);
+				PanicAlert("ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, %d, %d)=%d failed%s\n%s", res, size.w, size.h, SCM_OCULUS_STR, e.ErrorString);
+				return;				
+			}
 #else
-			ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, size.w, size.h, &TextureSet);
-			GL_CHECK();
+			if (!OVR_SUCCESS(res = ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, size.w, size.h, &TextureSet))) {
+				ovrErrorInfo e;
+				ovr_GetLastErrorInfo(&e);
+				PanicAlert("ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, %d, %d)=%d failed%s\n%s", res, size.w, size.h, SCM_OCULUS_STR, e.ErrorString);
+				return;
+			}
 #endif
 			for (int i = 0; i < TextureSet->TextureCount; ++i)
 			{
@@ -854,7 +862,7 @@ void VR_BeginFrame()
 #endif
 }
 
-static bool began_gui = false, has_gui = false;
+static bool began_gui = false, has_gui = false, last_frame_had_gui = false;
 
 void VR_BeginGUI()
 {
@@ -875,10 +883,8 @@ void VR_BeginGUI()
 		g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
 #endif
 		lock_guard guard(AsyncTimewarpLock);
-		GL_CHECK();
-		// Switch to eye render target
 		VR_RenderToGUI();
-		GL_CHECK();
+		glGetError();
 		glClearColor(0, 0, 0, 0);
 		glClear(GL_COLOR_BUFFER_BIT);
 		GLenum err = glGetError();
@@ -903,7 +909,8 @@ void VR_EndGUI()
 		if (g_asyc_timewarp_active) {
 			glFlush();
 			glFinish();
-			guiRenderTexture->TextureSet->CurrentIndex = (guiRenderTexture->TextureSet->CurrentIndex + 1) % guiRenderTexture->TextureSet->TextureCount;
+			if (vr_gui_valid)
+				guiRenderTexture->TextureSet->CurrentIndex = (guiRenderTexture->TextureSet->CurrentIndex + 1) % guiRenderTexture->TextureSet->TextureCount;
 		}
 		if (!vr_drew_frame) {
 			VR_DoPresentHMDFrame(true);
@@ -991,7 +998,7 @@ void PresentFrameSDK6()
 				LayerList[count-1] = &ld.Header;
 			}
 			ovrLayerQuad lg;
-			if (guiRenderTexture && has_gui) {
+			if (guiRenderTexture && (has_gui || last_frame_had_gui)) {
 				++count;
 #if OVR_MAJOR_VERSION >= 8
 				lg.Header.Type = ovrLayerType_Quad;
@@ -1080,11 +1087,13 @@ void VR_DoPresentHMDFrame(bool valid)
 		//ovrHmd_EndEyeRender(hmd, ovrEye_Left, g_left_eye_pose, &FramebufferManager::m_eye_texture[ovrEye_Left].Texture);
 		//ovrHmd_EndEyeRender(hmd, ovrEye_Right, g_right_eye_pose, &FramebufferManager::m_eye_texture[ovrEye_Right].Texture);
 #if OVR_MAJOR_VERSION <= 5
-		// Let OVR do distortion rendering, Present and flush/sync.
-		if (s_frame_eye_poses)
-			ovrHmd_EndFrame(hmd, s_frame_eye_poses, &g_eye_texture[0].Texture);
-		else
-			ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+		if (!g_asyc_timewarp_active) {
+			// Let OVR do distortion rendering, Present and flush/sync.
+			if (s_frame_eye_poses)
+				ovrHmd_EndFrame(hmd, s_frame_eye_poses, &g_eye_texture[0].Texture);
+			else
+				ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+		}		
 		if (g_Config.bSynchronousTimewarp)
 		{
 			tcount += timewarps;
@@ -1097,16 +1106,17 @@ void VR_DoPresentHMDFrame(bool valid)
 		}
 #else
 		RecreateMirrorTextureIfNeeded();
-		PresentFrameSDK6();
-		if (g_Config.bSynchronousTimewarp)
-		{
-			tcount += timewarps;
-			while (tcount >= reals) {
-				PresentFrameSDK6();
-				tcount -= reals;
+		if (!g_asyc_timewarp_active) {
+			PresentFrameSDK6();
+			if (g_Config.bSynchronousTimewarp) {
+				tcount += timewarps;
+				while (tcount >= reals) {
+					PresentFrameSDK6();
+					tcount -= reals;
+				}
+			} else {
+				tcount = 0;
 			}
-		} else {
-			tcount = 0;
 		}
 
 		if (!g_Config.bNoMirrorToWindow && mirrorTexture)
@@ -1125,7 +1135,6 @@ void VR_DoPresentHMDFrame(bool valid)
 #endif
 	}
 #endif
-	has_gui = false;
 }
 
 void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
@@ -1236,31 +1245,21 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 		g_new_tracking_frame = true;
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 		if (g_asyc_timewarp_active) {
-			for (int eye = 0; eye < 2; eye++)
-			{
-				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet) {
+			// swap front and back buffers
+			for (int eye = 0; eye < 2; eye++) {
+				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet)
 					eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
-					if (frame_eye_poses)
-						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
-					else
-						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
-					eyeRenderTexture[eye]->frame_index[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_index;
-					eyeRenderTexture[eye]->UnsetRenderSurface();
-				}
 			}
-			has_gui = false;
-			return;
-		} else {
-			for (int eye = 0; eye < 2; eye++)
-			{
-				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet) {
-					if (frame_eye_poses)
-						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
-					else
-						eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
-					eyeRenderTexture[eye]->frame_index[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_index;
-					eyeRenderTexture[eye]->UnsetRenderSurface();
-				}
+		}
+		for (int eye = 0; eye < 2; eye++)
+		{
+			if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet) {
+				if (frame_eye_poses)
+					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
+				else
+					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+				eyeRenderTexture[eye]->frame_index[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_index;
+				eyeRenderTexture[eye]->UnsetRenderSurface();
 			}
 		}
 #else
@@ -1273,19 +1272,14 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 		g_new_tracking_frame = true;
 	}
 
+	last_frame_had_gui = has_gui;
+	has_gui = false;
 	VR_DoPresentHMDFrame(valid);
-	//VR_DrawTimewarpFrame();
-	//tcount += timewarps;
-	//while (tcount >= reals) {
-	//	VR_DrawTimewarpFrame();
-	//	tcount -= reals;
-	//}
 }
 
 
 void VR_DrawTimewarpFrame()
 {
-	GL_CHECK();
 	// As far as I know, OpenVR doesn't support Timewarp yet
 #if 0 && defined(HAVE_OPENVR)
 	if (g_has_steamvr && m_pCompositor)
