@@ -260,6 +260,7 @@ extern long long g_ovr_frameindex;
 #define ovrHmd_Destroy ovr_Destroy
 #define ovrHmd_GetFovTextureSize ovr_GetFovTextureSize
 #define ovrHmd_GetFloat ovr_GetFloat
+#define ovrHmd_SetBool ovr_SetBool
 #define ovrHmd_GetTrackingState ovr_GetTrackingState
 #endif
 

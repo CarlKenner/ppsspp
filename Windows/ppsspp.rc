@@ -448,7 +448,15 @@ BEGIN
         MENUITEM "Fullscreen",                              ID_OPTIONS_FULLSCREEN
         MENUITEM "VSync",                                   ID_OPTIONS_VSYNC
         MENUITEM "Postprocessing Shader",                   ID_OPTIONS_FXAA
-        POPUP "Rendering Resolution"
+		POPUP "Judder Prevention"
+		BEGIN
+		    MENUITEM "Asynchronous Timewarp",               ID_OPTIONS_ASYNCTIMEWARP
+		    MENUITEM "Synchronous Timewarp",                ID_OPTIONS_SYNCTIMEWARP
+		    MENUITEM "Unlock Speed",                        ID_OPTIONS_UNLOCKSPEED
+		    MENUITEM "Motion Blur",                         ID_OPTIONS_MOTIONBLUR
+		    MENUITEM "Judder",                              ID_OPTIONS_JUDDER
+		END
+		POPUP "Rendering Resolution"
         BEGIN
             MENUITEM "Auto",                                ID_OPTIONS_SCREENAUTO
             MENUITEM "&1x",                                 ID_OPTIONS_SCREEN1X

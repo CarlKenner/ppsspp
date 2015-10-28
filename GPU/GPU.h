@@ -69,6 +69,7 @@ struct GPUStatistics {
 		numAlphaTestedDraws = 0;
 		numNonAlphaTestedDraws = 0;
 		msProcessingDisplayLists = 0;
+		msOculus = 0;
 		vertexGPUCycles = 0;
 		otherGPUCycles = 0;
 		memset(gpuCommandsAtCallLevel, 0, sizeof(gpuCommandsAtCallLevel));
@@ -86,6 +87,7 @@ struct GPUStatistics {
 	int numTextureSwitches;
 	int numShaderSwitches;
 	int numTexturesDecoded;
+	double msOculus;
 	double msProcessingDisplayLists;
 	int vertexGPUCycles;
 	int otherGPUCycles;

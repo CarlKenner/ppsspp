@@ -656,13 +656,14 @@ void GLES_GPU::BeginFrame() {
 
 inline void GLES_GPU::UpdateVsyncInterval(bool force) {
 #ifdef _WIN32
-	int desiredVSyncInterval = g_Config.bVSync ? 1 : 0;
+	int desiredVSyncInterval = (g_Config.bVSync && !g_has_rift) ? 1 : 0;
 	if (PSP_CoreParameter().unthrottle) {
 		desiredVSyncInterval = 0;
 	}
 	if (PSP_CoreParameter().fpsLimit == 1) {
 		// For an alternative speed that is a clean factor of 60, the user probably still wants vsync.
-		if (g_Config.iFpsLimit == 0 || (g_Config.iFpsLimit != 15 && g_Config.iFpsLimit != 30 && g_Config.iFpsLimit != 60)) {
+		// Other factors of 60 that aren't listed yet: 1, 2, 3, 4, 5, 6, 10, 12
+		if (g_Config.iFpsLimit == 0 || (g_Config.iFpsLimit != 15 && g_Config.iFpsLimit != 20 && g_Config.iFpsLimit != 30 && g_Config.iFpsLimit != 60)) {
 			desiredVSyncInterval = 0;
 		}
 	}

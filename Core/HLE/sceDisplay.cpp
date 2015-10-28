@@ -417,6 +417,7 @@ void __DisplayGetDebugStats(char stats[], size_t bufsize) {
 
 	snprintf(stats, bufsize - 1,
 		"Frames: %i\n"
+		"ovrHmd_SubmitFrame: %0.3f ms\n"
 		"DL processing time: %0.2f ms\n"
 		"Kernel processing time: %0.2f ms\n"
 		"Slowest syscall: %s : %0.2f ms\n"
@@ -438,6 +439,7 @@ void __DisplayGetDebugStats(char stats[], size_t bufsize) {
 		"Fragment shaders loaded: %i\n"
 		"Combined shaders loaded: %i\n",
 		gpuStats.numVBlanks,
+		gpuStats.msOculus * 1000.0f,
 		gpuStats.msProcessingDisplayLists * 1000.0f,
 		kernelStats.msInSyscalls * 1000.0f,
 		kernelStats.slowestSyscallName ? kernelStats.slowestSyscallName : "(none)",
@@ -479,9 +481,10 @@ void __DisplaySetWasPaused() {
 }
 
 static bool FrameTimingThrottled() {
-	if (PSP_CoreParameter().fpsLimit == FPS_LIMIT_CUSTOM && g_Config.iFpsLimit == 0) {
+	if (g_has_rift && !g_asyc_timewarp_active && g_Config.bSynchronousTimewarp)
 		return false;
-	}
+	if (PSP_CoreParameter().fpsLimit == FPS_LIMIT_CUSTOM && g_Config.iFpsLimit == 0)
+		return false;
 	return !PSP_CoreParameter().unthrottle;
 }
 

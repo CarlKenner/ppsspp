@@ -513,7 +513,6 @@ void RenderDistortion()
 
 void VR_ConfigureHMD()
 {
-	GL_CHECK();
 #ifdef HAVE_OPENVR
 	if (g_has_steamvr && m_pCompositor)
 	{
@@ -586,9 +585,9 @@ void VR_ConfigureHMD()
 #endif
 
 #else
+		//ovrHmd_SetBool(hmd, "QueueAheadEnabled", ovrFalse);
 		for (int i = 0; i < ovrEye_Count; ++i)
 			g_eye_render_desc[i] = ovrHmd_GetRenderDesc(hmd, (ovrEyeType)i, g_eye_fov[i]);
-		GL_CHECK();
 #endif
 	}
 #endif
@@ -974,6 +973,7 @@ void VR_RenderToEyebuffer(int eye)
 void PresentFrameSDK6()
 {
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
+	double start = 0.0;
 	if (g_has_rift)
 	{
 		long long frame_index = 0;
@@ -1019,7 +1019,21 @@ void PresentFrameSDK6()
 				lg.QuadPoseCenter.Orientation.z = 0;
 				LayerList[count-1] = &lg.Header;
 			}
+			if (g_Config.bShowDebugStats) {
+				time_update();
+				start = time_now_d();
+			}
 			ovrResult result = ovrHmd_SubmitFrame(hmd, frame_index, nullptr, LayerList, count);
+			//ovrHmd_SubmitFrame(hmd, frame_index, nullptr, LayerList, count);
+			//static bool even = false;
+			//if (even)
+			//	ovrHmd_SubmitFrame(hmd, frame_index, nullptr, LayerList, count);
+			//even = !even;
+			if (g_Config.bShowDebugStats) {
+				time_update();
+				double total = time_now_d() - start;
+				gpuStats.msOculus += total;
+			}
 		}
 	}
 #endif 
@@ -1239,7 +1253,7 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 	if (valid)
 	{
 		vr_drew_frame = true;
-		glFinish();
+		//glFinish();
 		//Sleep(8);
 		lock_guard guard(AsyncTimewarpLock);
 		g_new_tracking_frame = true;

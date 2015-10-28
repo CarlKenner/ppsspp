@@ -84,14 +84,15 @@ namespace MainWindow {
 
 		// Game Settings submenus
 		SUBMENU_CUSTOM_SHADERS = 10,
-		SUBMENU_RENDERING_RESOLUTION = 11,
-		SUBMENU_WINDOW_SIZE = 12,
-		SUBMENU_RENDERING_BACKEND = 13,
-		SUBMENU_RENDERING_MODE = 14,
-		SUBMENU_FRAME_SKIPPING = 15,
-		SUBMENU_TEXTURE_FILTERING = 16,
-		SUBMENU_BUFFER_FILTER = 17,
-		SUBMENU_TEXTURE_SCALING = 18,
+		SUBMENU_JUDDER_PREVENTION = 11,
+		SUBMENU_RENDERING_RESOLUTION = 12,
+		SUBMENU_WINDOW_SIZE = 13,
+		SUBMENU_RENDERING_BACKEND = 14,
+		SUBMENU_RENDERING_MODE = 15,
+		SUBMENU_FRAME_SKIPPING = 16,
+		SUBMENU_TEXTURE_FILTERING = 17,
+		SUBMENU_BUFFER_FILTER = 18,
+		SUBMENU_TEXTURE_SCALING = 19,
 	};
 
 	static std::string GetMenuItemText(HMENU menu, int menuID) {
@@ -268,6 +269,12 @@ namespace MainWindow {
 		TranslateMenuItem(menu, ID_OPTIONS_FULLSCREEN, L"\tAlt+Return, F11");
 		TranslateMenuItem(menu, ID_OPTIONS_VSYNC);
 		TranslateSubMenu(menu, "Postprocessing Shader", MENU_OPTIONS, SUBMENU_CUSTOM_SHADERS);
+		TranslateSubMenu(menu, "Judder Prevention", MENU_OPTIONS, SUBMENU_JUDDER_PREVENTION);
+		TranslateMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP);
+		TranslateMenuItem(menu, ID_OPTIONS_SYNCTIMEWARP);
+		TranslateMenuItem(menu, ID_OPTIONS_UNLOCKSPEED);
+		TranslateMenuItem(menu, ID_OPTIONS_MOTIONBLUR);
+		TranslateMenuItem(menu, ID_OPTIONS_JUDDER);
 		TranslateSubMenu(menu, "Rendering Resolution", MENU_OPTIONS, SUBMENU_RENDERING_RESOLUTION, L"\tCtrl+1");
 		TranslateMenuItem(menu, ID_OPTIONS_SCREENAUTO);
 		// Skip rendering resolution 2x-5x..
@@ -619,6 +626,39 @@ namespace MainWindow {
 			g_Config.bIgnoreWindowsKey = !g_Config.bIgnoreWindowsKey;
 			break;
 
+		case ID_OPTIONS_ASYNCTIMEWARP:
+			g_Config.bSynchronousTimewarp = false;
+			g_Config.bAsynchronousTimewarp = true;
+			g_Config.bLowPersistence = true;
+			PSP_CoreParameter().fpsLimit = 0;
+			break;
+		case ID_OPTIONS_SYNCTIMEWARP:
+			g_Config.bAsynchronousTimewarp = false;
+			g_Config.bSynchronousTimewarp = true;
+			g_Config.bLowPersistence = true;
+			PSP_CoreParameter().fpsLimit = 0;
+			break;
+		case ID_OPTIONS_UNLOCKSPEED:
+			g_Config.bAsynchronousTimewarp = false;
+			g_Config.bSynchronousTimewarp = false;
+			g_Config.bLowPersistence = true;
+			PSP_CoreParameter().fpsLimit = 1;
+			if (g_Config.iFpsLimit > 0 && g_Config.iFpsLimit < g_hmd_refresh_rate)
+				setFpsLimit(g_hmd_refresh_rate);
+			break;
+		case ID_OPTIONS_MOTIONBLUR:
+			g_Config.bAsynchronousTimewarp = false;
+			g_Config.bSynchronousTimewarp = false;
+			g_Config.bLowPersistence = false;
+			PSP_CoreParameter().fpsLimit = 0;
+			break;
+		case ID_OPTIONS_JUDDER:
+			g_Config.bAsynchronousTimewarp = false;
+			g_Config.bSynchronousTimewarp = false;
+			g_Config.bLowPersistence = true;
+			PSP_CoreParameter().fpsLimit = 0;
+			break;
+
 		case ID_OPTIONS_SCREENAUTO: SetInternalResolution(RESOLUTION_AUTO); break;
 		case ID_OPTIONS_SCREEN1X:   SetInternalResolution(RESOLUTION_NATIVE); break;
 		case ID_OPTIONS_SCREEN2X:   SetInternalResolution(RESOLUTION_2X); break;
@@ -967,6 +1007,50 @@ namespace MainWindow {
 			EnableMenuItem(menu, ID_OPTIONS_VERTEXCACHE, MF_GRAYED);
 		} else {
 			EnableMenuItem(menu, ID_OPTIONS_VERTEXCACHE, MF_ENABLED);
+		}
+
+		// VR Judder Prevention
+		if (!g_can_async_timewarp) {
+			EnableMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP, MF_GRAYED);
+		} else {
+			EnableMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP, MF_ENABLED);
+		}
+#if OVR_MAJOR_VERSION >= 7
+		EnableMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_GRAYED);
+#endif
+		if (g_has_rift && hmdDesc.Type <= ovrHmd_DK1) {
+			EnableMenuItem(menu, ID_OPTIONS_JUDDER, MF_GRAYED);
+		} else {
+			EnableMenuItem(menu, ID_OPTIONS_JUDDER, MF_ENABLED);
+		}
+		if (!g_Config.bLowPersistence && g_has_rift && hmdDesc.Type > ovrHmd_DK1)
+			CheckMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_BYCOMMAND | MF_CHECKED);
+		else
+			CheckMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_BYCOMMAND | MF_UNCHECKED);
+		if (g_Config.bAsynchronousTimewarp && g_can_async_timewarp) {
+			CheckMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP, MF_BYCOMMAND | MF_CHECKED);
+			CheckMenuItem(menu, ID_OPTIONS_SYNCTIMEWARP, MF_BYCOMMAND | MF_UNCHECKED);
+			CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_UNCHECKED);
+			CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_UNCHECKED);
+		} else {
+			CheckMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP, MF_BYCOMMAND | MF_UNCHECKED);
+			if (g_Config.bSynchronousTimewarp) {
+				CheckMenuItem(menu, ID_OPTIONS_SYNCTIMEWARP, MF_BYCOMMAND | MF_CHECKED);
+				CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_UNCHECKED);
+				CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_UNCHECKED);
+			} else {
+				CheckMenuItem(menu, ID_OPTIONS_SYNCTIMEWARP, MF_BYCOMMAND | MF_UNCHECKED);
+				if (PSP_CoreParameter().fpsLimit == 1) {
+					CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_CHECKED);
+					CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_UNCHECKED);
+				} else if (!g_Config.bLowPersistence && g_has_rift && hmdDesc.Type > ovrHmd_DK1) {
+					CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_UNCHECKED);
+					CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_UNCHECKED);
+				} else {
+					CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_UNCHECKED);
+					CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_CHECKED);
+				}
+			}
 		}
 
 		static const int zoomitems[11] = {

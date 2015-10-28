@@ -319,6 +319,11 @@
 #define ID_OPTIONS_OPENGL                40155
 #define ID_DEBUG_BRUTEFORCE              40156
 #define ID_DEBUG_BRUTEFORCEIFS           40157
+#define ID_OPTIONS_ASYNCTIMEWARP         40158
+#define ID_OPTIONS_SYNCTIMEWARP          40159
+#define ID_OPTIONS_UNLOCKSPEED           40160
+#define ID_OPTIONS_MOTIONBLUR            40161
+#define ID_OPTIONS_JUDDER                40162
 
 // Dummy option to let the buffered rendering hotkey cycle through all the options.
 #define ID_OPTIONS_BUFFEREDRENDERINGDUMMY 40500
