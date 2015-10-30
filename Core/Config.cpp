@@ -653,7 +653,7 @@ static ConfigSetting vrGameSettings[] = {
 	ReportedConfigSetting("DontDrawScreenSpace", &g_Config.bDontDrawScreenSpace, true, true, true),
 	ReportedConfigSetting("Before3DIsBackground", &g_Config.bBefore3DIsBackground, true, true, true),
 	ReportedConfigSetting("OverrideClearColor", &g_Config.bOverrideClearColor, false, true, true),
-	ReportedConfigSetting("BackgroundColor", &g_Config.iBackgroundColor, 0xFF000000, true, true),
+	ReportedConfigSetting("BackgroundColor", &g_Config.iBackgroundColor, 0x00000000, true, true),
 	ConfigSetting("HudFullscreen", &g_Config.bHudFullscreen, false),
 	ConfigSetting("SelectedLayer", &g_Config.iSelectedLayer, -1),
 	ConfigSetting("FlashState", &g_Config.iFlashState, 0),
