@@ -1175,12 +1175,12 @@ void VR_BruteForceResume()
 		s_fViewTranslationVector[i] = g_Config.BruteForceFreeLook[i];
 
 	int count = 0;
-	for (auto it = symbolMap.activeFunctions.begin(), end = symbolMap.activeFunctions.end(); it != end; ++it) {
+	for (auto it = g_symbolMap->activeFunctions.begin(), end = g_symbolMap->activeFunctions.end(); it != end; ++it) {
 		const SymbolMap::FunctionEntry& entry = it->second;
 		// skip functions with length 4, which are probably just a return and nothing else, and are impossible to patch
 		if (entry.size <= 4)
 			continue;
-		const char* name = symbolMap.GetLabelName(it->first);
+		const char* name = g_symbolMap->GetLabelName(it->first);
 		char temp[2048];
 		if (name != NULL)
 			sprintf(temp, "%s", name);

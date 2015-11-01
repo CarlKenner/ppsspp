@@ -63,6 +63,7 @@ enum {
 	PSP_SAS_EFFECT_TYPE_ECHO = 6,
 	PSP_SAS_EFFECT_TYPE_DELAY = 7,
 	PSP_SAS_EFFECT_TYPE_PIPE = 8,
+	PSP_SAS_EFFECT_TYPE_MAX = 8,
 
 	PSP_SAS_OUTPUTMODE_MIXED = 0,
 	PSP_SAS_OUTPUTMODE_RAW = 1,
@@ -103,6 +104,8 @@ public:
 	bool End() const { return end_; }
 
 	void DoState(PointerWrap &p);
+
+	u32 GetReadPtr() const { return read_; }
 
 private:
 	s16 samples[28];

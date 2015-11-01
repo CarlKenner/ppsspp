@@ -1337,8 +1337,8 @@ const std::string Config::FindDefaultConfigFile(const std::string &baseFilename)
 		return baseFilename;
 	}
 #endif
-
-	const std::string filename = "Sys/GameSettings/" + baseFilename;
+	const std::string &exePath = File::GetExeDirectory();
+	const std::string filename = exePath + "/Sys/GameSettings/" + baseFilename;
 	if (File::Exists(filename)) {
 		return filename;
 	}
