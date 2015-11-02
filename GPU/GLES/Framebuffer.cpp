@@ -550,9 +550,12 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 	// (it always runs at output resolution so FXAA may look odd).
 	float x, y, w, h;
 	int uvRotation = (g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) ? g_Config.iInternalScreenRotation : ROTATION_LOCKED_HORIZONTAL;
-	if (g_Config.bEnableVR && g_has_hmd)
+	if (g_Config.bEnableVR && g_has_hmd) {
 		uvRotation = ROTATION_LOCKED_HORIZONTAL;
-	CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)pixelWidth_, (float)pixelHeight_, uvRotation);
+		CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)renderWidth_, (float)renderHeight_, uvRotation);
+	} else {
+		CenterRect(&x, &y, &w, &h, 480.0f, 272.0f, (float)pixelWidth_, (float)pixelHeight_, uvRotation);
+	}
 	if (applyPostShader) {
 		glsl_bind(postShaderProgram_);
 		UpdatePostShaderUniforms(renderWidth_, renderHeight_);
@@ -561,19 +564,19 @@ void FramebufferManager::DrawFramebuffer(const u8 *srcPixels, GEBufferFormat src
 		// Left Eye Image
 		glstate.viewport.set(0, 0, renderWidth_, renderHeight_);
 		if (applyPostShader && usePostShader_ && useBufferedRendering_) {
-			DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, postShaderProgram_, uvRotation);
+			DrawVirtualScreen(nullptr, 0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, 0, 0);
 		}
 		else {
-			DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
+			DrawVirtualScreen(nullptr, 0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, 0, 0);
 		}
 		if (g_Config.bEnableVR) {
 			// Right Eye Image
 			OGL::VR_RenderToEyebuffer(1);
 			if (applyPostShader && usePostShader_ && useBufferedRendering_) {
-				DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, postShaderProgram_, uvRotation);
+				DrawVirtualScreen(nullptr, 0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, 0, 1);
 			}
 			else {
-				DrawActiveTexture(0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, NULL, uvRotation);
+				DrawVirtualScreen(nullptr, 0, x, y, w, h, (float)renderWidth_, (float)renderHeight_, false, 0.0f, 0.0f, 480.0f / 512.0f, 1.0f, 0, 1);
 			}
 		}
 	}
@@ -733,7 +736,7 @@ void FramebufferManager::DrawActiveTexture(GLuint texture, float x, float y, flo
 }
 
 // Draw a texture to the framebuffer as a 2D virtual screen.
-void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip, float u0, float v0, float u1, float v1, int eye)
+void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint texture, float x, float y, float w, float h, float destW, float destH, bool flip, float u0, float v0, float u1, float v1, int texture_eye, int render_eye)
 {
 	// destW and destH are the width and height of the virtual framebuffer, generally 480x272 or less
 	// w, y, w, and h are the dimensions 
@@ -789,7 +792,7 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 
 	glsl_bind(program);
 	if (program == draw3dprogram_ && eyeLoc_ != -1) {
-		glUniform1i(eyeLoc_, eye);
+		glUniform1i(eyeLoc_, texture_eye);
 	}
 
 	float UnitsPerMetre = g_Config.fUnitsPerMetre / g_Config.fScale;
@@ -803,10 +806,10 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 	hmd_right = temp.transpose();
 	proj_left = hmd_left;
 	proj_right = hmd_right;
-	stereoparams[0] = proj_left.xx;
-	stereoparams[1] = proj_right.xx;
-	stereoparams[2] = proj_left.zx;
-	stereoparams[3] = proj_right.zx;
+	stereoparams[0+render_eye] = proj_left.xx;
+	stereoparams[1-render_eye] = proj_right.xx;
+	stereoparams[2+render_eye] = proj_left.zx;
+	stereoparams[3-render_eye] = proj_right.zx;
 	proj_left.zx = 0;
 	Matrix44 rotation_matrix;
 	Matrix44 lean_back_matrix;
@@ -934,8 +937,8 @@ void FramebufferManager::DrawVirtualScreen(VirtualFramebuffer *vfb, GLuint textu
 		posLeft[i] *= UnitsPerMetre;
 		posRight[i] *= UnitsPerMetre;
 	}
-	stereoparams[0] *= posLeft[0];
-	stereoparams[1] *= posRight[0];
+	stereoparams[0+render_eye] *= posLeft[0];
+	stereoparams[1-render_eye] *= posRight[0];
 
 	Matrix44 view_matrix_left, view_matrix_right;
 	//if (g_Config.backend_info.bSupportsGeometryShaders)
