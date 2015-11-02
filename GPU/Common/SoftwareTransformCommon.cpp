@@ -415,7 +415,7 @@ void SoftwareTransform(
 	// rectangle out of many. Quite a small optimization though.
 	// Experiment: Disable on PowerVR (see issue #6290)
 	// TODO: This bleeds outside the play area in non-buffered mode. Big deal? Probably not.
-	if (maxIndex > 1 && gstate.isModeClear() && prim == GE_PRIM_RECTANGLES && IsReallyAClear(transformed, maxIndex) && gl_extensions.gpuVendor != GPU_VENDOR_POWERVR) {  // && g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) {
+	if (maxIndex > 1 && gstate.isModeClear() && prim == GE_PRIM_RECTANGLES && (IsReallyAClear(transformed, maxIndex) || (g_Config.bEnableVR && g_has_hmd)) && gl_extensions.gpuVendor != GPU_VENDOR_POWERVR) {  // && g_Config.iRenderingMode != FB_NON_BUFFERED_MODE) {
 		result->color = transformed[0].color0_32;
 		result->depth = transformed[0].z;
 		result->action = SW_CLEAR;
