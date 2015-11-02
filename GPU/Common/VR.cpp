@@ -80,6 +80,7 @@ bool g_has_hmd = false, g_has_rift = false, g_has_vr920 = false, g_has_steamvr =
 bool g_is_direct_mode = false;
 bool g_new_tracking_frame = true;
 bool g_new_frame_tracker_for_efb_skip = true;
+bool g_dumpThisFrame = false;
 u32 skip_objects_count = 0;
 Matrix44 g_head_tracking_matrix;
 float g_head_tracking_position[3];

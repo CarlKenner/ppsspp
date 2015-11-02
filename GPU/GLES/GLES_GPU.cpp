@@ -713,9 +713,11 @@ void GLES_GPU::BeginFrameInternal() {
 	if (dumpNextFrame_) {
 		NOTICE_LOG(G3D, "DUMPING THIS FRAME");
 		dumpThisFrame_ = true;
+		g_dumpThisFrame = true;
 		dumpNextFrame_ = false;
 	} else if (dumpThisFrame_) {
 		dumpThisFrame_ = false;
+		g_dumpThisFrame = false;
 	}
 	shaderManager_->DirtyShader();
 

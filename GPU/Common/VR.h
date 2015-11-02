@@ -193,6 +193,7 @@ extern bool g_force_vr, g_prefer_steamvr;
 extern bool g_has_hmd, g_has_rift, g_has_vr920, g_has_steamvr, g_is_direct_mode;
 extern bool g_new_tracking_frame;
 extern bool g_new_frame_tracker_for_efb_skip;
+extern bool g_dumpThisFrame;
 extern unsigned skip_objects_count;
 extern Matrix44 g_head_tracking_matrix;
 extern float g_head_tracking_position[3];

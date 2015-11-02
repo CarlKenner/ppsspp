@@ -784,6 +784,16 @@ rotateVBO:
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
 		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_, false);
 		SetupDecFmtForDraw(program, dec_->GetDecVtxFmt(), vbo ? 0 : decoded);
+		if (g_dumpThisFrame) {
+			if (!gstate.isModeClear() && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+				NOTICE_LOG(VR, "***** Screenspace effect ****");
+			}
+			if (g_is_skyplane) {
+				NOTICE_LOG(VR, "***** Sky Rectangle ****");
+			}
+			const char *zTestFuncs[] = { "NEVER", "ALWAYS", " == ", " != ", " < ", " <= ", " > ", " >= " };
+			NOTICE_LOG(VR, "@@@ Z: %4X..%4X, ZTest:%d  %s, ZWrite:%d centre=%5.3f, scale=%5.3f", gstate.getDepthRangeMin(), gstate.getDepthRangeMax(), gstate.isDepthTestEnabled(), zTestFuncs[gstate.getDepthTestFunction()], gstate.isDepthWriteEnabled(), gstate.getViewportZCenter(), gstate.getViewportZScale());
+		}
 		if (!DontDraw) {
 			if (g_Config.bHudOnTop)
 				ApplyDepthState(m_layer_on_top);
@@ -853,6 +863,16 @@ rotateVBO:
 
 		Shader *gshader = shaderManager_->ApplyGeometryShader(prim, lastVType_);
 		LinkedShader *program = shaderManager_->ApplyFragmentShader(vshader, gshader, prim, lastVType_, result.action != SW_DRAW_PRIMITIVES);
+		if (g_dumpThisFrame) {
+			if (!gstate.isModeClear() && textureCache_ && textureCache_->nextTexture_ && textureCache_->nextTexture_->framebuffer) {
+				NOTICE_LOG(VR, "***** Screenspace effect ****");
+			}
+			if (g_is_skyplane) {
+				NOTICE_LOG(VR, "***** Sky Rectangle ****");
+			}
+			const char *zTestFuncs[] = { "NEVER", "ALWAYS", " == ", " != ", " < ", " <= ", " > ", " >= " };
+			NOTICE_LOG(VR, "@@@ Z: %4X..%4X, ZTest:%d  %s, ZWrite:%d centre=%5.3f, scale=%5.3f", gstate.getDepthRangeMin(), gstate.getDepthRangeMax(), gstate.isDepthTestEnabled(), zTestFuncs[gstate.getDepthTestFunction()], gstate.isDepthWriteEnabled(), gstate.getViewportZCenter(), gstate.getViewportZScale());
+		}
 
 		if (result.action == SW_DRAW_PRIMITIVES) {
 			if (result.setStencil) {
@@ -876,19 +896,21 @@ rotateVBO:
 					switch (gstate.getDepthTestFunction()) {
 					case GE_COMP_GREATER:
 					case GE_COMP_GEQUAL:
-						glstate.depthRange.set(gstate.getDepthRangeMin() / 65535.0, gstate.getDepthRangeMin() / 65535.0);
+						if (gstate.isClearModeDepthMask())
+							glstate.depthRange.set(0.0, 0.0);
+						else
+							glstate.depthRange.set(gstate.getDepthRangeMin() / 65535.0, gstate.getDepthRangeMin() / 65535.0);
 						break;
 					case GE_COMP_LESS:
 					case GE_COMP_LEQUAL:
-						glstate.depthRange.set(gstate.getDepthRangeMax() / 65535.0, gstate.getDepthRangeMax() / 65535.0);
+						if (gstate.isClearModeDepthMask())
+							glstate.depthRange.set(1.0, 1.0);
+						else
+							glstate.depthRange.set(gstate.getDepthRangeMax() / 65535.0, gstate.getDepthRangeMax() / 65535.0);
 						break;
 					}
 					glEnable(GL_DEPTH_CLAMP);
 					glstate.depthFunc.set(GL_ALWAYS);
-					//ELOG("Draw Skyplane");
-				}
-				else {
-					//ELOG("Draw");
 				}
 				if (drawIndexed) {
 					glDrawElements(glprim[prim], numTrans, GL_UNSIGNED_SHORT, inds);
