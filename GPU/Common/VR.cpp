@@ -1172,6 +1172,7 @@ void VR_BruteForceResume()
 	g_Config.bVSync = false;
 	g_Config.bEnableLogging = false;
 	PSP_CoreParameter().unthrottle = true;
+	PSP_CoreParameter().fpsLimit = 1;
 	for (int i = 0; i < 3; ++i)
 		s_fViewTranslationVector[i] = g_Config.BruteForceFreeLook[i];
 
@@ -1264,6 +1265,7 @@ void VR_BruteForceRestoreSettings()
 	g_Config.iAnisotropyLevel = g_Config.BruteForce_iAnisotropyLevel;
 	g_Config.iTexScalingLevel = g_Config.BruteForce_iTexScalingLevel;
 	PSP_CoreParameter().unthrottle = false;
+	PSP_CoreParameter().fpsLimit = 0;
 	g_Config.Save();
 }
 
