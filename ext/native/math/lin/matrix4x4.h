@@ -31,21 +31,21 @@ public:
 		float data[16];
 	};
 
-	const Vec3 right() const {return Vec3(xx, xy, xz);}
-	const Vec3 up()		const {return Vec3(yx, yy, yz);}
-	const Vec3 front() const {return Vec3(zx, zy, zz);}
-	const Vec3 move()	const {return Vec3(wx, wy, wz);}
+	const ::Vec3 right() const {return ::Vec3(xx, xy, xz);}
+	const ::Vec3 up()		const {return ::Vec3(yx, yy, yz);}
+	const ::Vec3 front() const {return ::Vec3(zx, zy, zz);}
+	const ::Vec3 move()	const {return ::Vec3(wx, wy, wz);}
 
-	void setRight(const Vec3 &v) {
+	void setRight(const ::Vec3 &v) {
 		xx = v.x; xy = v.y; xz = v.z;
 	}
-	void setUp(const Vec3 &v) {
+	void setUp(const ::Vec3 &v) {
 		yx = v.x; yy = v.y; yz = v.z;
 	}
-	void setFront(const Vec3 &v) {
+	void setFront(const ::Vec3 &v) {
 		zx = v.x; zy = v.y; zz = v.z;
 	}
-	void setMove(const Vec3 &v) {
+	void setMove(const ::Vec3 &v) {
 		wx = v.x; wy = v.y; wz = v.z;
 	}
 
@@ -71,7 +71,7 @@ public:
 		empty();
 		xx=yy=zz=f; ww=1.0f;
 	}
-	void setScaling(const Vec3 f) {
+	void setScaling(const ::Vec3 f) {
 		empty();
 		xx=f.x;
 		yy=f.y;
@@ -82,13 +82,13 @@ public:
 	void setIdentity() {
 		setScaling(1.0f);
 	}
-	void setTranslation(const Vec3 &trans) {
+	void setTranslation(const ::Vec3 &trans) {
 		setIdentity();
 		wx = trans.x;
 		wy = trans.y;
 		wz = trans.z;
 	}
-	void setTranslationAndScaling(const Vec3 &trans, const Vec3 &scale) {
+	void setTranslationAndScaling(const ::Vec3 &trans, const ::Vec3 &scale) {
 		setScaling(scale);
 		wx = trans.x;
 		wy = trans.y;
@@ -126,7 +126,7 @@ public:
 		zz = 1.0f; 
 		ww = 1.0f;
 	}
-	void setRotationAxisAngle(const Vec3 &axis, float angle);
+	void setRotationAxisAngle(const ::Vec3 &axis, float angle);
 
 
 	void setRotation(float x,float y, float z);
@@ -149,9 +149,9 @@ public:
 		wx=Pd * Lx;			wy=Pd * Ly;		 wz=Pd * Lz;		 ww=Pd * Lw + d;
 	}
 
-	void setViewLookAt(const Vec3 &from, const Vec3 &at, const Vec3 &worldup);
-	void setViewLookAtD3D(const Vec3 &from, const Vec3 &at, const Vec3 &worldup);
-	void setViewFrame(const Vec3 &pos, const Vec3 &right, const Vec3 &forward, const Vec3 &up);
+	void setViewLookAt(const ::Vec3 &from, const ::Vec3 &at, const ::Vec3 &worldup);
+	void setViewLookAtD3D(const ::Vec3 &from, const ::Vec3 &at, const ::Vec3 &worldup);
+	void setViewFrame(const ::Vec3 &pos, const ::Vec3 &right, const ::Vec3 &forward, const ::Vec3 &up);
 	void stabilizeOrtho() {
 		/*
 		front().normalize();
@@ -164,9 +164,9 @@ public:
 	bool getOpenGLProjection(float *l, float *r, float *b, float *t, float *zNear, float *zFar, float *hfov, float *vfov, bool *lefthanded) const;
 	void toOpenGL(char *buffer, int len) const;
 	void print() const;
-	static Matrix4x4 fromPRS(const Vec3 &position, const Quaternion &normal, const Vec3 &scale);
+	static Matrix4x4 fromPRS(const ::Vec3 &position, const Quaternion &normal, const ::Vec3 &scale);
 
-	void translateAndScale(const Vec3 &trans, const Vec3 &scale) {
+	void translateAndScale(const ::Vec3 &trans, const ::Vec3 &scale) {
 		xx = xx * scale.x + xw * trans.x;
 		xy = xy * scale.y + xw * trans.y;
 		xz = xz * scale.z + xw * trans.z;
@@ -182,6 +182,11 @@ public:
 		wx = wx * scale.x + ww * trans.x;
 		wy = wy * scale.y + ww * trans.y;
 		wz = wz * scale.z + ww * trans.z;
+	}
+
+	void flipAxis(int axis) {
+		for (int row = 0; row < 4; ++row)
+			m[4 * row + axis] = -m[4 * row + axis];
 	}
 public:
 	static void LoadIdentity(Matrix4x4 &mtx);
@@ -208,17 +213,17 @@ public:
 		float data[9];
 	};
 
-	const Vec3 right() const { return Vec3(xx, xy, xz); }
-	const Vec3 up()		const { return Vec3(yx, yy, yz); }
-	const Vec3 front() const { return Vec3(zx, zy, zz); }
+	const ::Vec3 right() const { return ::Vec3(xx, xy, xz); }
+	const ::Vec3 up()		const { return ::Vec3(yx, yy, yz); }
+	const ::Vec3 front() const { return ::Vec3(zx, zy, zz); }
 
-	void setRight(const Vec3 &v) {
+	void setRight(const ::Vec3 &v) {
 		xx = v.x; xy = v.y; xz = v.z;
 	}
-	void setUp(const Vec3 &v) {
+	void setUp(const ::Vec3 &v) {
 		yx = v.x; yy = v.y; yz = v.z;
 	}
-	void setFront(const Vec3 &v) {
+	void setFront(const ::Vec3 &v) {
 		zx = v.x; zy = v.y; zz = v.z;
 	}
 
@@ -248,7 +253,7 @@ public:
 		empty();
 		xx = yy = zz = f;
 	}
-	void setScaling(const Vec3 f) {
+	void setScaling(const ::Vec3 f) {
 		empty();
 		xx = f.x;
 		yy = f.y;
@@ -287,13 +292,17 @@ public:
 		yx = -s;	 yy = c;
 		zz = 1.0f;
 	}
-	void setRotationAxisAngle(const Vec3 &axis, float angle);
+	void setRotationAxisAngle(const ::Vec3 &axis, float angle);
 	void setRotation(float x, float y, float z);
 
 	void toText(char *buffer, int len) const;
 	void print() const;
-	static Matrix3x3 fromPRS(const Vec3 &position, const Quaternion &normal, const Vec3 &scale);
+	static Matrix3x3 fromPRS(const ::Vec3 &position, const Quaternion &normal, const ::Vec3 &scale);
 
+	void flipAxis(int axis) {
+		for (int row = 0; row < 3; ++row)
+			m[3 * row + axis] = -m[3 * row + axis];
+	}
 public:
 	static void LoadIdentity(Matrix3x3 &mtx);
 	static void LoadQuaternion(Matrix3x3 &mtx, const Quaternion &quat);

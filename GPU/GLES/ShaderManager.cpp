@@ -845,29 +845,19 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 		}
 	}
 	if (!gstate.isModeThrough() && !isClear && (dirty & DIRTY_PROJMATRIX || bFreeLookChanged || (bFrameChanged && g_Config.bEnableVR && g_has_hmd))) {
+		Matrix4x4 flippedMatrix;
 		if (g_Config.bEnableVR && g_has_hmd) {
-			Matrix4x4 flippedMatrix = SetProjectionConstants(gstate.projMatrix, dirty & DIRTY_PROJMATRIX, false);
-			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m); 
+			flippedMatrix = SetProjectionConstants(gstate.projMatrix, dirty & DIRTY_PROJMATRIX, false);
 			//bProjectionChanged = false;
-		}
-		else {
-			Matrix4x4 flippedMatrix;
+		} else {
 			memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 
 			const bool invertedY = gstate_c.vpHeight < 0;
-			if (invertedY) {
-				flippedMatrix.xy = -flippedMatrix.xy;
-				flippedMatrix.yy = -flippedMatrix.yy;
-				flippedMatrix.zy = -flippedMatrix.zy;
-				flippedMatrix.wy = -flippedMatrix.wy;
-			}
+			if (invertedY)
+				flippedMatrix.flipAxis(1);
 			const bool invertedX = gstate_c.vpWidth < 0;
-			if (invertedX) {
-				flippedMatrix.xx = -flippedMatrix.xx;
-				flippedMatrix.yx = -flippedMatrix.yx;
-				flippedMatrix.zx = -flippedMatrix.zx;
-				flippedMatrix.wx = -flippedMatrix.wx;
-			}
+			if (invertedX)
+				flippedMatrix.flipAxis(0);
 
 			// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
 			// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
@@ -913,9 +903,11 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 				ScaleProjMatrix(flippedMatrix);
 				flippedMatrix = free_look_matrix * flippedMatrix;
 			}
-
-			glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 		}
+		bool useBufferedRendering = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE;
+		if (useBufferedRendering)
+			flippedMatrix.flipAxis(1);
+		glUniformMatrix4fv(u_proj, 1, GL_FALSE, flippedMatrix.m);
 		dirtyUniforms &= ~DIRTY_PROJMATRIX;
 	}
 	else if (skybox_changed && g_Config.bEnableVR && g_has_hmd)
@@ -927,17 +919,14 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 	if (gstate.isModeThrough() && !isClear && (dirty & DIRTY_PROJTHROUGHMATRIX || (bFrameChanged && g_Config.bEnableVR && g_has_hmd)))
 	{
 		Matrix4x4 proj_through;
-		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0, 0.0f, 1.0f);
+		proj_through.setOrtho(0.0f, gstate_c.curRTWidth, gstate_c.curRTHeight, 0.0f, 0.0f, 1.0f);
 		//DEBUG_LOG(VR, "proj_through: (%d, %d) to (%d, %d), %g to %g", 0, 0, gstate_c.curRTWidth, gstate_c.curRTHeight, 0.0f, 1.0f);
 		if (g_Config.bEnableVR && g_has_hmd)
-		{
-			Matrix4x4 flippedMatrix = SetProjectionConstants(proj_through.m, false, true);
-			glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, flippedMatrix.m);
-		}
-		else
-		{
-			glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, proj_through.m);
-		}
+			proj_through = SetProjectionConstants(proj_through.m, false, true);
+		bool useBufferedRendering = g_Config.iRenderingMode != FB_NON_BUFFERED_MODE;
+		if (useBufferedRendering)
+			proj_through.flipAxis(1);
+		glUniformMatrix4fv(u_proj_through, 1, GL_FALSE, proj_through.m);
 		dirtyUniforms &= ~DIRTY_PROJTHROUGHMATRIX;
 	}
 	bFrameChanged = false;
@@ -1067,19 +1056,11 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 
 	if (!isThrough) {
 		const bool invertedY = gstate_c.vpHeight < 0;
-		if (invertedY) {
-			flippedMatrix.xy = -flippedMatrix.xy;
-			flippedMatrix.yy = -flippedMatrix.yy;
-			flippedMatrix.zy = -flippedMatrix.zy;
-			flippedMatrix.wy = -flippedMatrix.wy;
-		}
+		if (invertedY)
+			flippedMatrix.flipAxis(1);
 		const bool invertedX = gstate_c.vpWidth < 0;
-		if (invertedX) {
-			flippedMatrix.xx = -flippedMatrix.xx;
-			flippedMatrix.yx = -flippedMatrix.yx;
-			flippedMatrix.zx = -flippedMatrix.zx;
-			flippedMatrix.wx = -flippedMatrix.wx;
-		}
+		if (invertedX) 
+			flippedMatrix.flipAxis(0);
 	}
 
 	// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,

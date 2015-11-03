@@ -78,7 +78,7 @@ public:
 	void operator *=(const Matrix4x4 &m) {
 		*this = *this * m;
 	}
-	Vec4 multiply4D(const Matrix4x4 &m) const;
+	::Vec4 multiply4D(const Matrix4x4 &m) const;
 	Vec3 rotatedBy(const Matrix4x4 &m) const;
 	Vec3 operator %(const Vec3 &v) const {
 		return Vec3(y*v.z-z*v.y, z*v.x-x*v.z, x*v.y-y*v.x);
@@ -120,26 +120,26 @@ public:
 	}
 };
 
-inline Vec3 operator * (const float f, const Vec3 &v) {return v * f;}
+inline ::Vec3 operator * (const float f, const ::Vec3 &v) {return v * f;}
 
 // In new code, prefer these to the operators.
 
-inline float dot(const Vec3 &a, const Vec3 &b) {
+inline float dot(const ::Vec3 &a, const ::Vec3 &b) {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-inline Vec3 cross(const Vec3 &a, const Vec3 &b) {
+inline ::Vec3 cross(const ::Vec3 &a, const ::Vec3 &b) {
 	return a % b;
 }
 
-inline float sqr(const Vec3 &v) {
+inline float sqr(const ::Vec3 &v) {
 	return dot(v, v);
 }
 
 class AABBox {
 public:
-	Vec3 min;
-	Vec3 max;
+	::Vec3 min;
+	::Vec3 max;
 };
 
-#endif	// _MATH_LIN_VEC3
+#endif	// _MATH_LIN_::Vec3
