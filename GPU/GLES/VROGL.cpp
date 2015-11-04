@@ -31,7 +31,7 @@
 
 #ifdef _WIN32
 #ifndef _XBOX
-#include "Windows/OpenGLBase.h"
+#include "Windows/GPU/WindowsGLContext.h"
 #endif
 #endif
 

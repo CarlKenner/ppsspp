@@ -37,7 +37,7 @@
 #if defined(_WIN32)
 #include "Windows/DSoundStream.h"
 #include "Windows/MainWindow.h"
-#include "Windows/D3D9Base.h"
+#include "Windows/GPU/D3D9Context.h"
 #include "Windows/W32Util/Misc.h"
 #endif
 
@@ -130,6 +130,7 @@ std::string config_filename;
 
 #ifdef IOS
 bool iosCanUseJit;
+bool targetIsJailbroken;
 #endif
 
 // Really need to clean this mess of globals up... but instead I add more :P

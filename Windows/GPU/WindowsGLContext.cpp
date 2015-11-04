@@ -31,7 +31,7 @@
 #include "UI/OnScreenDisplay.h"
 
 #include "Windows/W32Util/Misc.h"
-#include "Windows/OpenGLBase.h"
+#include "Windows/GPU/WindowsGLContext.h"
 
 
 HDC hDC;     // Private GDI Device Context
