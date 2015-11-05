@@ -852,7 +852,7 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 		} else {
 			memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
 
-			const bool invertedY = gstate_c.vpHeight < 0;
+			const bool invertedY = gstate_c.vpHeight > 0;
 			if (invertedY)
 				flippedMatrix.flipAxis(1);
 			const bool invertedX = gstate_c.vpWidth < 0;
@@ -1055,7 +1055,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 	bool isPerspective = flippedMatrix.zw == -1.0f || flippedMatrix.zw == 1.0f;
 
 	if (!isThrough) {
-		const bool invertedY = gstate_c.vpHeight < 0;
+		const bool invertedY = gstate_c.vpHeight > 0;
 		if (invertedY)
 			flippedMatrix.flipAxis(1);
 		const bool invertedX = gstate_c.vpWidth < 0;
@@ -2150,6 +2150,8 @@ std::vector<std::string> ShaderManager::DebugGetShaderIDs(DebugShaderType type) 
 				ids.push_back(id);
 			}
 		}
+		break;
+	default:
 		break;
 	}
 	return ids;

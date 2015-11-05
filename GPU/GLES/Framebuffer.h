@@ -125,7 +125,7 @@ public:
 	struct CardboardSettings * GetCardboardSettings(struct CardboardSettings * cardboardSettings);
 
 	void UpdateHeadTrackingIfNeeded();
-	virtual void ClearBuffer() override;
+	virtual void ClearBuffer(bool keepState = false) override;
 protected:
 	virtual void DisableState() override;
 	virtual void ClearDepthBuffer() override;
