@@ -1,6 +1,7 @@
 #include "Core/Config.h"
 #include "UI/OnScreenDisplay.h"
 #include "UI/ui_atlas.h"
+#include "GPU/Common/BruteForce.h"
 
 #include "base/colorutil.h"
 #include "base/timeutil.h"
@@ -55,7 +56,7 @@ restart:
 }
 
 void OnScreenMessages::Show(const std::string &text, float duration_s, uint32_t color, int icon, bool checkUnique, const char *id) {
-	if (g_Config.bBruteForcing)
+	if (g_bruteforcing)
 		return;
 	double now = time_now_d();
 	std::lock_guard<std::recursive_mutex> guard(mutex_);

@@ -501,6 +501,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	g_Config.bEnableLogging = true;
 #endif
 	if (g_Config.bBruteForcing) {
+		g_bruteforcing = true;
 		boot_filename = g_Config.sBruteForceFileName;
 		PSP_CoreParameter().unthrottle = true;
 	}

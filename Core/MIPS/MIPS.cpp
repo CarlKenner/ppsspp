@@ -34,8 +34,7 @@
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/MIPS/JitCommon/NativeJit.h"
 #include "Core/CoreTiming.h"
-
-extern bool g_bruteforcing;
+#include "GPU/Common/BruteForce.h"
 
 MIPSState mipsr4k;
 MIPSState *currentMIPS = &mipsr4k;

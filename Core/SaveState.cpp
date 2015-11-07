@@ -546,7 +546,7 @@ namespace SaveState
 			{
 			case SAVESTATE_LOAD:
 				++LoadCountThisSession;
-				if (g_Config.bBruteForcing) {
+				if (g_bruteforcing) {
 					size_t sz;
 					result = CChunkFileReader::ERROR_NONE;
 					if (!MemorySaveState) {
@@ -578,7 +578,7 @@ namespace SaveState
 			case SAVESTATE_SAVE:
 				delete[] MemorySaveState;
 				MemorySaveState = nullptr;
-				if (!g_Config.bBruteForcing)
+				if (!g_bruteforcing)
 					INFO_LOG(COMMON, "Saving state to %s", op.filename.c_str());
 				result = CChunkFileReader::Save(op.filename, REVISION, PPSSPP_GIT_VERSION, state);
 				if (result == CChunkFileReader::ERROR_NONE) {

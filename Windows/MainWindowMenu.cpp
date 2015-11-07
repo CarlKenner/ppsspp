@@ -14,6 +14,7 @@
 #include "GPU/GLES/TextureScaler.h"
 #include "GPU/GLES/TextureCache.h"
 #include "UI/OnScreenDisplay.h"
+#include "GPU/Common/BruteForce.h"
 #include "GPU/Common/PostShader.h"
 #include "GPU/Common/VR.h"
 #include "GPU/GLES/Framebuffer.h"

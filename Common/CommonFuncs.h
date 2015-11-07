@@ -19,6 +19,7 @@
 
 #include "base/compat.h"
 #include "CommonTypes.h"
+#include "../GPU/Common/BruteForce.h"
 
 #if defined(IOS) || defined(MIPS)
 #include <signal.h>

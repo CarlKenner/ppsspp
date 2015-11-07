@@ -18,11 +18,10 @@
 #include "Common.h" // Local
 #include "StringUtils.h"
 #include "util/text/utf8.h"
+#include "../GPU/Common/BruteForce.h"
 #include <string>
 
 bool MsgHandler(const char* caption, const char* text, bool yes_no, int Style);
-
-extern bool g_bruteforcing;
 
 static bool AlertEnabled = true;
 

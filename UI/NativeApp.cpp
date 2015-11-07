@@ -81,6 +81,7 @@
 #include "Core/HLE/sceCtrl.h"
 #include "Core/Util/GameManager.h"
 #include "Core/Util/AudioFormat.h"
+#include "GPU/Common/BruteForce.h"
 #include "GPU/GLES/VROGL.h"
 #include "GPU/GPU.h"
 

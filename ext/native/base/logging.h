@@ -5,6 +5,7 @@
 #include "base/arch.h"
 #include "base/backtrace.h"
 #include "base/compat.h"
+#include "../../GPU/Common/BruteForce.h"
 
 // Simple wrapper around Android's logging interface that also allows other
 // implementations, and also some misc utilities.
@@ -17,9 +18,6 @@
 #undef Crash
 
 #include <stdio.h>
-
-extern bool g_bruteforcing;
-void VR_BruteForceCrash(bool outofmemory);
 
 // Logging
 #ifdef _WIN32

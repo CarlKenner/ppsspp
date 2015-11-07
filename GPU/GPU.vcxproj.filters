@@ -212,6 +212,9 @@
     <ClInclude Include="Common\OculusSystemLibraryHeader.h">
       <Filter>Common</Filter>
     </ClInclude>
+    <ClInclude Include="Common\BruteForce.h">
+      <Filter>Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Math3D.cpp">
@@ -406,6 +409,9 @@
       <Filter>GLES</Filter>
     </ClCompile>
     <ClCompile Include="Common\OculusSystemLibraryHeader.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\BruteForce.cpp">
       <Filter>Common</Filter>
     </ClCompile>
   </ItemGroup>

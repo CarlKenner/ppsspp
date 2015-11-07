@@ -208,6 +208,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\ext\xbrz\xbrz.h" />
+    <ClInclude Include="Common\BruteForce.h" />
     <ClInclude Include="Common\DepalettizeShaderCommon.h" />
     <ClInclude Include="Common\DrawEngineCommon.h" />
     <ClInclude Include="Common\FramebufferCommon.h" />
@@ -279,6 +280,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\ext\xbrz\xbrz.cpp" />
+    <ClCompile Include="Common\BruteForce.cpp" />
     <ClCompile Include="Common\DepalettizeShaderCommon.cpp" />
     <ClCompile Include="Common\DrawEngineCommon.cpp" />
     <ClCompile Include="Common\FramebufferCommon.cpp" />
