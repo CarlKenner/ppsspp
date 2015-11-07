@@ -51,6 +51,7 @@
 #include "GPU/Common/PostShader.h"
 #include "GPU/Common/TextureDecoder.h"
 #include "GPU/Common/VR.h"
+#include "GPU/Common/VROculus.h"
 #include "GPU/Debugger/Stepping.h"
 #include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/FBO.h"
@@ -117,14 +118,14 @@ struct TextureBuffer
 			if (!OVR_SUCCESS(res = ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, size.w, size.h, &TextureSet))) {
 				ovrErrorInfo e;
 				ovr_GetLastErrorInfo(&e);
-				PanicAlert("ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, %d, %d)=%d failed%s\n%s", size.w, size.h, res, SCM_OCULUS_STR, e.ErrorString);
+				PanicAlert("ovr_CreateSwapTextureSetGL(hmd, GL_SRGB8_ALPHA8, %d, %d)=%d failed%s\n%s", size.w, size.h, res, g_vr_sdk_version_string.c_str(), e.ErrorString);
 				return;				
 			}
 #else
 			if (!OVR_SUCCESS(res = ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, size.w, size.h, &TextureSet))) {
 				ovrErrorInfo e;
 				ovr_GetLastErrorInfo(&e);
-				PanicAlert("ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, %d, %d)=%d failed%s\n%s", size.w, size.h, res, SCM_OCULUS_STR, e.ErrorString);
+				PanicAlert("ovrHmd_CreateSwapTextureSetGL(hmd, GL_RGBA, %d, %d)=%d failed%s\n%s", size.w, size.h, res, g_vr_sdk_version_string.c_str(), e.ErrorString);
 				return;
 			}
 #endif
@@ -216,7 +217,7 @@ struct TextureBuffer
 	void SetAndClearRenderSurface()
 	{
 		int WriteIndex;
-		if (g_asyc_timewarp_active)
+		if (g_vr_asyc_timewarp_active)
 			WriteIndex = (TextureSet->CurrentIndex + 1) % TextureSet->TextureCount;
 		else
 			WriteIndex = TextureSet->CurrentIndex;
@@ -838,24 +839,24 @@ void VR_BeginFrame()
 	if (g_has_rift)
 	{
 #if OVR_MAJOR_VERSION >= 6
-		//++g_ovr_frameindex;
+		//++g_vr_frame_index;
 		// On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture 
 #if OVR_MAJOR_VERSION <= 7
 		//g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
 #endif
-		if (!g_asyc_timewarp_active) {
+		if (!g_vr_asyc_timewarp_active) {
 			lock_guard guard(AsyncTimewarpLock);
 			for (int eye = 0; eye < 2; eye++)
 			{
 				// Increment to use next texture, just before writing
 				eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
-				eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+				eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = ((ovrPosef *)g_eye_poses)[eye];
 			}
 		}
 #else
 		ovrHmd_DismissHSWDisplay(hmd);
 		GL_CHECK();
-		g_rift_frame_timing = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
+		g_rift_frame_timing = ovrHmd_BeginFrame(hmd, ++g_vr_frame_index);
 #endif
 	}
 #endif
@@ -875,7 +876,7 @@ void VR_BeginGUI()
 #if OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
-		if (!g_asyc_timewarp_active) {
+		if (!g_vr_asyc_timewarp_active) {
 			guiRenderTexture->TextureSet->CurrentIndex = (guiRenderTexture->TextureSet->CurrentIndex + 1) % guiRenderTexture->TextureSet->TextureCount;
 		}
 #if OVR_MAJOR_VERSION <= 7
@@ -905,7 +906,7 @@ void VR_EndGUI()
 	if (g_has_rift)
 	{
 		lock_guard guard(AsyncTimewarpLock);
-		if (g_asyc_timewarp_active) {
+		if (g_vr_asyc_timewarp_active) {
 			glFlush();
 			glFinish();
 			if (vr_gui_valid)
@@ -1063,7 +1064,7 @@ void VR_DoPresentHMDFrame(bool valid)
 		oldOrientationTracking = g_Config.bOrientationTracking;
 		oldMagYawCorrection = g_Config.bMagYawCorrection;
 	}
-	if (g_asyc_timewarp_active)
+	if (g_vr_asyc_timewarp_active)
 		return;
 #ifdef HAVE_OPENVR
 	if (m_pCompositor)
@@ -1101,12 +1102,12 @@ void VR_DoPresentHMDFrame(bool valid)
 		//ovrHmd_EndEyeRender(hmd, ovrEye_Left, g_left_eye_pose, &FramebufferManager::m_eye_texture[ovrEye_Left].Texture);
 		//ovrHmd_EndEyeRender(hmd, ovrEye_Right, g_right_eye_pose, &FramebufferManager::m_eye_texture[ovrEye_Right].Texture);
 #if OVR_MAJOR_VERSION <= 5
-		if (!g_asyc_timewarp_active) {
+		if (!g_vr_asyc_timewarp_active) {
 			// Let OVR do distortion rendering, Present and flush/sync.
 			if (s_frame_eye_poses)
 				ovrHmd_EndFrame(hmd, s_frame_eye_poses, &g_eye_texture[0].Texture);
 			else
-				ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+				ovrHmd_EndFrame(hmd, (ovrPosef *)g_eye_poses, &g_eye_texture[0].Texture);
 		}		
 		if (g_Config.bSynchronousTimewarp)
 		{
@@ -1120,7 +1121,7 @@ void VR_DoPresentHMDFrame(bool valid)
 		}
 #else
 		RecreateMirrorTextureIfNeeded();
-		if (!g_asyc_timewarp_active) {
+		if (!g_vr_asyc_timewarp_active) {
 			PresentFrameSDK6();
 			if (g_Config.bSynchronousTimewarp) {
 				tcount += timewarps;
@@ -1151,7 +1152,7 @@ void VR_DoPresentHMDFrame(bool valid)
 #endif
 }
 
-void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
+void VR_PresentHMDFrame(bool valid, VRPose *frame_eye_poses, int frame_index)
 {
 	float vps, f_fps, actual_fps;
 	__DisplayGetFPS(&vps, &f_fps, &actual_fps);
@@ -1160,7 +1161,7 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 	int refresh = g_hmd_refresh_rate;
 	int newfps = (int)(f_fps + 0.5f);
 	int fps;
-	if (g_asyc_timewarp_active) {
+	if (g_vr_asyc_timewarp_active) {
 		oldfps = 0;
 		reals = 1;
 		timewarps = 0;
@@ -1258,7 +1259,7 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 		lock_guard guard(AsyncTimewarpLock);
 		g_new_tracking_frame = true;
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
-		if (g_asyc_timewarp_active) {
+		if (g_vr_asyc_timewarp_active) {
 			// swap front and back buffers
 			for (int eye = 0; eye < 2; eye++) {
 				if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet)
@@ -1269,16 +1270,16 @@ void VR_PresentHMDFrame(bool valid, ovrPosef *frame_eye_poses, int frame_index)
 		{
 			if (eyeRenderTexture[eye] && eyeRenderTexture[eye]->TextureSet) {
 				if (frame_eye_poses)
-					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_eye_poses[eye];
+					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = ((ovrPosef *)frame_eye_poses)[eye];
 				else
-					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = g_eye_poses[eye];
+					eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = ((ovrPosef *)g_eye_poses)[eye];
 				eyeRenderTexture[eye]->frame_index[eyeRenderTexture[eye]->TextureSet->CurrentIndex] = frame_index;
 				eyeRenderTexture[eye]->UnsetRenderSurface();
 			}
 		}
 #else
 		// this could become invalid by the end of the function, but so far we are only using it inside this function
-		s_frame_eye_poses = frame_eye_poses;
+		s_frame_eye_poses = (ovrPosef *)frame_eye_poses;
 #endif
 	}
 	else
@@ -1319,18 +1320,18 @@ void VR_DrawTimewarpFrame()
 	{
 #if OVR_MAJOR_VERSION <= 5
 		ovrFrameTiming frameTime;
-		frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
+		frameTime = ovrHmd_BeginFrame(hmd, ++g_vr_frame_index);
 
 		ovr_WaitTillTime(frameTime.TimewarpPointSeconds - g_Config.fTimeWarpTweak);
 
 		if (s_frame_eye_poses)
 			ovrHmd_EndFrame(hmd, s_frame_eye_poses, &g_eye_texture[0].Texture);
 		else
-			ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+			ovrHmd_EndFrame(hmd, (ovrPosef *)g_eye_poses, &g_eye_texture[0].Texture);
 #else
 #if OVR_MAJOR_VERSION <= 7
 		ovrFrameTiming frameTime;
-		++g_ovr_frameindex;
+		++g_vr_frame_index;
 		// On Oculus SDK 0.6.0 and above, we get the frame timing manually
 		frameTime = ovrHmd_GetFrameTiming(hmd, 0);
 #endif
@@ -1369,7 +1370,7 @@ void VRThread();
 void VRThread_Start()
 {
 	lock_guard guard(vrThreadLock);
-	if (!vrThread && g_can_async_timewarp)
+	if (!vrThread && g_vr_can_async_timewarp)
 	{
 		start_vr_thread_event = CreateEvent(NULL, FALSE, FALSE, NULL);
 		wait_for_vr_thread_event = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -1542,13 +1543,13 @@ void VRThread()
 	_InterlockedExchange(&vrThreadReady, THREAD_CORE_LOOP);
 	while (!s_stop_vr_thread)
 	{
-		g_asyc_timewarp_active = g_Config.bAsynchronousTimewarp && g_can_async_timewarp;
-		if (g_asyc_timewarp_active)
+		g_vr_asyc_timewarp_active = g_Config.bAsynchronousTimewarp && g_vr_can_async_timewarp;
+		if (g_vr_asyc_timewarp_active)
 			VR_DrawAsyncTimewarpFrame();
 		else
 			Sleep(1000);
 	}
-	g_asyc_timewarp_active = false;
+	g_vr_asyc_timewarp_active = false;
 	_InterlockedExchange(&vrThreadReady, THREAD_SHUTDOWN);
 
 	// cleanup

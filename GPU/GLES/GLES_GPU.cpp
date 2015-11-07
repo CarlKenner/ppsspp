@@ -643,7 +643,7 @@ void GLES_GPU::BeginFrame() {
 
 inline void GLES_GPU::UpdateVsyncInterval(bool force) {
 #ifdef _WIN32
-	int desiredVSyncInterval = (g_Config.bVSync && !g_has_rift) ? 1 : 0;
+	int desiredVSyncInterval = (g_Config.bVSync && !g_vr_dont_vsync) ? 1 : 0;
 	if (PSP_CoreParameter().unthrottle) {
 		desiredVSyncInterval = 0;
 	}

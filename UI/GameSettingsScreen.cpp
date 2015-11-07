@@ -360,7 +360,7 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new ItemHeader(gr->T("All games")));
 	vrSettings->Add(new CheckBox(&g_Config.bEnableVR, gr->T("Enable VR")));
 	vrSettings->Add(new CheckBox(&g_Config.bSynchronousTimewarp, gr->T("Synchronous timewarp")));
-	if (g_can_async_timewarp)
+	if (g_vr_can_async_timewarp)
 		vrSettings->Add(new CheckBox(&g_Config.bAsynchronousTimewarp, gr->T("Asynchronous timewarp")));
 	vrSettings->Add(new CheckBox(&g_Config.bDisableNearClipping, gr->T("Disable Near Clipping")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fScale, 0.001f, 100.0f, gr->T("Scale"), 0.01f, screenManager(), "x lifesize"));
@@ -378,26 +378,23 @@ void GameSettingsScreen::CreateViews() {
 	vrSettings->Add(new CheckBox(&g_Config.bKeyholeSnap, gr->T("Keyhole Snap")));
 	vrSettings->Add(new PopupSliderChoiceFloat(&g_Config.fKeyholeSnapSize, 10.0f, 120.0f, gr->T("Keyhole Snap Size"), 1.0f, screenManager(), "degrees"));
 
-#ifdef OVR_MAJOR_VERSION
-#if	OVR_MAJOR_VERSION >= 5 || (OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION >= 2)
-	vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
-#endif
-#if OVR_MAJOR_VERSION <= 6
-	vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
-	vrSettings->Add(new CheckBox(&g_Config.bDynamicPrediction, gr->T("Dynamic prediction")));
-#endif
-#endif
+	if (g_vr_has_hq_distortion)
+		vrSettings->Add(new CheckBox(&g_Config.bHqDistortion, gr->T("HQ distortion")));
+	if (!g_vr_cant_motion_blur && !g_vr_must_motion_blur)
+		vrSettings->Add(new CheckBox(&g_Config.bLowPersistence, gr->T("Low persistence")));
+	if (g_vr_has_dynamic_predict)
+		vrSettings->Add(new CheckBox(&g_Config.bDynamicPrediction, gr->T("Dynamic prediction")));
 	vrSettings->Add(new CheckBox(&g_Config.bOrientationTracking, gr->T("Orientation tracking")));
 	vrSettings->Add(new CheckBox(&g_Config.bMagYawCorrection, gr->T("Magnetic yaw")));
 	vrSettings->Add(new CheckBox(&g_Config.bPositionTracking, gr->T("Position tracking")));
-#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION <= 5
-	vrSettings->Add(new CheckBox(&g_Config.bChromatic, gr->T("Chromatic aberration")));
-	vrSettings->Add(new CheckBox(&g_Config.bTimewarp, gr->T("Timewarp")));
-	vrSettings->Add(new CheckBox(&g_Config.bVignette, gr->T("Vignette")));
-	//vrSettings->Add(new CheckBox(&g_Config.bNoRestore, gr->T("Don't restore")));
-	vrSettings->Add(new CheckBox(&g_Config.bSRGB, gr->T("sRGB")));
-	vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
-#endif
+	if (g_vr_has_configure_rendering) {
+		vrSettings->Add(new CheckBox(&g_Config.bChromatic, gr->T("Chromatic aberration")));
+		vrSettings->Add(new CheckBox(&g_Config.bTimewarp, gr->T("Timewarp")));
+		vrSettings->Add(new CheckBox(&g_Config.bVignette, gr->T("Vignette")));
+		//vrSettings->Add(new CheckBox(&g_Config.bNoRestore, gr->T("Don't restore")));
+		vrSettings->Add(new CheckBox(&g_Config.bSRGB, gr->T("sRGB")));
+		vrSettings->Add(new CheckBox(&g_Config.bOverdrive, gr->T("Overdrive")));
+	}
 	vrSettings->Add(new CheckBox(&g_Config.bFlipVertical, gr->T("Flip vertical")));
 	vrSettings->Add(new CheckBox(&g_Config.bNoMirrorToWindow, gr->T("No mirror window")));
 

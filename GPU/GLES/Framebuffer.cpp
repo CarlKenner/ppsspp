@@ -152,7 +152,7 @@ static const char color_vs[] =
 	"  gl_Position = a_position;\n"
 	"}\n";
 
-static bool g_first_rift_frame = true;
+static bool g_first_vr_frame = true;
 
 void ConvertFromRGBA8888(u8 *dst, const u8 *src, u32 dstStride, u32 srcStride, u32 width, u32 height, GEBufferFormat format);
 
@@ -1379,9 +1379,9 @@ void FramebufferManager::CopyDisplayToOutput() {
 	//lock_guard guard(OGL::AsyncTimewarpLock);
 	if (g_has_hmd)
 	{
-		if (g_first_rift_frame && g_has_hmd)
+		if (g_first_vr_frame && g_has_hmd)
 		{
-			g_first_rift_frame = false;
+			g_first_vr_frame = false;
 
 			VR_ConfigureHMDPrediction();
 			VR_ConfigureHMDTracking();
@@ -2478,11 +2478,9 @@ bool FramebufferManager::GetStencilbuffer(u32 fb_address, int fb_stride, GPUDebu
 
 void FramebufferManager::UpdateHeadTrackingIfNeeded() {
 	::UpdateHeadTrackingIfNeeded();
-#ifdef OVR_MAJOR_VERSION
 	if (currentRenderVfb_) {
 		currentRenderVfb_->vr_eye_poses[0] = g_eye_poses[0];
 		currentRenderVfb_->vr_eye_poses[1] = g_eye_poses[1];
-		currentRenderVfb_->vr_frame_index = g_ovr_frameindex;
+		currentRenderVfb_->vr_frame_index = g_vr_frame_index;
 	}
-#endif
 }

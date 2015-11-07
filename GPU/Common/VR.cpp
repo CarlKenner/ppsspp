@@ -28,6 +28,7 @@
 #include "Core/CoreParameter.h"
 #include "Core/System.h"
 #include "GPU/Common/VR.h"
+#include "GPU/Common/VROculus.h"
 
 #ifdef HAVE_OPENVR
 #include <openvr.h>
@@ -45,6 +46,8 @@ int m_iValidPoseCount;
 
 void ClearDebugProj();
 
+VRPose g_eye_poses[2], g_front_eye_poses[2];
+
 #ifdef OVR_MAJOR_VERSION
 ovrHmd hmd = nullptr;
 ovrHmdDesc hmdDesc;
@@ -53,8 +56,7 @@ ovrEyeRenderDesc g_eye_render_desc[2];
 #if OVR_MAJOR_VERSION <= 7
 ovrFrameTiming g_rift_frame_timing;
 #endif
-ovrPosef g_eye_poses[2], g_front_eye_poses[2];
-long long g_ovr_frameindex;
+long long g_vr_frame_index;
 #if OVR_MAJOR_VERSION >= 7
 ovrGraphicsLuid luid;
 #endif
@@ -66,6 +68,35 @@ LUID *g_hmd_luid = nullptr;
 
 std::mutex g_vr_lock;
 
+#ifdef HAVE_OCULUSSDK
+#ifdef HAVE_OPENVR
+#define SCM_OCULUS_STR ", Oculus SDK " OVR_VERSION_STRING " or SteamVR"
+#else
+#define SCM_OCULUS_STR ", Oculus SDK " OVR_VERSION_STRING
+#endif
+#else
+#if defined(_WIN32) && defined(OVR_MAJOR_VERSION)
+#ifdef HAVE_OPENVR
+#define SCM_OCULUS_STR ", for Oculus DLL " OVR_VERSION_STRING " or SteamVR"
+#else
+#define SCM_OCULUS_STR ", for Oculus DLL " OVR_VERSION_STRING
+#endif
+#else
+#ifdef HAVE_OPENVR
+#define SCM_OCULUS_STR ", SteamVR"
+#else
+#define SCM_OCULUS_STR ", no Oculus SDK"
+#endif
+#endif
+#endif
+
+std::string g_vr_sdk_version_string = SCM_OCULUS_STR;
+
+bool g_vr_cant_motion_blur = false, g_vr_must_motion_blur = false;
+bool g_vr_has_dynamic_predict = true, g_vr_has_configure_rendering = true, g_vr_has_hq_distortion = true;
+bool g_vr_should_swap_buffers = true, g_vr_dont_vsync = false;
+bool g_vr_can_async_timewarp = false;
+volatile bool g_vr_asyc_timewarp_active = false;
 bool g_force_vr = false, g_prefer_steamvr = false;
 bool g_has_hmd = false, g_has_rift = false, g_has_vr920 = false, g_has_steamvr = false;
 bool g_is_direct_mode = false;
@@ -96,8 +127,6 @@ float s_fViewTranslationVector[3] = { 0, 0, 0 };
 float s_fViewRotation[2] = { 0, 0 };
 bool bProjectionChanged = false;
 bool bFreeLookChanged = false;
-bool g_can_async_timewarp = false;
-volatile bool g_asyc_timewarp_active = false;
 
 ControllerStyle vr_left_controller = CS_HYDRA_LEFT, vr_right_controller = CS_HYDRA_RIGHT;
 
@@ -112,6 +141,10 @@ int skipped_opcode_replay_count = 0;
 #ifdef _WIN32
 static char hmd_device_name[MAX_PATH] = "";
 #endif
+
+bool VR_ShouldUnthrottle() {
+	return g_has_rift && !g_vr_asyc_timewarp_active && g_Config.bSynchronousTimewarp;
+}
 
 void VR_NewVRFrame()
 {
@@ -233,8 +266,14 @@ bool InitSteamVR()
 				g_has_steamvr = false;
 			}
 		}
-		if (g_has_steamvr)
-			g_can_async_timewarp = false;
+		if (g_has_steamvr) {
+			g_vr_can_async_timewarp = false;
+			g_vr_cant_motion_blur = true;
+			g_vr_has_dynamic_predict = false;
+			g_vr_has_configure_rendering = false;
+			g_vr_has_hq_distortion = false;
+			g_vr_should_swap_buffers = true; // todo: check if this is right
+		}
 		return g_has_steamvr;
 	}
 #endif
@@ -254,7 +293,7 @@ bool InitOculusDebugVR()
 		hmd = ovrHmd_CreateDebug(ovrHmd_DK2);
 #endif
 		if (hmd != nullptr)
-			g_can_async_timewarp = false;
+			g_vr_can_async_timewarp = false;
 
 		return (hmd != nullptr);
 	}
@@ -267,15 +306,36 @@ bool InitOculusHMD()
 #ifdef OVR_MAJOR_VERSION
 	if (hmd)
 	{
+
+		g_vr_dont_vsync = true;
+#if OVR_MAJOR_VERSION >= 5 || (OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION >= 2)
+		g_vr_has_hq_distortion = true;
+#else
+		g_vr_has_hq_distortion = false;
+#endif
+#if OVR_MAJOR_VERSION <= 5
+		g_vr_should_swap_buffers = false;
+#else
+		g_vr_should_swap_buffers = true;
+#endif
+
 		// Get more details about the HMD
 		//ovrHmd_GetDesc(hmd, &hmdDesc);
 #if OVR_MAJOR_VERSION >= 7
+		g_vr_cant_motion_blur = true;
+		g_vr_has_dynamic_predict = false;
+		g_vr_has_configure_rendering = false;
 		hmdDesc = ovr_GetHmdDesc(hmd);
 		ovr_SetEnabledCaps(hmd, ovrHmd_GetEnabledCaps(hmd) | 0);
 #else
+		g_vr_cant_motion_blur = false;
+		g_vr_has_dynamic_predict = true;
+		g_vr_has_configure_rendering = true;
 		hmdDesc = *hmd;
 		ovrHmd_SetEnabledCaps(hmd, ovrHmd_GetEnabledCaps(hmd) | ovrHmdCap_DynamicPrediction | ovrHmdCap_LowPersistence);
 #endif
+
+
 
 #if OVR_MAJOR_VERSION >= 6
 		if (OVR_SUCCESS(ovrHmd_ConfigureTracking(hmd, ovrTrackingCap_Orientation | ovrTrackingCap_Position | ovrTrackingCap_MagYawCorrection, 0)))
@@ -285,6 +345,7 @@ bool InitOculusHMD()
 		{
 			g_has_rift = true;
 			g_has_hmd = true;
+			g_vr_must_motion_blur = hmdDesc.Type <= ovrHmd_DK1;
 			g_hmd_window_width = hmdDesc.Resolution.w;
 			g_hmd_window_height = hmdDesc.Resolution.h;
 			g_best_eye_fov[0] = hmdDesc.DefaultEyeFov[0];
@@ -359,17 +420,17 @@ bool InitOculusVR()
 		g_hmd_luid = reinterpret_cast<LUID*>(&luid);
 #endif
 	if (hmd != nullptr)
-		g_can_async_timewarp = !g_Config.bNoAsyncTimewarp;
+		g_vr_can_async_timewarp = !g_Config.bNoAsyncTimewarp;
 #elif OVR_MAJOR_VERSION >= 6
 	ovr_Initialize(nullptr);
 	if (ovrHmd_Create(0, &hmd) != ovrSuccess)
 		hmd = nullptr;
 	if (hmd != nullptr)
-		g_can_async_timewarp = !g_Config.bNoAsyncTimewarp;
+		g_vr_can_async_timewarp = !g_Config.bNoAsyncTimewarp;
 #else
 	ovr_Initialize();
 	hmd = ovrHmd_Create(0);
-	g_can_async_timewarp = false;
+	g_vr_can_async_timewarp = false;
 #endif
 
 	if (!hmd)
@@ -392,8 +453,13 @@ bool InitVR920VR()
 		// Todo: find vr920
 		g_hmd_window_x = 0;
 		g_hmd_window_y = 0;
-		g_can_async_timewarp = false;
+		g_vr_can_async_timewarp = false;
 		g_hmd_refresh_rate = 60; // or 30, depending on how we implement it
+		g_vr_must_motion_blur = true;
+		g_vr_has_dynamic_predict = false;
+		g_vr_has_configure_rendering = false;
+		g_vr_has_hq_distortion = false;
+		g_vr_should_swap_buffers = true;
 		return true;
 	}
 #endif
@@ -407,8 +473,9 @@ void InitVR()
 	g_is_direct_mode = false;
 	g_hmd_device_name = nullptr;
 	g_has_steamvr = false;
-	g_can_async_timewarp = false;
-	g_asyc_timewarp_active = false;
+	g_vr_can_async_timewarp = false;
+	g_vr_asyc_timewarp_active = false;
+	g_vr_dont_vsync = false;
 #ifdef _WIN32
 	g_hmd_luid = nullptr;
 #endif
@@ -467,7 +534,7 @@ void VR_StopRendering()
 
 void ShutdownVR()
 {
-	g_can_async_timewarp = false;
+	g_vr_can_async_timewarp = false;
 #ifdef HAVE_OPENVR
 	if (g_has_steamvr && m_pHMD)
 	{
@@ -563,16 +630,16 @@ void VR_GetEyePoses()
 	if (g_has_rift)
 	{
 #ifdef OCULUSSDK042
-		g_eye_poses[ovrEye_Left] = ovrHmd_GetEyePose(hmd, ovrEye_Left);
-		g_eye_poses[ovrEye_Right] = ovrHmd_GetEyePose(hmd, ovrEye_Right);
+		((ovrPosef*)g_eye_poses)[ovrEye_Left] = ovrHmd_GetEyePose(hmd, ovrEye_Left);
+		((ovrPosef*)g_eye_poses)[ovrEye_Right] = ovrHmd_GetEyePose(hmd, ovrEye_Right);
 #else
 		ovrVector3f useHmdToEyeViewOffset[2] = { g_eye_render_desc[0].HmdToEyeViewOffset, g_eye_render_desc[1].HmdToEyeViewOffset };
 #if OVR_MAJOR_VERSION >= 7
 #if OVR_MAJOR_VERSION <= 7
-		ovr_GetEyePoses(hmd, g_ovr_frameindex, useHmdToEyeViewOffset, g_eye_poses, nullptr);
+		ovr_GetEyePoses(hmd, g_vr_frame_index, useHmdToEyeViewOffset, (ovrPosef *)g_eye_poses, nullptr);
 #endif
 #else
-		ovrHmd_GetEyePoses(hmd, g_ovr_frameindex, useHmdToEyeViewOffset, g_eye_poses, nullptr);
+		ovrHmd_GetEyePoses(hmd, g_vr_frame_index, useHmdToEyeViewOffset, (ovrPosef *)g_eye_poses, nullptr);
 #endif
 #endif
 	}
@@ -622,30 +689,30 @@ void UpdateOculusHeadTracking()
 	// On Oculus SDK 0.6 and above, we start the next frame the first time we read the head tracking.
 	// On SDK 0.5 and below, this is done in BeginFrame instead.
 #if OVR_MAJOR_VERSION >= 6
-	++g_ovr_frameindex;
+	++g_vr_frame_index;
 #endif
 	// we can only call GetEyePose between BeginFrame and EndFrame
 #ifdef OCULUSSDK042
 	g_vr_lock.lock();
-	g_eye_poses[ovrEye_Left] = ovrHmd_GetEyePose(hmd, ovrEye_Left);
-	g_eye_poses[ovrEye_Right] = ovrHmd_GetEyePose(hmd, ovrEye_Right);
+	((ovrPosef*)g_eye_poses)[ovrEye_Left] = ovrHmd_GetEyePose(hmd, ovrEye_Left);
+	((ovrPosef*)g_eye_poses)[ovrEye_Right] = ovrHmd_GetEyePose(hmd, ovrEye_Right);
 	g_vr_lock.unlock();
-	OVR::Posef pose = g_eye_poses[ovrEye_Left];
+	OVR::Posef pose = ((ovrPosef*)g_eye_poses)[ovrEye_Left];
 #else
 	ovrVector3f useHmdToEyeViewOffset[2] = { g_eye_render_desc[0].HmdToEyeViewOffset, g_eye_render_desc[1].HmdToEyeViewOffset };
 #if OVR_MAJOR_VERSION >= 8
-	double display_time = ovr_GetPredictedDisplayTime(hmd, g_ovr_frameindex);
+	double display_time = ovr_GetPredictedDisplayTime(hmd, g_vr_frame_index);
 	ovrTrackingState state = ovr_GetTrackingState(hmd, display_time, false);
-	ovr_CalcEyePoses(state.HeadPose.ThePose, useHmdToEyeViewOffset, g_eye_poses);
+	ovr_CalcEyePoses(state.HeadPose.ThePose, useHmdToEyeViewOffset, (ovrPosef *)g_eye_poses);
 	OVR::Posef pose = state.HeadPose.ThePose;
 #elif OVR_MAJOR_VERSION >= 6
-	ovrFrameTiming timing = ovrHmd_GetFrameTiming(hmd, g_ovr_frameindex);
+	ovrFrameTiming timing = ovrHmd_GetFrameTiming(hmd, g_vr_frame_index);
 	ovrTrackingState state = ovrHmd_GetTrackingState(hmd, timing.DisplayMidpointSeconds);
-	ovr_CalcEyePoses(state.HeadPose.ThePose, useHmdToEyeViewOffset, g_eye_poses);
+	ovr_CalcEyePoses(state.HeadPose.ThePose, useHmdToEyeViewOffset, (ovrPosef *)g_eye_poses);
 	OVR::Posef pose = state.HeadPose.ThePose;
 #else
-	ovrHmd_GetEyePoses(hmd, g_ovr_frameindex, useHmdToEyeViewOffset, g_eye_poses, nullptr);
-	OVR::Posef pose = g_eye_poses[ovrEye_Left];
+	ovrHmd_GetEyePoses(hmd, g_vr_frame_index, useHmdToEyeViewOffset, (ovrPosef *)g_eye_poses, nullptr);
+	OVR::Posef pose = ((ovrPosef *)g_eye_poses)[ovrEye_Left];
 #endif
 #endif
 	//ovrTrackingState ss = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.ScanoutMidpointSeconds);

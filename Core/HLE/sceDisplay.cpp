@@ -481,7 +481,7 @@ void __DisplaySetWasPaused() {
 }
 
 static bool FrameTimingThrottled() {
-	if (g_has_rift && !g_asyc_timewarp_active && g_Config.bSynchronousTimewarp)
+	if (VR_ShouldUnthrottle())
 		return false;
 	if (PSP_CoreParameter().fpsLimit == FPS_LIMIT_CUSTOM && g_Config.iFpsLimit == 0)
 		return false;

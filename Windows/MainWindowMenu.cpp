@@ -1001,29 +1001,30 @@ namespace MainWindow {
 		// Disable Vertex Cache when HW T&L is disabled.
 		if (!g_Config.bHardwareTransform) {
 			EnableMenuItem(menu, ID_OPTIONS_VERTEXCACHE, MF_GRAYED);
-		} else {
+		}
+		else {
 			EnableMenuItem(menu, ID_OPTIONS_VERTEXCACHE, MF_ENABLED);
 		}
 
 		// VR Judder Prevention
-		if (!g_can_async_timewarp) {
+		if (!g_vr_can_async_timewarp) {
 			EnableMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP, MF_GRAYED);
-		} else {
+		}
+		else {
 			EnableMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP, MF_ENABLED);
 		}
-#if OVR_MAJOR_VERSION >= 7
-		EnableMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_GRAYED);
-#endif
-		if (g_has_rift && hmdDesc.Type <= ovrHmd_DK1) {
+		if (g_vr_cant_motion_blur) {
+			EnableMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_GRAYED);
+		} else if (g_vr_must_motion_blur) {
 			EnableMenuItem(menu, ID_OPTIONS_JUDDER, MF_GRAYED);
 		} else {
 			EnableMenuItem(menu, ID_OPTIONS_JUDDER, MF_ENABLED);
 		}
-		if (!g_Config.bLowPersistence && g_has_rift && hmdDesc.Type > ovrHmd_DK1)
+		if (!g_Config.bLowPersistence && !g_vr_must_motion_blur)
 			CheckMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_BYCOMMAND | MF_CHECKED);
 		else
 			CheckMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_BYCOMMAND | MF_UNCHECKED);
-		if (g_Config.bAsynchronousTimewarp && g_can_async_timewarp) {
+		if (g_Config.bAsynchronousTimewarp && g_vr_can_async_timewarp) {
 			CheckMenuItem(menu, ID_OPTIONS_ASYNCTIMEWARP, MF_BYCOMMAND | MF_CHECKED);
 			CheckMenuItem(menu, ID_OPTIONS_SYNCTIMEWARP, MF_BYCOMMAND | MF_UNCHECKED);
 			CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_UNCHECKED);
@@ -1039,10 +1040,13 @@ namespace MainWindow {
 				if (PSP_CoreParameter().fpsLimit == 1) {
 					CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_CHECKED);
 					CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_UNCHECKED);
-				} else if (!g_Config.bLowPersistence && g_has_rift && hmdDesc.Type > ovrHmd_DK1) {
+				} else if (!g_Config.bLowPersistence || g_vr_must_motion_blur) {
 					CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_UNCHECKED);
 					CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_UNCHECKED);
-				} else {
+					if (g_vr_must_motion_blur)
+						CheckMenuItem(menu, ID_OPTIONS_MOTIONBLUR, MF_BYCOMMAND | MF_CHECKED);
+				}
+				else {
 					CheckMenuItem(menu, ID_OPTIONS_UNLOCKSPEED, MF_BYCOMMAND | MF_UNCHECKED);
 					CheckMenuItem(menu, ID_OPTIONS_JUDDER, MF_BYCOMMAND | MF_CHECKED);
 				}

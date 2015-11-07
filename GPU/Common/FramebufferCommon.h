@@ -26,10 +26,6 @@
 #include "GPU/Common/VR.h"
 #include "GPU/ge_constants.h"
 
-#ifndef OVR_MAJOR_VERSION
-typedef int ovrPosef;
-#endif
-
 enum {
 	FB_USAGE_DISPLAYED_FRAMEBUFFER = 1,
 	FB_USAGE_RENDERTARGET = 2,
@@ -97,7 +93,7 @@ struct VirtualFramebuffer {
 
 	// We need to record what angle the framebuffer was rendered from so timewarp can work correctly,
 	// even if this framebuffer was last rendered to several frames ago.
-	ovrPosef vr_eye_poses[2];
+	VRPose vr_eye_poses[2];
 	int vr_frame_index;
 };
 

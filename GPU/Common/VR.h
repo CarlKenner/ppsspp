@@ -29,7 +29,6 @@ const int DEFAULT_VR_EXTRA_VIDEO_LOOPS = 0;
 const int DEFAULT_VR_EXTRA_VIDEO_LOOPS_DIVIDER = 0;
 
 #ifdef __INTELLISENSE__
-//#define HAVE_OCULUSSDK
 //#define HAVE_OPENVR
 //#define HAVE_OSVR
 #endif
@@ -37,64 +36,6 @@ const int DEFAULT_VR_EXTRA_VIDEO_LOOPS_DIVIDER = 0;
 #ifdef _WIN32
 #include <windows.h>
 #undef max
-#endif
-
-#ifdef HAVE_OCULUSSDK
-#include "OVR_Version.h"
-#if OVR_MAJOR_VERSION <= 4
-#include "Kernel/OVR_Types.h"
-#else
-#define OCULUSSDK044ORABOVE
-#define OVR_DLL_BUILD
-#endif
-#include "OVR_CAPI.h"
-#if OVR_MAJOR_VERSION >= 5
-#include "Extras/OVR_Math.h"
-#else
-#include "Kernel/OVR_Math.h"
-
-// Detect which version of the Oculus SDK we are using
-#if OVR_MINOR_VERSION >= 4
-#if OVR_BUILD_VERSION >= 4
-#define OCULUSSDK044ORABOVE
-#elif OVR_BUILD_VERSION >= 3
-#define OCULUSSDK043
-#else
-#define OCULUSSDK042
-#endif
-#else
-Error, Oculus SDK 0.3.x is no longer supported
-#endif
-
-extern "C"
-{
-	void ovrhmd_EnableHSWDisplaySDKRender(ovrHmd hmd, ovrBool enabled);
-}
-#endif
-
-#ifdef HAVE_OPENVR
-#define SCM_OCULUS_STR ", Oculus SDK " OVR_VERSION_STRING " or SteamVR"
-#else
-#define SCM_OCULUS_STR ", Oculus SDK " OVR_VERSION_STRING
-#endif
-#else
-#ifdef _WIN32
-#include "OculusSystemLibraryHeader.h"
-#define OCULUSSDK044ORABOVE
-#endif
-#if defined(_WIN32) && defined(OVR_MAJOR_VERSION)
-#ifdef HAVE_OPENVR
-#define SCM_OCULUS_STR ", for Oculus DLL " OVR_VERSION_STRING " or SteamVR"
-#else
-#define SCM_OCULUS_STR ", for Oculus DLL " OVR_VERSION_STRING
-#endif
-#else
-#ifdef HAVE_OPENVR
-#define SCM_OCULUS_STR ", SteamVR"
-#else
-#define SCM_OCULUS_STR ", no Oculus SDK"
-#endif
-#endif
 #endif
 
 #ifdef HAVE_OPENVR
@@ -169,6 +110,7 @@ void VR_GetProjectionHalfTan(float &hmd_halftan);
 void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar, bool isOpenGL);
 void VR_GetEyePos(float *posLeft, float *posRight);
 void VR_GetFovTextureSize(int *width, int *height);
+bool VR_ShouldUnthrottle();
 
 void VR_SetGame(bool is_wii, bool is_nand, std::string id);
 bool VR_GetLeftHydraPos(float *pos);
@@ -182,6 +124,12 @@ void TranslateView(float left_metres, float forward_metres, float down_metres = 
 void RotateView(float x, float y);
 void ScaleView(float scale);
 void ResetView();
+
+extern bool g_vr_cant_motion_blur, g_vr_must_motion_blur;
+extern bool g_vr_has_dynamic_predict, g_vr_has_configure_rendering, g_vr_has_hq_distortion;
+extern bool g_vr_should_swap_buffers, g_vr_dont_vsync;
+extern bool g_vr_can_async_timewarp;
+extern volatile bool g_vr_asyc_timewarp_active;
 
 extern bool g_force_vr, g_prefer_steamvr;
 extern bool g_has_hmd, g_has_rift, g_has_vr920, g_has_steamvr, g_is_direct_mode;
@@ -202,8 +150,6 @@ extern float this_frame_widest_HFOV, this_frame_widest_VFOV, this_frame_widest_z
 extern float g_game_camera_pos[3];
 extern Matrix44 g_game_camera_rotmat;
 extern float s_fViewTranslationVector[3];
-extern bool g_can_async_timewarp;
-extern volatile bool g_asyc_timewarp_active;
 
 //Opcode Replay Buffer
 extern bool g_opcode_replay_enabled;
@@ -216,7 +162,13 @@ extern int skipped_opcode_replay_count;
 
 extern std::atomic<unsigned> g_drawn_vr;
 
+extern std::string g_vr_sdk_version_string;
+
 extern bool debug_nextScene;
+
+typedef struct {
+	float qx, qy, qz, qw, x, y, z;
+} VRPose;
 
 #ifdef HAVE_OPENVR
 extern vr::IVRSystem *m_pHMD;
@@ -230,34 +182,8 @@ extern bool m_rbShowTrackedDevice[vr::k_unMaxTrackedDeviceCount];
 extern int m_iValidPoseCount;
 #endif
 
-#ifdef OVR_MAJOR_VERSION
-extern ovrHmd hmd;
-extern ovrHmdDesc hmdDesc;
-extern ovrFovPort g_eye_fov[2];
-extern ovrEyeRenderDesc g_eye_render_desc[2];
-#if OVR_MAJOR_VERSION <= 7
-extern ovrFrameTiming g_rift_frame_timing;
-#endif
-extern ovrPosef g_eye_poses[2], g_front_eye_poses[2];
-extern long long g_ovr_frameindex;
-#endif
-
-#if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 7
-#define ovrHmd_GetFrameTiming ovr_GetFrameTiming
-#define ovrHmd_SubmitFrame ovr_SubmitFrame
-#define ovrHmd_GetRenderDesc ovr_GetRenderDesc
-#define ovrHmd_DestroySwapTextureSet ovr_DestroySwapTextureSet
-#define ovrHmd_DestroyMirrorTexture ovr_DestroyMirrorTexture
-#define ovrHmd_SetEnabledCaps ovr_SetEnabledCaps
-#define ovrHmd_GetEnabledCaps ovr_GetEnabledCaps
-#define ovrHmd_ConfigureTracking ovr_ConfigureTracking
-#define ovrHmd_RecenterPose ovr_RecenterPose
-#define ovrHmd_Destroy ovr_Destroy
-#define ovrHmd_GetFovTextureSize ovr_GetFovTextureSize
-#define ovrHmd_GetFloat ovr_GetFloat
-#define ovrHmd_SetBool ovr_SetBool
-#define ovrHmd_GetTrackingState ovr_GetTrackingState
-#endif
+extern VRPose g_eye_poses[2], g_front_eye_poses[2];
+extern long long g_vr_frame_index;
 
 #ifdef _WIN32
 extern LUID *g_hmd_luid;
