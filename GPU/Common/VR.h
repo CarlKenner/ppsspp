@@ -38,10 +38,6 @@ const int DEFAULT_VR_EXTRA_VIDEO_LOOPS_DIVIDER = 0;
 #undef max
 #endif
 
-#ifdef HAVE_OPENVR
-#include <openvr.h>
-#endif
-
 #include <atomic>
 
 // Maths
@@ -119,19 +115,6 @@ typedef struct {
 } VRPose;
 extern VRPose g_eye_poses[2];
 extern long long g_vr_frame_index;
-
-// OpenVR
-#ifdef HAVE_OPENVR
-extern vr::IVRSystem *m_pHMD;
-extern vr::IVRRenderModels *m_pRenderModels;
-extern vr::IVRCompositor *m_pCompositor;
-extern std::string m_strDriver;
-extern std::string m_strDisplay;
-extern vr::TrackedDevicePose_t m_rTrackedDevicePose[vr::k_unMaxTrackedDeviceCount];
-extern bool m_bUseCompositor;
-extern bool m_rbShowTrackedDevice[vr::k_unMaxTrackedDeviceCount];
-extern int m_iValidPoseCount;
-#endif
 
 // Used internally by VROGL.cpp
 void VR_ConfigureHMDTracking();

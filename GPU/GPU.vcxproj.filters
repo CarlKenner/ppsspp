@@ -218,6 +218,9 @@
     <ClInclude Include="Common\VROculus.h">
       <Filter>Common</Filter>
     </ClInclude>
+    <ClInclude Include="Common\VROpenVR.h">
+      <Filter>Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Math3D.cpp">

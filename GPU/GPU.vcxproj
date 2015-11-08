@@ -234,6 +234,7 @@
     <ClInclude Include="Common\VR.h" />
     <ClInclude Include="Common\VR920.h" />
     <ClInclude Include="Common\VROculus.h" />
+    <ClInclude Include="Common\VROpenVR.h" />
     <ClInclude Include="Debugger\Breakpoints.h" />
     <ClInclude Include="Debugger\Stepping.h" />
     <ClInclude Include="Directx9\DepalettizeShaderDX9.h" />

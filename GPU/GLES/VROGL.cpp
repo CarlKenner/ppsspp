@@ -54,6 +54,7 @@
 #include "GPU/Common/TextureDecoder.h"
 #include "GPU/Common/VR.h"
 #include "GPU/Common/VROculus.h"
+#include "GPU/Common/VROpenVR.h"
 #include "GPU/Debugger/Stepping.h"
 #include "GPU/GLES/GLStateCache.h"
 #include "GPU/GLES/FBO.h"

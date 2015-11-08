@@ -29,10 +29,9 @@
 #include "Core/System.h"
 #include "GPU/Common/VR.h"
 #include "GPU/Common/VROculus.h"
+#include "GPU/Common/VROpenVR.h"
 
 #ifdef HAVE_OPENVR
-#include <openvr.h>
-
 vr::IVRSystem *m_pHMD;
 vr::IVRRenderModels *m_pRenderModels;
 vr::IVRCompositor *m_pCompositor;
