@@ -524,7 +524,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	InitCommonControlsEx(&comm);
 	timeBeginPeriod(1);
 
-	InitVR();
+	VR_Init();
 
 	MainWindow::Init(_hInstance);
 
@@ -623,7 +623,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	g_Config.Save();
 	g_gameInfoCache.Clear();
 	g_gameInfoCache.Shutdown();
-	ShutdownVR();
+	VR_Shutdown();
 	LogManager::Shutdown();
 
 	if (g_Config.bRestartRequired) {

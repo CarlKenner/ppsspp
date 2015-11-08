@@ -31,6 +31,8 @@
 
 #ifdef _WIN32
 #ifndef _XBOX
+#include <windows.h>
+#include "GPU/Common/VR920.h"
 #include "Windows/GPU/WindowsGLContext.h"
 #endif
 #endif
@@ -62,6 +64,9 @@
 #include "GPU/GLES/VROGL.h"
 
 // Oculus Rift
+#ifdef HAVE_OCULUSSDK
+#include "OVR_CAPI_GL.h"
+#endif
 #ifdef OVR_MAJOR_VERSION
 ovrGLTexture g_eye_texture[2];
 #endif
@@ -676,7 +681,12 @@ void VR_StopGUI()
 
 void VR_StartFramebuffer(int target_width, int target_height)
 {
-	GL_CHECK();
+	if (g_has_hmd)
+	{
+		VR_ConfigureHMDPrediction();
+		VR_ConfigureHMDTracking();
+		VR_ConfigureHMD();
+	}
 	m_eyeFramebuffer[0] = 0;
 	m_eyeFramebuffer[1] = 0;
 	m_frontBuffer[0] = 0;
@@ -823,6 +833,13 @@ void VR_StopFramebuffer()
 
 void VR_BeginFrame()
 {
+	if (g_first_vr_frame && g_has_hmd)
+	{
+		g_first_vr_frame = false;
+
+		VR_ConfigureHMDPrediction();
+		VR_ConfigureHMDTracking();
+	}
 	//GL_CHECK();
 	//glFlush();
 	//GL_CHECK();
@@ -866,6 +883,13 @@ static bool began_gui = false, has_gui = false, last_frame_had_gui = false;
 
 void VR_BeginGUI()
 {
+	if (g_first_vr_frame && g_has_hmd)
+	{
+		g_first_vr_frame = false;
+
+		VR_ConfigureHMDPrediction();
+		VR_ConfigureHMDTracking();
+	}
 	if (began_gui) {
 		lock_guard guard(AsyncTimewarpLock);
 		VR_RenderToGUI();

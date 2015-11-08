@@ -44,132 +44,83 @@ const int DEFAULT_VR_EXTRA_VIDEO_LOOPS_DIVIDER = 0;
 
 #include <atomic>
 
+// Maths
 #include "math/lin/matrix4x4.h"
 #include "math/math_util.h"
-
 #include "GPU/Math3D.h"
-
 typedef Matrix4x4 Matrix44;
 typedef Matrix3x3 Matrix33;
-
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 #define RADIANS_TO_DEGREES(rad) ((float) rad * (float) (180.0 / M_PI))
 #define DEGREES_TO_RADIANS(deg) ((float) deg * (float) (M_PI / 180.0))
-//#define RECURSIVE_OPCODE
-#define INLINE_OPCODE
 
-typedef enum
-{
-	CS_HYDRA_LEFT,
-	CS_HYDRA_RIGHT,
-	CS_PSP_LEFT,
-	CS_PSP_RIGHT,
-
-	CS_WIIMOTE,
-	CS_NUNCHUK,
-	CS_WIIMOTE_LEFT,
-	CS_WIIMOTE_RIGHT,
-	CS_CLASSIC_LEFT,
-	CS_CLASSIC_RIGHT,
-	CS_GC_LEFT,
-	CS_GC_RIGHT,
-	CS_N64_LEFT,
-	CS_N64_RIGHT,
-	CS_SNES_LEFT,
-	CS_SNES_RIGHT,
-	CS_SNES_NTSC_RIGHT,
-	CS_NES_LEFT,
-	CS_NES_RIGHT,
-	CS_FAMICON_LEFT,
-	CS_FAMICON_RIGHT,
-	CS_SEGA_LEFT,
-	CS_SEGA_RIGHT,
-	CS_GENESIS_LEFT,
-	CS_GENESIS_RIGHT,
-	CS_TURBOGRAFX_LEFT,
-	CS_TURBOGRAFX_RIGHT,
-	CS_PCENGINE_LEFT,
-	CS_PCENGINE_RIGHT,
-	CS_ARCADE_LEFT,
-	CS_ARCADE_RIGHT
-} ControllerStyle;
-
-void InitVR();
+// Main emulator interface
+void VR_Init();
 void VR_StopRendering();
-void ShutdownVR();
+void VR_Shutdown();
 void VR_RecenterHMD();
-void VR_ConfigureHMDTracking();
-void VR_ConfigureHMDPrediction();
 void VR_NewVRFrame();
+void VR_SetGame(std::string id);
+
+// Used for VR rendering
 void VR_GetEyePoses();
-void ReadHmdOrientation(float *roll, float *pitch, float *yaw, float *x, float *y, float *z);
-bool UpdateHeadTrackingIfNeeded();
+bool VR_UpdateHeadTrackingIfNeeded();
 void VR_GetProjectionHalfTan(float &hmd_halftan);
-void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar, bool isOpenGL);
+void VR_GetProjectionMatrices(Matrix4x4 &left_eye, Matrix4x4 &right_eye, float znear, float zfar, bool isOpenGL);
 void VR_GetEyePos(float *posLeft, float *posRight);
 void VR_GetFovTextureSize(int *width, int *height);
+
+// HMD description and capabilities
 bool VR_ShouldUnthrottle();
-
-void VR_SetGame(bool is_wii, bool is_nand, std::string id);
-bool VR_GetLeftHydraPos(float *pos);
-bool VR_GetRightHydraPos(float *pos);
-ControllerStyle VR_GetHydraStyle(int hand);
-
-void OpcodeReplayBuffer();
-void OpcodeReplayBufferInline();
-
-void TranslateView(float left_metres, float forward_metres, float down_metres = 0.0f);
-void RotateView(float x, float y);
-void ScaleView(float scale);
-void ResetView();
-
+extern bool g_has_hmd, g_has_rift, g_has_vr920, g_has_steamvr, g_is_direct_mode;
 extern bool g_vr_cant_motion_blur, g_vr_must_motion_blur;
 extern bool g_vr_has_dynamic_predict, g_vr_has_configure_rendering, g_vr_has_hq_distortion;
 extern bool g_vr_should_swap_buffers, g_vr_dont_vsync;
 extern bool g_vr_can_async_timewarp;
 extern volatile bool g_vr_asyc_timewarp_active;
+extern int g_hmd_window_width, g_hmd_window_height, g_hmd_window_x, g_hmd_window_y, g_hmd_refresh_rate;
+extern const char *g_hmd_device_name;
 
+// Command line
 extern bool g_force_vr, g_prefer_steamvr;
-extern bool g_has_hmd, g_has_rift, g_has_vr920, g_has_steamvr, g_is_direct_mode;
-extern bool g_new_tracking_frame;
-extern bool g_new_frame_tracker_for_efb_skip;
-extern bool g_dumpThisFrame;
-extern unsigned skip_objects_count;
+
+// Tracking
 extern Matrix44 g_head_tracking_matrix;
 extern float g_head_tracking_position[3];
 extern float g_left_hand_tracking_position[3], g_right_hand_tracking_position[3];
-extern int g_hmd_window_width, g_hmd_window_height, g_hmd_window_x, g_hmd_window_y, g_hmd_refresh_rate;
-extern const char *g_hmd_device_name;
+
+// The state of the game scene
 extern bool g_fov_changed, g_vr_black_screen;
 extern bool g_vr_had_3D_already;
-extern float vr_freelook_speed;
 extern float vr_widest_3d_HFOV, vr_widest_3d_VFOV, vr_widest_3d_zNear, vr_widest_3d_zFar;
 extern float this_frame_widest_HFOV, this_frame_widest_VFOV, this_frame_widest_zNear, this_frame_widest_zFar;
 extern float g_game_camera_pos[3];
 extern Matrix44 g_game_camera_rotmat;
+
+// Freelook
+void TranslateView(float left_metres, float forward_metres, float down_metres = 0.0f);
+void RotateView(float x, float y);
+void ScaleView(float scale);
+void ResetView();
+extern float vr_freelook_speed;
 extern float s_fViewTranslationVector[3];
 
-//Opcode Replay Buffer
-extern bool g_opcode_replay_enabled;
-extern bool g_new_frame_just_rendered;
-extern bool g_first_pass;
-extern bool g_first_pass_vs_constants;
-extern bool g_opcode_replay_frame;
-extern bool g_opcode_replay_log_frame;
-extern int skipped_opcode_replay_count;
-
+// Debugging info
 extern std::atomic<unsigned> g_drawn_vr;
-
 extern std::string g_vr_sdk_version_string;
-
+extern bool g_dumpThisFrame;
 extern bool debug_nextScene;
 
+// Pose and frame index are important for headtracking and timewarp
 typedef struct {
 	float qx, qy, qz, qw, x, y, z;
 } VRPose;
+extern VRPose g_eye_poses[2];
+extern long long g_vr_frame_index;
 
+// OpenVR
 #ifdef HAVE_OPENVR
 extern vr::IVRSystem *m_pHMD;
 extern vr::IVRRenderModels *m_pRenderModels;
@@ -182,9 +133,11 @@ extern bool m_rbShowTrackedDevice[vr::k_unMaxTrackedDeviceCount];
 extern int m_iValidPoseCount;
 #endif
 
-extern VRPose g_eye_poses[2], g_front_eye_poses[2];
-extern long long g_vr_frame_index;
-
+// Used internally by VROGL.cpp
+void VR_ConfigureHMDTracking();
+void VR_ConfigureHMDPrediction();
+extern bool g_new_tracking_frame;
+extern bool g_first_vr_frame;
 #ifdef _WIN32
 extern LUID *g_hmd_luid;
 #endif

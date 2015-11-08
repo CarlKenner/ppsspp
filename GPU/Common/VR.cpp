@@ -46,7 +46,7 @@ int m_iValidPoseCount;
 
 void ClearDebugProj();
 
-VRPose g_eye_poses[2], g_front_eye_poses[2];
+VRPose g_eye_poses[2];
 
 #ifdef OVR_MAJOR_VERSION
 ovrHmd hmd = nullptr;
@@ -97,27 +97,32 @@ bool g_vr_has_dynamic_predict = true, g_vr_has_configure_rendering = true, g_vr_
 bool g_vr_should_swap_buffers = true, g_vr_dont_vsync = false;
 bool g_vr_can_async_timewarp = false;
 volatile bool g_vr_asyc_timewarp_active = false;
+
 bool g_force_vr = false, g_prefer_steamvr = false;
 bool g_has_hmd = false, g_has_rift = false, g_has_vr920 = false, g_has_steamvr = false;
 bool g_is_direct_mode = false;
 bool g_new_tracking_frame = true;
-bool g_new_frame_tracker_for_efb_skip = true;
 bool g_dumpThisFrame = false;
-u32 skip_objects_count = 0;
+bool g_first_vr_frame = true;
+
 Matrix44 g_head_tracking_matrix;
 float g_head_tracking_position[3];
 float g_left_hand_tracking_position[3], g_right_hand_tracking_position[3];
+
 int g_hmd_window_width = 0, g_hmd_window_height = 0, g_hmd_window_x = 0, g_hmd_window_y = 0;
 int g_hmd_refresh_rate = 75;
 const char *g_hmd_device_name = nullptr;
+
 float g_vr_speed = 0;
-float vr_freelook_speed = 0;
 bool g_fov_changed = false, g_vr_black_screen = false;
+
 bool g_vr_had_3D_already = false;
 float vr_widest_3d_HFOV=0, vr_widest_3d_VFOV=0, vr_widest_3d_zNear=0, vr_widest_3d_zFar=0;
 float this_frame_widest_HFOV=0, this_frame_widest_VFOV=0, this_frame_widest_zNear=0, this_frame_widest_zFar=0;
+
 float g_game_camera_pos[3];
 Matrix44 g_game_camera_rotmat;
+
 bool debug_newScene = true, debug_nextScene = false;
 
 // freelook
@@ -125,12 +130,10 @@ Matrix3x3 s_viewRotationMatrix;
 Matrix3x3 s_viewInvRotationMatrix;
 float s_fViewTranslationVector[3] = { 0, 0, 0 };
 float s_fViewRotation[2] = { 0, 0 };
+float vr_freelook_speed = 0;
 bool bProjectionChanged = false;
 bool bFreeLookChanged = false;
 
-ControllerStyle vr_left_controller = CS_HYDRA_LEFT, vr_right_controller = CS_HYDRA_RIGHT;
-
-bool g_opcode_replay_enabled = false;
 bool g_new_frame_just_rendered = false;
 bool g_first_pass = true;
 bool g_first_pass_vs_constants = true;
@@ -441,7 +444,7 @@ bool InitOculusVR()
 #endif
 }
 
-bool InitVR920VR()
+bool VR_Init920VR()
 {
 #ifdef _WIN32
 	LoadVR920();
@@ -466,9 +469,9 @@ bool InitVR920VR()
 	return false;
 }
 
-void InitVR()
+void VR_Init()
 {
-	NOTICE_LOG(VR, "InitVR()");
+	NOTICE_LOG(VR, "VR_Init()");
 	g_has_hmd = false;
 	g_is_direct_mode = false;
 	g_hmd_device_name = nullptr;
@@ -482,12 +485,12 @@ void InitVR()
 
 	if (g_prefer_steamvr)
 	{
-		if (!InitSteamVR() && !InitOculusVR() && !InitVR920VR() && !InitOculusDebugVR())
+		if (!InitSteamVR() && !InitOculusVR() && !VR_Init920VR() && !InitOculusDebugVR())
 			g_has_hmd = g_force_vr;
 	}
 	else
 	{
-		if (!InitOculusVR() && !InitSteamVR() && !InitVR920VR() && !InitOculusDebugVR())
+		if (!InitOculusVR() && !InitSteamVR() && !VR_Init920VR() && !InitOculusDebugVR())
 			g_has_hmd = g_force_vr;
 	}
 	InitOculusHMD();
@@ -532,7 +535,7 @@ void VR_StopRendering()
 #endif
 }
 
-void ShutdownVR()
+void VR_Shutdown()
 {
 	g_vr_can_async_timewarp = false;
 #ifdef HAVE_OPENVR
@@ -822,7 +825,7 @@ void UpdateVuzixHeadTracking()
 }
 #endif
 
-bool UpdateHeadTrackingIfNeeded()
+bool VR_UpdateHeadTrackingIfNeeded()
 {
 	if (g_new_tracking_frame) {
 		g_new_tracking_frame = false;
@@ -870,7 +873,7 @@ void VR_GetProjectionHalfTan(float &hmd_halftan)
 		}
 }
 
-void VR_GetProjectionMatrices(Matrix44 &left_eye, Matrix44 &right_eye, float znear, float zfar, bool isOpenGL)
+void VR_GetProjectionMatrices(Matrix4x4 &left_eye, Matrix4x4 &right_eye, float znear, float zfar, bool isOpenGL)
 {
 #ifdef OVR_MAJOR_VERSION
 	if (g_has_rift)
@@ -991,34 +994,8 @@ void VR_GetFovTextureSize(int *width, int *height)
 #endif
 }
 
-bool VR_GetLeftHydraPos(float *pos)
+void VR_SetGame(std::string id)
 {
-	pos[0] = -0.15f;
-	pos[1] = -0.30f;
-	pos[2] = -0.4f;
-	return true;
-}
-
-bool VR_GetRightHydraPos(float *pos)
-{
-	pos[0] = 0.15f;
-	pos[1] = -0.30f;
-	pos[2] = -0.4f;
-	return true;
-}
-
-void VR_SetGame()
-{
-	vr_left_controller = CS_PSP_LEFT;
-	vr_right_controller = CS_PSP_RIGHT;
-}
-
-ControllerStyle VR_GetHydraStyle(int hand)
-{
-	if (hand)
-		return vr_right_controller;
-	else
-		return vr_left_controller;
 }
 
 void ScaleView(float scale)
