@@ -195,10 +195,9 @@ private:
 	void ApplyDrawState(int prim);
 	void ApplyDrawStateLate();
 	void ApplyDepthState(bool on_top);
-	void ApplyBlendState();
-	void ApplyStencilReplaceAndLogicOp(ReplaceAlphaType replaceAlphaWithStencil);
 	bool ApplyShaderBlending();
-	inline void ResetShaderBlending();
+	void ResetShaderBlending();
+
 	GLuint AllocateBuffer();
 	void FreeBuffer(GLuint buf);
 

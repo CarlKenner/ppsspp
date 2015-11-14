@@ -47,6 +47,9 @@ enum {
 };
 
 struct FBO;
+namespace DX9 {
+	struct FBO_DX9;
+}
 
 struct VirtualFramebuffer {
 	int last_frame_used;
@@ -82,7 +85,10 @@ struct VirtualFramebuffer {
 	GEBufferFormat format;  // virtual, right now they are all RGBA8888
 	// TODO: Handle fbo and colorDepth better.
 	u8 colorDepth;
-	FBO *fbo;
+	union {
+		FBO *fbo;
+		DX9::FBO_DX9 *fbo_dx9;
+	};
 
 	u16 drawnWidth;
 	u16 drawnHeight;
