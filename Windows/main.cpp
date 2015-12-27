@@ -509,6 +509,11 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		PSP_CoreParameter().unthrottle = true;
 	}
 
+	if (iCmdShow == SW_MAXIMIZE) {
+		// Consider this to mean --fullscreen.
+		g_Config.bFullScreen = true;
+	}
+
 	LogManager::Init();
 	// Consider at least the following cases before changing this code:
 	//   - By default in Release, the console should be hidden by default even if logging is enabled.
@@ -550,6 +555,11 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	host->SetWindowTitle(0);
 
 	MainWindow::CreateDebugWindows();
+
+	const bool minimized = iCmdShow == SW_MINIMIZE || iCmdShow == SW_SHOWMINIMIZED || iCmdShow == SW_SHOWMINNOACTIVE;
+	if (minimized) {
+		MainWindow::Minimize();
+	}
 
 	// Emu thread is always running!
 	EmuThread_Start();

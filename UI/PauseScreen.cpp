@@ -454,7 +454,7 @@ UI::EventReturn GamePauseScreen::OnShowDefaults(UI::EventParams &e) {
 #ifdef _WIN32
 	std::string gameId = g_paramSFO.GetValueString("DISC_ID");
 	GameInfo *info = g_gameInfoCache.GetInfo(NULL, gamePath_, 0);
-	g_Config.createGameDefaultConfig(gameId, info->title);
+	g_Config.createGameDefaultConfig(gameId, info->GetTitle());
 	info->hasDefaults = true;
 	std::string filename = ReplaceAll(g_Config.getGameDefaultConfigFile(info->id), "/", "\\");
 	std::string str = std::string("start \"\" \"") + filename + "\"";
