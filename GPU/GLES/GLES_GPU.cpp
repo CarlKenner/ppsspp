@@ -181,13 +181,8 @@ static const CommandTableEntry commandTable[] = {
 	{GE_CMD_ZTEST, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_ZTESTENABLE, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_ZWRITEDISABLE, FLAG_FLUSHBEFOREONCHANGE},
-#ifndef USING_GLES2
 	{GE_CMD_LOGICOP, FLAG_FLUSHBEFOREONCHANGE},
 	{GE_CMD_LOGICOPENABLE, FLAG_FLUSHBEFOREONCHANGE},
-#else
-	{GE_CMD_LOGICOP, 0},
-	{GE_CMD_LOGICOPENABLE, 0},
-#endif
 
 	// Can probably ignore this one as we don't support AA lines.
 	{GE_CMD_ANTIALIASENABLE, FLAG_FLUSHBEFOREONCHANGE},
@@ -417,6 +412,7 @@ GLES_GPU::GLES_GPU()
 	textureCache_.SetFramebufferManager(&framebufferManager_);
 	textureCache_.SetDepalShaderCache(&depalShaderCache_);
 	textureCache_.SetShaderManager(shaderManager_);
+	textureCache_.SetTransformDrawEngine(&transformDraw_);
 	fragmentTestCache_.SetTextureCache(&textureCache_);
 
 	// Sanity check gstate
@@ -458,6 +454,7 @@ GLES_GPU::GLES_GPU()
 
 	// Some of our defaults are different from hw defaults, let's assert them.
 	// We restore each frame anyway, but here is convenient for tests.
+	transformDraw_.RestoreVAO();
 	glstate.Restore();
 }
 
@@ -477,7 +474,7 @@ GLES_GPU::~GLES_GPU() {
 // Take the raw GL extension and versioning data and turn into feature flags.
 void GLES_GPU::CheckGPUFeatures() {
 	u32 features = 0;
-	if (gl_extensions.ARB_blend_func_extended /*|| gl_extensions.EXT_blend_func_extended*/) {
+	if (gl_extensions.ARB_blend_func_extended || gl_extensions.EXT_blend_func_extended) {
 		if (gl_extensions.gpuVendor == GPU_VENDOR_INTEL || !gl_extensions.VersionGEThan(3, 0, 0)) {
 			// Don't use this extension to off on sub 3.0 OpenGL versions as it does not seem reliable
 			// Also on Intel, see https://github.com/hrydgard/ppsspp/issues/4867
@@ -508,6 +505,9 @@ void GLES_GPU::CheckGPUFeatures() {
 	}
 	if (gl_extensions.NV_framebuffer_blit) {
 		features |= GPU_SUPPORTS_NV_FRAMEBUFFER_BLIT;
+	}
+	if (gl_extensions.ARB_vertex_array_object && gl_extensions.IsCoreContext) {
+		features |= GPU_SUPPORTS_VAO;
 	}
 
 	bool useCPU = false;
@@ -543,6 +543,9 @@ void GLES_GPU::CheckGPUFeatures() {
 	if (gl_extensions.EXT_blend_minmax || gl_extensions.GLES3)
 		features |= GPU_SUPPORTS_BLEND_MINMAX;
 
+	if (gl_extensions.OES_copy_image || gl_extensions.NV_copy_image || gl_extensions.EXT_copy_image || gl_extensions.ARB_copy_image)
+		features |= GPU_SUPPORTS_ANY_COPY_IMAGE;
+
 	if (!gl_extensions.IsGLES)
 		features |= GPU_SUPPORTS_LOGIC_OP;
 
@@ -556,6 +559,11 @@ void GLES_GPU::CheckGPUFeatures() {
 		if (!PSP_CoreParameter().compat.flags().NoDepthRounding) {
 			features |= GPU_ROUND_DEPTH_TO_16BIT;
 		}
+	}
+
+	// The Phantasy Star hack :(
+	if (PSP_CoreParameter().compat.flags().DepthRangeHack) {
+		features |= GPU_USE_DEPTH_RANGE_HACK;
 	}
 
 #ifdef MOBILE_DEVICE
@@ -692,6 +700,7 @@ void GLES_GPU::UpdateCmdInfo() {
 }
 
 void GLES_GPU::ReapplyGfxStateInternal() {
+	transformDraw_.RestoreVAO();
 	glstate.Restore();
 	GPUCommon::ReapplyGfxStateInternal();
 }
@@ -707,6 +716,7 @@ void GLES_GPU::BeginFrameInternal() {
 
 	textureCache_.StartFrame();
 	transformDraw_.DecimateTrackedVertexArrays();
+	transformDraw_.DecimateBuffers();
 	depalShaderCache_.Decimate();
 	fragmentTestCache_.Decimate();
 

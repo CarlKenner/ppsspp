@@ -310,11 +310,7 @@ void GameSettingsScreen::CreateViews() {
 	CheckBox *depthWrite = graphicsSettings->Add(new CheckBox(&g_Config.bAlwaysDepthWrite, gr->T("Always Depth Write")));
 	depthWrite->SetDisabledPtr(&g_Config.bSoftwareRendering);
 
-	CheckBox *prescale = graphicsSettings->Add(new CheckBox(&g_Config.bPrescaleUV, gr->T("Texture Coord Speedhack")));
-	prescale->SetDisabledPtr(&g_Config.bSoftwareRendering);
-
-	CheckBox *depthRange = graphicsSettings->Add(new CheckBox(&g_Config.bDepthRangeHack, gr->T("Depth Range Hack (Phantasy Star Portable 2)")));
-	depthRange->SetDisabledPtr(&g_Config.bSoftwareRendering);
+	graphicsSettings->Add(new CheckBox(&g_Config.bPrescaleUV, gr->T("Texture Coord Speedhack")));
 
 	CheckBox *wireframe = graphicsSettings->Add(new CheckBox(&g_Config.bWireFrame, gr->T("Enable Wireframe")));
 	wireframe->SetDisabledPtr(&g_Config.bSoftwareRendering);
@@ -480,7 +476,7 @@ void GameSettingsScreen::CreateViews() {
 
 #if defined(MOBILE_DEVICE)
 	controlsSettings->Add(new CheckBox(&g_Config.bHapticFeedback, co->T("HapticFeedback", "Haptic Feedback (vibration)")));
-	static const char *tiltTypes[] = { "None (Disabled)", "Analog Stick", "D-PAD", "PSP Action Buttons"};
+	static const char *tiltTypes[] = { "None (Disabled)", "Analog Stick", "D-PAD", "PSP Action Buttons", "L/R Trigger Buttons"};
 	controlsSettings->Add(new PopupMultiChoice(&g_Config.iTiltInputType, co->T("Tilt Input Type"), tiltTypes, 0, ARRAY_SIZE(tiltTypes), co->GetName(), screenManager()))->OnClick.Handle(this, &GameSettingsScreen::OnTiltTypeChange);
 
 	Choice *customizeTilt = controlsSettings->Add(new Choice(co->T("Customize tilt")));
@@ -675,7 +671,7 @@ void GameSettingsScreen::CreateViews() {
 #endif
 
 #if defined(_M_X64)
-	systemSettings->Add(new CheckBox(&g_Config.bCacheFullIsoInRam, sy->T("Cache ISO in RAM", "Cache full ISO in RAM (slow startup)")));
+	systemSettings->Add(new CheckBox(&g_Config.bCacheFullIsoInRam, sy->T("Cache ISO in RAM", "Cache full ISO in RAM")));
 #endif
 
 //#ifndef ANDROID
@@ -730,6 +726,7 @@ UI::EventReturn GameSettingsScreen::OnHardwareTransform(UI::EventParams &e) {
 }
 
 UI::EventReturn GameSettingsScreen::OnScreenRotation(UI::EventParams &e) {
+	ILOG("New display rotation: %d", g_Config.iScreenRotation);
 	System_SendMessage("rotate", "");
 	return UI::EVENT_DONE;
 }

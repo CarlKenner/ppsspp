@@ -57,6 +57,9 @@ static const GLushort glBlendFactorLookup[(size_t)BlendFactor::COUNT] = {
 #if !defined(USING_GLES2)   // TODO: Remove when we have better headers
 	GL_SRC1_ALPHA,
 	GL_ONE_MINUS_SRC1_ALPHA,
+#elif !defined(IOS)
+	GL_SRC1_ALPHA_EXT,
+	GL_ONE_MINUS_SRC1_ALPHA_EXT,
 #else
 	GL_INVALID_ENUM,
 	GL_INVALID_ENUM,
@@ -404,8 +407,6 @@ void TransformDrawEngine::ApplyDrawStateLate() {
 			fragmentTestCache_->BindTestTexture(GL_TEXTURE2);
 		}
 
-		textureCache_->ApplyTexture();
-
 		// this is only for blending in the shader
 		if (fboTexNeedBind_) {
 			// Note that this is positions, not UVs, that we need the copy from.
@@ -420,5 +421,9 @@ void TransformDrawEngine::ApplyDrawStateLate() {
 			fboTexBound_ = true;
 			fboTexNeedBind_ = false;
 		}
+
+		// Apply the texture after the FBO tex, since it might unbind the texture.
+		// TODO: Could use a separate texture unit to be safer?
+		textureCache_->ApplyTexture();
 	}
 }

@@ -106,9 +106,9 @@
 
 static UI::Theme ui_theme;
 
-#ifdef ARM
+#if defined(ARM) && defined(ANDROID)
 #include "../../android/jni/ArmEmitterTest.h"
-#elif defined(ARM64)
+#elif defined(ARM64) && defined(ANDROID)
 #include "../../android/jni/Arm64EmitterTest.h"
 #endif
 
@@ -216,7 +216,8 @@ void QtHost::ShutdownSound() { }
 std::string NativeQueryConfig(std::string query) {
 	char temp[128];
 	if (query == "screenRotation") {
-		sprintf(temp, "%i", g_Config.iScreenRotation);
+		ILOG("g_Config.screenRotation = %d", g_Config.iScreenRotation);
+		snprintf(temp, sizeof(temp), "%d", g_Config.iScreenRotation);
 		return std::string(temp);
 	} else if (query == "immersiveMode") {
 		return std::string(g_Config.bImmersiveMode ? "1" : "0");
@@ -230,7 +231,7 @@ std::string NativeQueryConfig(std::string query) {
 		}
 
 		int max_res = std::max(System_GetPropertyInt(SYSPROP_DISPLAY_XRES), System_GetPropertyInt(SYSPROP_DISPLAY_YRES)) / 480 + 1;
-		sprintf(temp, "%i", std::min(scale, max_res));
+		snprintf(temp, sizeof(temp), "%d", std::min(scale, max_res));
 		return std::string(temp);
 	} else if (query == "force44khz") {
 		return std::string("0");
@@ -724,18 +725,6 @@ void NativeRender() {
 		if (GetUIState() != UISTATE_INGAME && g_Config.iGPUBackend == GPU_BACKEND_OPENGL) {
 			OGL::VR_BeginGUI();
 		}
-		thin3d->Clear(T3DClear::COLOR | T3DClear::DEPTH | T3DClear::STENCIL, 0xFF000000, 0.0f, 0);
-
-		T3DViewport viewport;
-		viewport.TopLeftX = 0;
-		viewport.TopLeftY = 0;
-		viewport.Width = pixel_xres;
-		viewport.Height = pixel_yres;
-		viewport.MaxDepth = 1.0;
-		viewport.MinDepth = 0.0;
-		thin3d->SetViewports(1, &viewport);
-		thin3d->SetTargetSize(pixel_xres, pixel_yres);
-
 		float xres = dp_xres;
 		float yres = dp_yres;
 
@@ -961,20 +950,7 @@ bool NativeAxis(const AxisInput &axis) {
 	//now transform out current tilt to the calibrated coordinate system
 	Tilt trueTilt = GenTilt(baseTilt, currentTilt, g_Config.bInvertTiltX, g_Config.bInvertTiltY, g_Config.fDeadzoneRadius, xSensitivity, ySensitivity);
 
-	//now send the appropriate tilt event
-	switch (g_Config.iTiltInputType) {
-		case TILT_ANALOG:
-			GenerateAnalogStickEvent(trueTilt);
-			break;
-		
-		case TILT_DPAD:
-			GenerateDPadEvent(trueTilt);
-			break;
-		
-		case TILT_ACTION_BUTTON:
-			GenerateActionButtonEvent(trueTilt);
-			break;
-	}
+	TranslateTiltToInput(trueTilt);
 	return true;
 }
 
@@ -1042,4 +1018,8 @@ void NativeShutdown() {
 #ifdef _WIN32
 	RemoveFontResourceEx(L"assets/Roboto-Condensed.ttf", FR_PRIVATE, NULL);
 #endif
+}
+
+void NativePermissionStatus(SystemPermission permission, PermissionStatus status) {
+	// TODO: Send this through the screen system? Nicer than listening to string messages
 }

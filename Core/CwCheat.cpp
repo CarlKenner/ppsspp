@@ -126,7 +126,6 @@ void hleCheat(u64 userdata, int cyclesLate) {
 }
 
 CWCheatEngine::CWCheatEngine() {
-
 }
 
 void CWCheatEngine::Exit() {
@@ -141,7 +140,7 @@ static inline std::vector<std::string> makeCodeParts(const std::vector<std::stri
 	char empty = ' ';
 	for (size_t i = 0; i < CodesList.size(); i++) {
 		currentcode = CodesList[i];
-		for (size_t j=0; j < currentcode.length(); j++) {
+		for (size_t j = 0; j < currentcode.length(); j++) {
 			if (currentcode[j] == empty) {
 				currentcode[j] = '\n';
 			}
@@ -203,6 +202,7 @@ std::vector<int> CWCheatEngine::GetNextCode() { // Feeds a size-2 vector of ints
 	std::vector<int> finalCode;
 	std::string modifier2 = "0";
 	while (true)  {
+		// Shouldn't splitCode be cleared here? Otherwise var1 and var2 will always be set to the first two codes.. I don't get it
 		if (currentCode >= parts.size()) {
 			code1.clear();
 			code2.clear();
@@ -210,6 +210,11 @@ std::vector<int> CWCheatEngine::GetNextCode() { // Feeds a size-2 vector of ints
 		}
 		code1 = parts[currentCode++];
 		trim2(code1);
+		if (currentCode >= parts.size()) {
+			code1.clear();
+			code2.clear();
+			break;
+		}
 		code2 = parts[currentCode++];
 		trim2(code2);
 		splitCode.push_back(code1);

@@ -122,8 +122,9 @@ public:
 
 	// Definitely cannot be changed while game is running.
 	bool bSeparateCPUThread;
-	int iIOTimingMethod;
+	bool bSeparateSASThread;
 	bool bSeparateIOThread;
+	int iIOTimingMethod;
 	int iLockedCPUSpeed;
 	bool bAutoSaveSymbolMap;
 	bool bCacheFullIsoInRam;
@@ -190,7 +191,6 @@ public:
 	int iCwCheatRefreshRate;
 	bool bDisableStencilTest;
 	bool bAlwaysDepthWrite;
-	bool bDepthRangeHack;
 	int iBloomHack; //0 = off, 1 = safe, 2 = balanced, 3 = aggressive
 	bool bTimerHack;
 	bool bAlphaMaskHack;

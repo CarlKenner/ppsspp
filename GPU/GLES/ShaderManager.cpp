@@ -335,13 +335,20 @@ LinkedShader::LinkedShader(Shader *vs, Shader *gs, Shader *fs, u32 vertType, boo
 	glBindAttribLocation(program, ATTR_COLOR0, "color0");
 	glBindAttribLocation(program, ATTR_COLOR1, "color1");
 
-#ifndef USING_GLES2
+#if !defined(USING_GLES2)
 	if (gstate_c.featureFlags & GPU_SUPPORTS_DUALSOURCE_BLEND) {
 		// Dual source alpha
 		glBindFragDataLocationIndexed(program, 0, 0, "fragColor0");
 		glBindFragDataLocationIndexed(program, 0, 1, "fragColor1");
 	} else if (gl_extensions.VersionGEThan(3, 3, 0)) {
 		glBindFragDataLocation(program, 0, "fragColor0");
+	}
+#elif !defined(IOS)
+	if (gl_extensions.GLES3) {
+		if (gstate_c.featureFlags & GPU_SUPPORTS_DUALSOURCE_BLEND) {
+			glBindFragDataLocationIndexedEXT(program, 0, 0, "fragColor0");
+			glBindFragDataLocationIndexedEXT(program, 0, 1, "fragColor1");
+		}
 	}
 #endif
 
@@ -710,7 +717,6 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 			// Not sure what GE_TEXMAP_UNKNOWN is, but seen in Riviera.  Treating the same as GE_TEXMAP_TEXTURE_COORDS works.
 		case GE_TEXMAP_UNKNOWN:
 			if (g_Config.bPrescaleUV) {
-				// Shouldn't even get here as we won't use the uniform in the shader.
 				// We are here but are prescaling UV in the decoder? Let's do the same as in the other case
 				// except consider *Scale and *Off to be 1 and 0.
 				uvscaleoff[0] = widthFactor;
@@ -866,7 +872,7 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 
 			// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
 			// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
-			if (g_Config.bDepthRangeHack) {
+			if (gstate_c.Supports(GPU_USE_DEPTH_RANGE_HACK)) {
 				float zScale = gstate.getViewportZScale() / 65535.0f;
 				float zCenter = gstate.getViewportZCenter() / 65535.0f;
 
@@ -1070,7 +1076,7 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 
 	// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
 	// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
-	if (g_Config.bDepthRangeHack) {
+	if (gstate_c.Supports(GPU_USE_DEPTH_RANGE_HACK)) {
 		float zScale = gstate.getViewportZScale() / 65535.0f;
 		float zCenter = gstate.getViewportZCenter() / 65535.0f;
 
@@ -1960,11 +1966,6 @@ bool ShaderManager::DebugAreShadersCompatibleForLinking(Shader *vs, Shader *gs, 
 }
 
 Shader *ShaderManager::ApplyVertexShader(int prim, u32 vertType) {
-	// This doesn't work - we miss some events that really do need to dirty the prescale.
-	// like changing the texmapmode.
-	// if (g_Config.bPrescaleUV)
-	//	 globalDirty_ &= ~DIRTY_UVSCALEOFFSET;
-
 	if (globalDirty_) {
 		if (lastShader_)
 			lastShader_->dirtyUniforms |= globalDirty_;

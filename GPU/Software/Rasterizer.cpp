@@ -114,11 +114,11 @@ static inline u8 ClampFogDepth(float fogdepth) {
 
 static inline void GetTexelCoordinates(int level, float s, float t, int& out_u, int& out_v)
 {
-	int width = 1 << (gstate.texsize[level] & 0xf);
-	int height = 1 << ((gstate.texsize[level]>>8) & 0xf);
+	int width = gstate.getTextureWidth(level);
+	int height = gstate.getTextureHeight(level);
 
-	int u = (int)(s * width);
-	int v = (int)(t * height);
+	int u = (int)(s * width + 0.375f);
+	int v = (int)(t * height + 0.375f);
 
 	if (gstate.isTexCoordClampedS()) {
 		if (u >= width - 1)
@@ -144,8 +144,8 @@ static inline void GetTexelCoordinates(int level, float s, float t, int& out_u, 
 static inline void GetTexelCoordinatesQuad(int level, float in_s, float in_t, int u[4], int v[4], int &frac_u, int &frac_v)
 {
 	// 8 bits of fractional UV
-	int width = 1 << (gstate.texsize[level] & 0xf);
-	int height = 1 << ((gstate.texsize[level]>>8) & 0xf);
+	int width = gstate.getTextureWidth(level);
+	int height = gstate.getTextureHeight(level);
 
 	int base_u = in_s * width * 256;
 	int base_v = in_t * height * 256;
@@ -190,9 +190,9 @@ static inline void GetTexelCoordinatesQuad(int level, float in_s, float in_t, in
 
 static inline void GetTexelCoordinatesThrough(int level, int s, int t, int& u, int& v)
 {
-	// Not actually sure which clamp/wrap modes should be applied. Let's just wrap for now.
-	int width = 1 << (gstate.texsize[level] & 0xf);
-	int height = 1 << ((gstate.texsize[level]>>8) & 0xf);
+	// TODO: Not actually sure which clamp/wrap modes should be applied. Let's just wrap for now.
+	int width = gstate.getTextureWidth(level);
+	int height = gstate.getTextureHeight(level);
 
 	// Wrap!
 	u = ((unsigned int)(s) & (width - 1));
@@ -202,8 +202,8 @@ static inline void GetTexelCoordinatesThrough(int level, int s, int t, int& u, i
 static inline void GetTexelCoordinatesThroughQuad(int level, int s, int t, int *u, int *v)
 {
 	// Not actually sure which clamp/wrap modes should be applied. Let's just wrap for now.
-	int width = 1 << (gstate.texsize[level] & 0xf);
-	int height = 1 << ((gstate.texsize[level] >> 8) & 0xf);
+	int width = gstate.getTextureWidth(level);
+	int height = gstate.getTextureHeight(level);
 
 	// Wrap!
 	for (int i = 0; i < 4; i++) {
@@ -830,21 +830,18 @@ static inline Vec3<int> GetSourceFactor(const Vec4<int>& source, const Vec4<int>
 		return Vec3<int>::AssignToAll(2 * source.a());
 
 	case GE_SRCBLEND_DOUBLEINVSRCALPHA:
-		return Vec3<int>::AssignToAll(255 - 2 * source.a());
+		return Vec3<int>::AssignToAll(255 - std::min(2 * source.a(), 255));
 
 	case GE_SRCBLEND_DOUBLEDSTALPHA:
 		return Vec3<int>::AssignToAll(2 * dst.a());
 
 	case GE_SRCBLEND_DOUBLEINVDSTALPHA:
-		// TODO: Clamping?
-		return Vec3<int>::AssignToAll(255 - 2 * dst.a());
+		return Vec3<int>::AssignToAll(255 - std::min(2 * dst.a(), 255));
 
 	case GE_SRCBLEND_FIXA:
-		return Vec3<int>::FromRGB(gstate.getFixA());
-
 	default:
-		ERROR_LOG_REPORT(G3D, "Software: Unknown source factor %x", gstate.getBlendFuncA());
-		return Vec3<int>();
+		// All other dest factors (> 10) are treated as FIXA.
+		return Vec3<int>::FromRGB(gstate.getFixA());
 	}
 }
 
@@ -881,25 +878,24 @@ static inline Vec3<int> GetDestFactor(const Vec4<int>& source, const Vec4<int>& 
 		return Vec3<int>::AssignToAll(2 * source.a());
 
 	case GE_DSTBLEND_DOUBLEINVSRCALPHA:
-		return Vec3<int>::AssignToAll(255 - 2 * source.a());
+		return Vec3<int>::AssignToAll(255 - std::min(2 * source.a(), 255));
 
 	case GE_DSTBLEND_DOUBLEDSTALPHA:
 		return Vec3<int>::AssignToAll(2 * dst.a());
 
 	case GE_DSTBLEND_DOUBLEINVDSTALPHA:
-		return Vec3<int>::AssignToAll(255 - 2 * dst.a());
+		return Vec3<int>::AssignToAll(255 - std::min(2 * dst.a(), 255));
 
 	case GE_DSTBLEND_FIXB:
-		return Vec3<int>::FromRGB(gstate.getFixB());
-
 	default:
-		ERROR_LOG_REPORT(G3D, "Software: Unknown dest factor %x", gstate.getBlendFuncB());
-		return Vec3<int>();
+		// All other dest factors (> 10) are treated as FIXB.
+		return Vec3<int>::FromRGB(gstate.getFixB());
 	}
 }
 
 static inline Vec3<int> AlphaBlendingResult(const Vec4<int> &source, const Vec4<int> &dst)
 {
+	// Note: These factors cannot go below 0, but they can go above 255 when doubling.
 	Vec3<int> srcfactor = GetSourceFactor(source, dst);
 	Vec3<int> dstfactor = GetDestFactor(source, dst);
 
@@ -1185,10 +1181,18 @@ void DrawTriangleSlice(
 	Vec2<int> d01((int)v0.screenpos.x - (int)v1.screenpos.x, (int)v0.screenpos.y - (int)v1.screenpos.y);
 	Vec2<int> d02((int)v0.screenpos.x - (int)v2.screenpos.x, (int)v0.screenpos.y - (int)v2.screenpos.y);
 	Vec2<int> d12((int)v1.screenpos.x - (int)v2.screenpos.x, (int)v1.screenpos.y - (int)v2.screenpos.y);
-	float texScaleU = getFloat24(gstate.texscaleu);
-	float texScaleV = getFloat24(gstate.texscalev);
-	float texOffsetU = getFloat24(gstate.texoffsetu);
-	float texOffsetV = getFloat24(gstate.texoffsetv);
+	float texScaleU = gstate_c.uv.uScale;
+	float texScaleV = gstate_c.uv.vScale;
+	float texOffsetU = gstate_c.uv.uOff;
+	float texOffsetV = gstate_c.uv.vOff;
+
+	if (g_Config.bPrescaleUV) {
+		// Already applied during vertex decode.
+		texScaleU = 1.0f;
+		texScaleV = 1.0f;
+		texOffsetU = 0.0f;
+		texOffsetV = 0.0f;
+	}
 
 	int bias0 = IsRightSideOrFlatBottomLine(v0.screenpos.xy(), v1.screenpos.xy(), v2.screenpos.xy()) ? -1 : 0;
 	int bias1 = IsRightSideOrFlatBottomLine(v1.screenpos.xy(), v2.screenpos.xy(), v0.screenpos.xy()) ? -1 : 0;
@@ -1342,24 +1346,21 @@ void DrawTriangle(const VertexData& v0, const VertexData& v1, const VertexData& 
 
 	int range = (maxY - minY) / 16 + 1;
 	if (gstate.isModeClear()) {
-		if (range >= 24 && (maxX - minX) >= 24 * 16)
-		{
-      VertexData v[3] = { v0, v1, v2 };
-			auto bound = [&](int a, int b) -> void {DrawTriangleSlice<true>(v0, v1, v2, minX, minY, maxX, maxY, a, b); };
+		if (range >= 24 && (maxX - minX) >= 24 * 16) {
+			auto bound = [&](int a, int b) -> void {
+				DrawTriangleSlice<true>(v0, v1, v2, minX, minY, maxX, maxY, a, b);
+			};
 			GlobalThreadPool::Loop(bound, 0, range);
-		}
-		else
-		{
+		} else {
 			DrawTriangleSlice<true>(v0, v1, v2, minX, minY, maxX, maxY, 0, range);
 		}
 	} else {
-		if (range >= 24 && (maxX - minX) >= 24 * 16)
-		{
-			auto bound = [&](int a, int b) -> void {DrawTriangleSlice<false>(v0, v1, v2, minX, minY, maxX, maxY, a, b); };
+		if (range >= 24 && (maxX - minX) >= 24 * 16) {
+			auto bound = [&](int a, int b) -> void {
+				DrawTriangleSlice<false>(v0, v1, v2, minX, minY, maxX, maxY, a, b);
+			};
 			GlobalThreadPool::Loop(bound, 0, range);
-		}
-		else
-		{
+		} else {
 			DrawTriangleSlice<false>(v0, v1, v2, minX, minY, maxX, maxY, 0, range);
 		}
 	}
@@ -1416,10 +1417,18 @@ void DrawPoint(const VertexData &v0)
 			// TODO: Is it really this simple?
 			ApplyTexturing(prim_color, s, t, maxTexLevel, magFilt, texptr, texbufwidthbits);
 		} else {
-			float texScaleU = getFloat24(gstate.texscaleu);
-			float texScaleV = getFloat24(gstate.texscalev);
-			float texOffsetU = getFloat24(gstate.texoffsetu);
-			float texOffsetV = getFloat24(gstate.texoffsetv);
+			float texScaleU = gstate_c.uv.uScale;
+			float texScaleV = gstate_c.uv.vScale;
+			float texOffsetU = gstate_c.uv.uOff;
+			float texOffsetV = gstate_c.uv.vOff;
+
+			if (g_Config.bPrescaleUV) {
+				// Already applied during vertex decode.
+				texScaleU = 1.0f;
+				texScaleV = 1.0f;
+				texOffsetU = 0.0f;
+				texOffsetV = 0.0f;
+			}
 
 			s = s * texScaleU + texOffsetU;
 			t = t * texScaleV + texOffsetV;
@@ -1435,12 +1444,15 @@ void DrawPoint(const VertexData &v0)
 	DrawingCoords p = TransformUnit::ScreenToDrawing(pprime);
 	u16 z = pos.z;
 
-	u8 fog = ClampFogDepth(v0.fogdepth);
+	u8 fog = 255;
+	if (gstate.isFogEnabled() && !clearMode) {
+		fog = ClampFogDepth(v0.fogdepth);
+	}
 
 	if (clearMode) {
-		DrawSinglePixel<true>(p, z, v0.fogdepth, prim_color);
+		DrawSinglePixel<true>(p, z, fog, prim_color);
 	} else {
-		DrawSinglePixel<false>(p, z, v0.fogdepth, prim_color);
+		DrawSinglePixel<false>(p, z, fog, prim_color);
 	}
 }
 
@@ -1496,10 +1508,18 @@ void DrawLine(const VertexData &v0, const VertexData &v1)
 		}
 	}
 
-	float texScaleU = getFloat24(gstate.texscaleu);
-	float texScaleV = getFloat24(gstate.texscalev);
-	float texOffsetU = getFloat24(gstate.texoffsetu);
-	float texOffsetV = getFloat24(gstate.texoffsetv);
+	float texScaleU = gstate_c.uv.uScale;
+	float texScaleV = gstate_c.uv.vScale;
+	float texOffsetU = gstate_c.uv.uOff;
+	float texOffsetV = gstate_c.uv.vOff;
+
+	if (g_Config.bPrescaleUV) {
+		// Already applied during vertex decode.
+		texScaleU = 1.0f;
+		texScaleV = 1.0f;
+		texOffsetU = 0.0f;
+		texOffsetV = 0.0f;
+	}
 
 	float x = a.x;
 	float y = a.y;
@@ -1516,7 +1536,10 @@ void DrawLine(const VertexData &v0, const VertexData &v1)
 		Vec2<float> tc = (v0.texturecoords * (float)(steps - i) + v1.texturecoords * (float)i) / steps1;
 		Vec4<int> prim_color = c0;
 
-		// TODO: Interpolate fog as well
+		u8 fog = 255;
+		if (gstate.isFogEnabled() && !clearMode) {
+			fog = ClampFogDepth((v0.fogdepth * (float)(steps - i) + v1.fogdepth * (float)i) / steps1);
+		}
 
 		float s = tc.s();
 		float t = tc.t();
@@ -1539,9 +1562,9 @@ void DrawLine(const VertexData &v0, const VertexData &v1)
 
 		DrawingCoords p = TransformUnit::ScreenToDrawing(pprime);
 		if (clearMode) {
-			DrawSinglePixel<true>(p, z, v0.fogdepth, prim_color);
+			DrawSinglePixel<true>(p, z, fog, prim_color);
 		} else {
-			DrawSinglePixel<false>(p, z, v0.fogdepth, prim_color);
+			DrawSinglePixel<false>(p, z, fog, prim_color);
 		}
 
 		x = x + xinc;
