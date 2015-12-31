@@ -1412,6 +1412,15 @@ void FramebufferManager::CopyDisplayToOutput() {
 		glstate.viewport.set(0, 0, pixelWidth_, pixelHeight_);
 	}
 
+	currentRenderVfb_ = 0;
+
+	if (displayFramebufPtr_ == 0) {
+		DEBUG_LOG(SCEGE, "Display disabled, displaying only black");
+		// No framebuffer to display! Clear to black.
+		ClearBuffer();
+		return;
+	}
+
 	if (useBufferedRendering_) {
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 #ifdef USING_GLES2
@@ -1423,8 +1432,6 @@ void FramebufferManager::CopyDisplayToOutput() {
 		// Hardly necessary to clear depth and stencil I guess...
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	}
-
-	currentRenderVfb_ = 0;
 
 	u32 offsetX = 0;
 	u32 offsetY = 0;
@@ -1854,13 +1861,22 @@ void FramebufferManager::BlitFramebuffer(VirtualFramebuffer *dst, int dstX, int 
 	int dstY1 = dstY * dstYFactor;
 	int dstY2 = (dstY + h) * dstYFactor;
 
+	if (src == dst && srcX == dstX && srcY == dstY) {
+		// Let's just skip a copy where the destination is equal to the source.
+		WARN_LOG_REPORT_ONCE(blitSame, G3D, "Skipped blit with equal dst and src");
+		return;
+	}
+
 	if (gstate_c.Supports(GPU_SUPPORTS_ANY_COPY_IMAGE)) {
 		// glBlitFramebuffer can clip, but glCopyImageSubData is more restricted.
 		// In case the src goes outside, we just skip the optimization in that case.
 		const bool sameSize = dstX2 - dstX1 == srcX2 - srcX1 && dstY2 - dstY1 == srcY2 - srcY1;
+		const bool sameDepth = dst->colorDepth == src->colorDepth;
 		const bool srcInsideBounds = srcX2 <= src->renderWidth && srcY2 <= src->renderHeight;
 		const bool dstInsideBounds = dstX2 <= dst->renderWidth && dstY2 <= dst->renderHeight;
-		if (sameSize && srcInsideBounds && dstInsideBounds) {
+		const bool xOverlap = src == dst && srcX2 > dstX1 && srcX1 < dstX2;
+		const bool yOverlap = src == dst && srcY2 > dstY1 && srcY1 < dstY2;
+		if (sameSize && sameDepth && srcInsideBounds && dstInsideBounds && !(xOverlap && yOverlap)) {
 #if defined(USING_GLES2)
 #ifndef IOS
 			glCopyImageSubDataOES(

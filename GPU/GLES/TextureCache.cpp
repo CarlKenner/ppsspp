@@ -19,10 +19,12 @@
 #include <cstring>
 
 #include "ext/xxhash.h"
+#include "i18n/i18n.h"
 #include "math/math_util.h"
 #include "profiler/profiler.h"
 
 #include "Common/ColorConv.h"
+#include "Core/Config.h"
 #include "Core/Host.h"
 #include "Core/MemMap.h"
 #include "Core/Reporting.h"
@@ -36,8 +38,7 @@
 #include "GPU/GLES/ShaderManager.h"
 #include "GPU/GLES/TransformPipeline.h"
 #include "GPU/Common/TextureDecoder.h"
-#include "Core/Config.h"
-#include "Core/Host.h"
+#include "UI/OnScreenDisplay.h"
 
 #ifdef _M_SSE
 #include <xmmintrin.h>
@@ -54,6 +55,8 @@
 
 // Changes more frequent than this will be considered "frequent" and prevent texture scaling.
 #define TEXCACHE_FRAME_CHANGE_FREQUENT 6
+// Note: only used when hash backoff is disabled.
+#define TEXCACHE_FRAME_CHANGE_FREQUENT_REGAIN_TRUST 33
 
 #define TEXCACHE_NAME_CACHE_SIZE 16
 
@@ -241,6 +244,13 @@ void TextureCache::Invalidate(u32 addr, int size, GPUInvalidationType type) {
 				gpuStats.numTextureInvalidations++;
 				// Start it over from 0 (unless it's safe.)
 				iter->second.numFrames = type == GPU_INVALIDATE_SAFE ? 256 : 0;
+				if (type == GPU_INVALIDATE_SAFE) {
+					u32 diff = gpuStats.numFlips - iter->second.lastFrame;
+					// We still need to mark if the texture is frequently changing, even if it's safely changing.
+					if (diff < TEXCACHE_FRAME_CHANGE_FREQUENT) {
+						iter->second.status |= TexCacheEntry::STATUS_CHANGE_FREQUENT;
+					}
+				}
 				iter->second.framesUntilNextFullHash = 0;
 			} else if (!iter->second.framebuffer) {
 				iter->second.invalidHint++;
@@ -791,8 +801,7 @@ static inline u32 MiniHash(const u32 *ptr) {
 
 static inline u32 QuickTexHash(u32 addr, int bufw, int w, int h, GETextureFormat format, TextureCache::TexCacheEntry *entry) {
 	if (h == 512 && entry->maxSeenV < 512 && entry->maxSeenV != 0) {
-		// Let's not hash less than 272, we might use more later and have to rehash.  272 is very common.
-		h = std::max(272, (int)entry->maxSeenV);
+		h = (int)entry->maxSeenV;
 	}
 
 	const u32 sizeInRAM = (textureBitsPerPixel[format] * bufw * h) / 8;
@@ -1016,7 +1025,14 @@ void TextureCache::ApplyTexture() {
 			// Texture scale/offset and gen modes don't apply in through.
 			// So we can optimize how much of the texture we look at.
 			if (gstate.isModeThrough()) {
-				nextTexture_->maxSeenV = std::max(nextTexture_->maxSeenV, gstate_c.vertBounds.maxV);
+				if (nextTexture_->maxSeenV == 0) {
+					// Let's not hash less than 272, we might use more later and have to rehash.  272 is very common.
+					nextTexture_->maxSeenV = std::max((u16)272, gstate_c.vertBounds.maxV);
+				} else if (gstate_c.vertBounds.maxV > nextTexture_->maxSeenV) {
+					// The max height changed, so we're better off hashing the entire thing.
+					nextTexture_->maxSeenV = 512;
+					nextTexture_->status |= TexCacheEntry::STATUS_FREE_CHANGE;
+				}
 			} else {
 				// Otherwise, we need to reset to ensure we use the whole thing.
 				// Can't tell how much is used.
@@ -1333,12 +1349,16 @@ void TextureCache::SetTexture(bool force) {
 				fullhash = QuickTexHash(texaddr, bufw, w, h, format, entry);
 				if (fullhash != entry->fullhash) {
 					hashFail = true;
-				} else if (entry->GetHashStatus() != TexCacheEntry::STATUS_HASHING && entry->numFrames > TexCacheEntry::FRAMES_REGAIN_TRUST) {
-					// Reset to STATUS_HASHING.
+				} else {
 					if (g_Config.bTextureBackoffCache) {
-						entry->SetHashStatus(TexCacheEntry::STATUS_HASHING);
+						if (entry->GetHashStatus() != TexCacheEntry::STATUS_HASHING && entry->numFrames > TexCacheEntry::FRAMES_REGAIN_TRUST) {
+							// Reset to STATUS_HASHING.
+							entry->SetHashStatus(TexCacheEntry::STATUS_HASHING);
+							entry->status &= ~TexCacheEntry::STATUS_CHANGE_FREQUENT;
+						}
+					} else if (entry->numFrames > TEXCACHE_FRAME_CHANGE_FREQUENT_REGAIN_TRUST) {
+						entry->status &= ~TexCacheEntry::STATUS_CHANGE_FREQUENT;
 					}
-					entry->status &= ~TexCacheEntry::STATUS_CHANGE_FREQUENT;
 				}
 			}
 
@@ -1347,7 +1367,11 @@ void TextureCache::SetTexture(bool force) {
 				reason = "hash fail";
 				entry->status |= TexCacheEntry::STATUS_UNRELIABLE;
 				if (entry->numFrames < TEXCACHE_FRAME_CHANGE_FREQUENT) {
-					entry->status |= TexCacheEntry::STATUS_CHANGE_FREQUENT;
+					if (entry->status & TexCacheEntry::STATUS_FREE_CHANGE) {
+						entry->status &= ~TexCacheEntry::STATUS_FREE_CHANGE;
+					} else {
+						entry->status |= TexCacheEntry::STATUS_CHANGE_FREQUENT;
+					}
 				}
 				entry->numFrames = 0;
 
@@ -1550,15 +1574,25 @@ void TextureCache::SetTexture(bool force) {
 		scaleFactor = g_Config.iTexScalingLevel;
 	}
 
+	// Rachet down scale factor in low-memory mode.
+	if (lowMemoryMode_) {
+		// Keep it even, though, just in case of npot troubles.
+		scaleFactor = scaleFactor > 4 ? 4 : (scaleFactor > 2 ? 2 : 1);
+	}
+
 	// Don't scale the PPGe texture.
 	if (entry->addr > 0x05000000 && entry->addr < 0x08800000)
 		scaleFactor = 1;
+	if ((entry->status & TexCacheEntry::STATUS_CHANGE_FREQUENT) != 0) {
+		// Remember for later that we /wanted/ to scale this texture.
+		entry->status |= TexCacheEntry::STATUS_TO_SCALE;
+		scaleFactor = 1;
+	}
 
-	if (scaleFactor != 1 && (entry->status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0) {
+	if (scaleFactor != 1) {
 		if (texelsScaledThisFrame_ >= TEXCACHE_MAX_TEXELS_SCALED) {
 			entry->status |= TexCacheEntry::STATUS_TO_SCALE;
 			scaleFactor = 1;
-			// INFO_LOG(G3D, "Skipped scaling for now..");
 		} else {
 			entry->status &= ~TexCacheEntry::STATUS_TO_SCALE;
 			texelsScaledThisFrame_ += w * h;
@@ -1595,7 +1629,7 @@ void TextureCache::SetTexture(bool force) {
 	LoadTextureLevel(*entry, 0, replaceImages, scaleFactor, dstFmt);
 	
 	// Mipmapping only enable when texture scaling disable
-	if (maxLevel > 0 && g_Config.iTexScalingLevel == 1) {
+	if (maxLevel > 0 && scaleFactor == 1) {
 		if (gstate_c.Supports(GPU_SUPPORTS_TEXTURE_LOD_CONTROL)) {
 			if (badMipSizes) {
 				// WARN_LOG(G3D, "Bad mipmap for texture sized %dx%dx%d - autogenerating", w, h, (int)format);
@@ -1669,7 +1703,7 @@ GLenum TextureCache::GetDestFormat(GETextureFormat format, GEPaletteFormat clutF
 	}
 }
 
-void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat clutformat, int level, u32 &texByteAlign, GLenum dstFmt, int *bufwout) {
+void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat clutformat, int level, u32 &texByteAlign, GLenum dstFmt, int scaleFactor, int *bufwout) {
 	void *finalBuf = NULL;
 
 	u32 texaddr = gstate.getTextureAddress(level);
@@ -1786,7 +1820,7 @@ void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat c
 	case GE_TFMT_8888:
 		if (!swizzled) {
 			// Special case: if we don't need to deal with packing, we don't need to copy.
-			if ((g_Config.iTexScalingLevel == 1 && gstate_c.Supports(GPU_SUPPORTS_UNPACK_SUBIMAGE)) || w == bufw) {
+			if ((scaleFactor == 1 && gstate_c.Supports(GPU_SUPPORTS_UNPACK_SUBIMAGE)) || w == bufw) {
 				if (UseBGRA8888()) {
 					tmpTexBuf32.resize(std::max(bufw, w) * h);
 					finalBuf = tmpTexBuf32.data();
@@ -1879,7 +1913,7 @@ void *TextureCache::DecodeTextureLevel(GETextureFormat format, GEPaletteFormat c
 		ERROR_LOG_REPORT(G3D, "NO finalbuf! Will crash!");
 	}
 
-	if (!(g_Config.iTexScalingLevel == 1 && gstate_c.Supports(GPU_SUPPORTS_UNPACK_SUBIMAGE)) && w != bufw) {
+	if (!(scaleFactor == 1 && gstate_c.Supports(GPU_SUPPORTS_UNPACK_SUBIMAGE)) && w != bufw) {
 		int pixelSize;
 		switch (dstFmt) {
 		case GL_UNSIGNED_SHORT_4_4_4_4:
@@ -1949,7 +1983,7 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 
 	GEPaletteFormat clutformat = gstate.getClutPaletteFormat();
 	int bufw;
-	void *finalBuf = DecodeTextureLevel(GETextureFormat(entry.format), clutformat, level, texByteAlign, dstFmt, &bufw);
+	void *finalBuf = DecodeTextureLevel(GETextureFormat(entry.format), clutformat, level, texByteAlign, dstFmt, scaleFactor, &bufw);
 	if (finalBuf == NULL) {
 		return;
 	}
@@ -1957,7 +1991,7 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 	gpuStats.numTexturesDecoded++;
 
 	// Can restore these and remove the fixup at the end of DecodeTextureLevel on desktop GL and GLES 3.
-	if ((g_Config.iTexScalingLevel == 1 && gstate_c.Supports(GPU_SUPPORTS_UNPACK_SUBIMAGE)) && w != bufw) {
+	if (scaleFactor == 1 && gstate_c.Supports(GPU_SUPPORTS_UNPACK_SUBIMAGE) && w != bufw) {
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, bufw);
 		useUnpack = true;
 	}
@@ -1967,7 +2001,7 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 	useBGRA = UseBGRA8888() && dstFmt == GL_UNSIGNED_BYTE;
 
 	pixelData = (u32 *)finalBuf;
-	if (scaleFactor > 1 && (entry.status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0)
+	if (scaleFactor > 1)
 		scaler.Scale(pixelData, dstFmt, w, h, scaleFactor);
 
 	if ((entry.status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0) {
@@ -2000,6 +2034,16 @@ void TextureCache::LoadTextureLevel(TexCacheEntry &entry, int level, bool replac
 				Decimate();
 				// Try again, now that we've cleared out textures in lowMemoryMode_.
 				glTexImage3D(GL_TEXTURE_2D_ARRAY, level, components, w, h, 1, 0, components2, dstFmt, pixelData);
+
+				I18NCategory *err = GetI18NCategory("Error");
+				if (scaleFactor > 1) {
+					osm.Show(err->T("Warning: Video memory FULL, reducing upscaling and switching to slow caching mode"), 2.0f);
+				} else {
+					osm.Show(err->T("Warning: Video memory FULL, switching to slow caching mode"), 2.0f);
+				}
+			} else if (err != GL_NO_ERROR) {
+				// We checked the err anyway, might as well log if there is one.
+				WARN_LOG(G3D, "Got an error in texture upload: %08x", err);
 			}
 		}
 	}
@@ -2031,7 +2075,7 @@ bool TextureCache::DecodeTexture(u8* output, const GPUgstate &state) {
 	int w = gstate.getTextureWidth(level);
 	int h = gstate.getTextureHeight(level);
 
-	void *finalBuf = DecodeTextureLevel(format, clutformat, level, texByteAlign, dstFmt);
+	void *finalBuf = DecodeTextureLevel(format, clutformat, level, texByteAlign, dstFmt, 1);
 	if (finalBuf == NULL) {
 		return false;
 	}
