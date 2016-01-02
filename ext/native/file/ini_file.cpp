@@ -539,7 +539,7 @@ bool IniFile::Load(std::istream &in, bool keep_current_data) {
 	static const int MAX_BYTES = 1024*32;
 
 	Section* current_section = nullptr;
-	while (!in.eof())
+	while (!(in.eof() || in.fail()))
 	{
 		char templine[MAX_BYTES];
 		in.getline(templine, MAX_BYTES);
