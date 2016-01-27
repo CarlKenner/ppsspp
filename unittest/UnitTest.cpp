@@ -34,11 +34,13 @@
 #include "base/NativeApp.h"
 #include "base/logging.h"
 #include "Common/CommonWindows.h"
-#include "Common/CPUDetect.h"
-#include "Common/ArmEmitter.h"
+#include "input/input_state.h"
 #include "ext/disarm.h"
 #include "math/math_util.h"
 #include "util/text/parsers.h"
+
+#include "Common/CPUDetect.h"
+#include "Common/ArmEmitter.h"
 #include "Core/Config.h"
 #include "Core/MIPS/MIPSVFPUUtils.h"
 #include "Core/FileSystems/ISOFileSystem.h"
@@ -46,6 +48,8 @@
 #include "unittest/JitHarness.h"
 #include "unittest/TestVertexJit.h"
 #include "unittest/UnitTest.h"
+
+InputState input_state;
 
 HDC hDC = NULL;
 HWND hWnd = NULL;

@@ -444,6 +444,7 @@ DIRECTX9_GPU::DIRECTX9_GPU()
 	// Some of our defaults are different from hw defaults, let's assert them.
 	// We restore each frame anyway, but here is convenient for tests.
 	dxstate.Restore();
+	textureCache_.NotifyConfigChanged();
 }
 
 void DIRECTX9_GPU::UpdateCmdInfo() {
@@ -478,11 +479,6 @@ void DIRECTX9_GPU::CheckGPUFeatures() {
 
 	if (!PSP_CoreParameter().compat.flags().NoDepthRounding) {
 		features |= GPU_ROUND_DEPTH_TO_16BIT;
-	}
-
-	// The Phantasy Star hack :(
-	if (PSP_CoreParameter().compat.flags().DepthRangeHack) {
-		features |= GPU_USE_DEPTH_RANGE_HACK;
 	}
 
 	gstate_c.featureFlags = features;
@@ -537,6 +533,7 @@ void DIRECTX9_GPU::BeginFrameInternal() {
 	if (resized_) {
 		UpdateCmdInfo();
 		transformDraw_.Resized();
+		textureCache_.NotifyConfigChanged();
 		resized_ = false;
 	}
 

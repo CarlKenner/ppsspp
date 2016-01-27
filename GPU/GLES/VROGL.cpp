@@ -649,7 +649,7 @@ void VR_StartGUI(int target_width, int target_height)
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
-		GL_SwapInterval(0);
+		//GL_SwapInterval(0);
 		GL_CHECK();
 
 		ovrSizei target_size;
@@ -696,7 +696,7 @@ void VR_StartFramebuffer(int target_width, int target_height)
 #if defined(OVR_MAJOR_VERSION) && OVR_MAJOR_VERSION >= 6
 	if (g_has_rift)
 	{
-		GL_SwapInterval(0);
+		//GL_SwapInterval(0);
 		GL_CHECK();
 
 		for (int eye = 0; eye<2; ++eye)

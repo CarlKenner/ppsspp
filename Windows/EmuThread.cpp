@@ -4,7 +4,9 @@
 #include "base/NativeApp.h"
 #include "base/mutex.h"
 #include "i18n/i18n.h"
+#include "input/input_state.h"
 #include "util/text/utf8.h"
+
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
 #include "../Globals.h"
@@ -30,6 +32,8 @@
 static recursive_mutex emuThreadLock;
 static HANDLE emuThread;
 static volatile long emuThreadReady;
+
+InputState input_state;
 
 extern std::vector<std::wstring> GetWideCmdLine();
 
@@ -119,11 +123,13 @@ unsigned int WINAPI TheThread(void *)
 
 	host->UpdateUI();
 
+	GraphicsContext *graphicsContext;
+
 	OGL::VRThread_Start();
 
 	OGL::VRThread_WaitForContextCreation();
 	std::string error_string;
-	if (!host->InitGraphics(&error_string)) {
+	if (!host->InitGraphics(&error_string, &graphicsContext)) {
 		I18NCategory *err = GetI18NCategory("Error");
 		Reporting::ReportMessage("Graphics init error: %s", error_string.c_str());
 
@@ -161,7 +167,9 @@ unsigned int WINAPI TheThread(void *)
 	OGL::VR_StartGUI(PSP_CoreParameter().pixelWidth, PSP_CoreParameter().pixelHeight);
 	OGL::VRThread_StartLoop();
 
-	NativeInitGraphics();
+	PSP_CoreParameter().graphicsContext = graphicsContext;
+
+	NativeInitGraphics(graphicsContext);
 	NativeResized();
 
 	INFO_LOG(BOOT, "Done.");
@@ -187,7 +195,7 @@ unsigned int WINAPI TheThread(void *)
 			if (!Core_IsActive())
 				UpdateUIState(UISTATE_MENU);
 
-			Core_Run();
+			Core_Run(graphicsContext);
 		}
 	} 
 	catch (std::bad_alloc) {

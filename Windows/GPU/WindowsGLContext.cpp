@@ -33,19 +33,9 @@
 #include "Windows/W32Util/Misc.h"
 #include "Windows/GPU/WindowsGLContext.h"
 
+void WindowsGLContext::SwapBuffers() {
+	::SwapBuffers(hDC);
 
-HDC hDC;     // Private GDI Device Context
-static HGLRC hRC;   // Permanent Rendering Context
-HWND hWnd;   // Holds Our Window Handle
-static volatile bool pauseRequested;
-static volatile bool resumeRequested;
-static HANDLE pauseEvent;
-static HANDLE resumeEvent;
-
-static int xres, yres;
-
-void GL_SwapBuffers() {
-	SwapBuffers(hDC);
 	// Used during fullscreen switching to prevent rendering.
 	if (pauseRequested) {
 		SetEvent(pauseEvent);
@@ -62,7 +52,7 @@ void GL_SwapBuffers() {
 	// glFinish();
 }
 
-void GL_Pause() {
+void WindowsGLContext::Pause() {
 	if (!hRC) {
 		return;
 	}
@@ -75,7 +65,7 @@ void GL_Pause() {
 	// OK, we now know the rendering thread is paused.
 }
 
-void GL_Resume() {
+void WindowsGLContext::Resume() {
 	if (!hRC) {
 		return;
 	}
@@ -155,7 +145,7 @@ void DebugCallbackARB(GLenum source, GLenum type, GLuint id, GLenum severity,
 	}
 }
 
-bool GL_Init(HWND window, std::string *error_message) {
+bool WindowsGLContext::Init(HINSTANCE hInst, HWND window, std::string *error_message) {
 	*error_message = "ok";
 	hWnd = window;
 	GLuint PixelFormat;
@@ -325,7 +315,7 @@ bool GL_Init(HWND window, std::string *error_message) {
 	if (OGL::g_hOffscreenRC && hRC)
 		wglShareLists(hRC, OGL::g_hOffscreenRC);
 
-	GL_SwapInterval(0);
+	SwapInterval(0);
 
 	if (g_Config.bGfxDebugOutput) {
 		if (wglewIsSupported("GL_KHR_debug") == 1) {
@@ -366,13 +356,13 @@ bool GL_Init(HWND window, std::string *error_message) {
 	return true;												// Success
 }
 
-void GL_SwapInterval(int interval) {
+void WindowsGLContext::SwapInterval(int interval) {
 	// glew loads wglSwapIntervalEXT if available
 	if (wglSwapIntervalEXT)
 		wglSwapIntervalEXT(0);
 }
 
-void GL_Shutdown() { 
+void WindowsGLContext::Shutdown() {
 	CloseHandle(pauseEvent);
 	CloseHandle(resumeEvent);
 	if (hRC) {
@@ -396,4 +386,15 @@ void GL_Shutdown() {
 		hDC = NULL;
 	}
 	hWnd = NULL;
+}
+
+void WindowsGLContext::Resize() {
+}
+
+Thin3DContext *WindowsGLContext::CreateThin3DContext() {
+	Thin3DContext *ctx = T3DCreateGLContext();
+	if (ctx) {
+		CheckGLExtensions();
+	}
+	return ctx;
 }

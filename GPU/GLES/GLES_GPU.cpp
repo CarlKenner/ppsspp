@@ -19,6 +19,7 @@
 #include "profiler/profiler.h"
 
 #include "Common/ChunkFile.h"
+#include "Common/GraphicsContext.h"
 
 #include "Core/Config.h"
 #include "Core/Debugger/Breakpoints.h"
@@ -395,8 +396,8 @@ static const CommandTableEntry commandTable[] = {
 
 GLES_GPU::CommandInfo GLES_GPU::cmdInfo_[256];
 
-GLES_GPU::GLES_GPU()
-: resized_(false) {
+GLES_GPU::GLES_GPU(GraphicsContext *ctx)
+: resized_(false), gfxCtx_(ctx) {
 	UpdateVsyncInterval(true);
 	CheckGPUFeatures();
 
@@ -454,8 +455,9 @@ GLES_GPU::GLES_GPU()
 
 	// Some of our defaults are different from hw defaults, let's assert them.
 	// We restore each frame anyway, but here is convenient for tests.
-	transformDraw_.RestoreVAO();
 	glstate.Restore();
+	transformDraw_.RestoreVAO();
+	textureCache_.NotifyConfigChanged();
 }
 
 GLES_GPU::~GLES_GPU() {
@@ -467,7 +469,7 @@ GLES_GPU::~GLES_GPU() {
 	shaderManager_ = nullptr;
 
 #ifdef _WIN32
-	GL_SwapInterval(0);
+	gfxCtx_->SwapInterval(0);
 #endif
 }
 
@@ -559,11 +561,6 @@ void GLES_GPU::CheckGPUFeatures() {
 		if (!PSP_CoreParameter().compat.flags().NoDepthRounding) {
 			features |= GPU_ROUND_DEPTH_TO_16BIT;
 		}
-	}
-
-	// The Phantasy Star hack :(
-	if (PSP_CoreParameter().compat.flags().DepthRangeHack) {
-		features |= GPU_USE_DEPTH_RANGE_HACK;
 	}
 
 #ifdef MOBILE_DEVICE
@@ -676,7 +673,7 @@ inline void GLES_GPU::UpdateVsyncInterval(bool force) {
 		//	// See http://developer.download.nvidia.com/opengl/specs/WGL_EXT_swap_control_tear.txt
 		//	glstate.SetVSyncInterval(-desiredVSyncInterval);
 		//} else {
-			GL_SwapInterval(desiredVSyncInterval);
+		gfxCtx_->SwapInterval(desiredVSyncInterval);
 		//}
 		lastVsync_ = desiredVSyncInterval;
 	}
@@ -716,6 +713,7 @@ void GLES_GPU::BeginFrameInternal() {
 		CheckGPUFeatures();
 		UpdateCmdInfo();
 		transformDraw_.Resized();
+		textureCache_.NotifyConfigChanged();
 	}
 	UpdateVsyncInterval(resized_);
 	resized_ = false;

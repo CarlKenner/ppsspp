@@ -612,8 +612,8 @@ static inline void ScaleProjMatrix(Matrix4x4 &in) {
 		// GL upside down is a pain as usual.
 		yOffset = -yOffset;
 	}
-	const Vec3 trans(gstate_c.vpXOffset, yOffset, 0.0f);
-	const Vec3 scale(gstate_c.vpWidthScale, gstate_c.vpHeightScale, 1.0);
+	const Vec3 trans(gstate_c.vpXOffset, yOffset, gstate_c.vpZOffset * 2.0f);
+	const Vec3 scale(gstate_c.vpWidthScale, gstate_c.vpHeightScale, gstate_c.vpDepthScale);
 	in.translateAndScale(trans, scale);
 }
 
@@ -811,11 +811,27 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 		float viewZScale = gstate.getViewportZScale();
 		float viewZCenter = gstate.getViewportZCenter();
 		float viewZInvScale;
+
+		// We had to scale and translate Z to account for our clamped Z range.
+		// Therefore, we also need to reverse this to round properly.
+		//
+		// Example: scale = 65535.0, center = 0.0
+		// Resulting range = -65535 to 65535, clamped to [0, 65535]
+		// gstate_c.vpDepthScale = 2.0f
+		// gstate_c.vpZOffset = -1.0f
+		//
+		// The projection already accounts for those, so we need to reverse them.
+		//
+		// Additionally, OpenGL uses a range from [-1, 1].  So we multiply by scale and add the center.
+		viewZScale *= (1.0f / gstate_c.vpDepthScale);
+		viewZCenter -= 65535.0f * (gstate_c.vpZOffset);
+
 		if (viewZScale != 0.0) {
 			viewZInvScale = 1.0f / viewZScale;
 		} else {
 			viewZInvScale = 0.0;
 		}
+
 		float data[4] = { viewZScale, viewZCenter, viewZCenter, viewZInvScale };
 		SetFloatUniform4(u_depthRange, data);
 	}
@@ -869,38 +885,6 @@ u32 LinkedShader::UpdateUniforms(u32 vertType, bool isClear) {
 			const bool invertedX = gstate_c.vpWidth < 0;
 			if (invertedX)
 				flippedMatrix.flipAxis(0);
-
-			// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
-			// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
-			if (gstate_c.Supports(GPU_USE_DEPTH_RANGE_HACK)) {
-				float zScale = gstate.getViewportZScale() / 65535.0f;
-				float zCenter = gstate.getViewportZCenter() / 65535.0f;
-
-				// if far depth range < 0
-				if (zCenter + zScale < 0.0f) {
-					// if perspective projection
-					if (flippedMatrix[11] < 0.0f) {
-						float depthMax = gstate.getDepthRangeMax() / 65535.0f;
-						float depthMin = gstate.getDepthRangeMin() / 65535.0f;
-
-						float a = flippedMatrix[10];
-						float b = flippedMatrix[14];
-
-						float n = b / (a - 1.0f);
-						float f = b / (a + 1.0f);
-
-						f = (n * f) / (n + ((zCenter + zScale) * (n - f) / (depthMax - depthMin)));
-
-						a = (n + f) / (n - f);
-						b = (2.0f * n * f) / (n - f);
-
-						if (!my_isnan(a) && !my_isnan(b)) {
-							flippedMatrix[10] = a;
-							flippedMatrix[14] = b;
-						}
-					}
-				}
-			}
 
 			// enable freelook also for non-VR mode, but only for perspective projections, not orthographic
 			if (flippedMatrix.zw == -1.0f || flippedMatrix.zw == 1.0f) {
@@ -1074,37 +1058,6 @@ Matrix4x4 LinkedShader::SetProjectionConstants(float input_proj_matrix[], bool s
 			flippedMatrix.flipAxis(0);
 	}
 
-	// In Phantasy Star Portable 2, depth range sometimes goes negative and is clamped by glDepthRange to 0,
-	// causing graphics clipping glitch (issue #1788). This hack modifies the projection matrix to work around it.
-	if (gstate_c.Supports(GPU_USE_DEPTH_RANGE_HACK)) {
-		float zScale = gstate.getViewportZScale() / 65535.0f;
-		float zCenter = gstate.getViewportZCenter() / 65535.0f;
-
-		// if far depth range < 0
-		if (zCenter + zScale < 0.0f) {
-			// if perspective projection
-			if (flippedMatrix[11] < 0.0f) {
-				float depthMax = gstate.getDepthRangeMax() / 65535.0f;
-				float depthMin = gstate.getDepthRangeMin() / 65535.0f;
-
-				float a = flippedMatrix[10];
-				float b = flippedMatrix[14];
-
-				float n = b / (a - 1.0f);
-				float f = b / (a + 1.0f);
-
-				f = (n * f) / (n + ((zCenter + zScale) * (n - f) / (depthMax - depthMin)));
-
-				a = (n + f) / (n - f);
-				b = (2.0f * n * f) / (n - f);
-
-				if (!my_isnan(a) && !my_isnan(b)) {
-					flippedMatrix[10] = a;
-					flippedMatrix[14] = b;
-				}
-			}
-		}
-	}
 	if (debug_newScene) {
 		//flippedMatrix.toOpenGL(s, 1024);
 		//NOTICE_LOG(VR, "flipped: %s", s);
