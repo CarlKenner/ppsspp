@@ -23,6 +23,11 @@
 #define ovrHmd_BlackStar        7
 #define ovrHmd_CB               8
 #define ovrHmd_Other            9
+#define ovrHmd_E3_2015         10
+#define ovrHmd_ES06            11
+#define ovrHmd_ES09            12
+#define ovrHmd_ES11            13
+#define ovrHmd_CV1             14
 
 #define ovrEye_Left  0
 #define ovrEye_Right 1
@@ -45,6 +50,10 @@
 #define ovrTrackingCap_MagYawCorrection 0x020
 #define ovrTrackingCap_Position         0x040
 #define ovrTrackingCap_Idle             0x100
+
+#define ovrTrackingOrigin_EyeLevel   0
+#define ovrTrackingOrigin_FloorLevel 1
+#define ovrTrackingOrigin_Count      2
 
 #define ovrStatus_OrientationTracked 0x0001
 #define ovrStatus_PositionTracked    0x0002
