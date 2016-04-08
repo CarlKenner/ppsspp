@@ -895,6 +895,7 @@ void VR_StopFramebuffer()
 			{
 #if OVR_PRODUCT_VERSION >= 1
 				ovr_DestroyTextureSwapChain(hmd, eyeRenderTexture[eye]->TextureChain);
+				eyeRenderTexture[eye]->TextureChain = nullptr;
 #else
 				ovrHmd_DestroySwapTextureSet(hmd, eyeRenderTexture[eye]->TextureSet);
 				GL_CHECK();
@@ -966,7 +967,7 @@ void VR_BeginFrame()
 			for (int eye = 0; eye < 2; eye++)
 			{
 #if OVR_PRODUCT_VERSION >= 1 
-				eyeRenderTexture[eye]->Commit();
+				//eyeRenderTexture[eye]->Commit();
 #else
 				// Increment to use next texture, just before writing
 				eyeRenderTexture[eye]->TextureSet->CurrentIndex = (eyeRenderTexture[eye]->TextureSet->CurrentIndex + 1) % eyeRenderTexture[eye]->TextureSet->TextureCount;
@@ -1119,39 +1120,37 @@ void PresentFrameSDK6()
 		ovrLayerEyeFov ld;
 		ld.Header.Flags = (g_Config.bFlipVertical ? 0 : ovrLayerFlag_TextureOriginAtBottomLeft) | (g_Config.bHqDistortion ? ovrLayerFlag_HighQuality : 0);
 		{
-			lock_guard guard(AsyncTimewarpLock);
 #if OVR_PRODUCT_VERSION >= 1
 			if (eyeRenderTexture[0] && eyeRenderTexture[1] && eyeRenderTexture[0]->TextureChain) {
 #else
+			lock_guard guard(AsyncTimewarpLock);
 			if (eyeRenderTexture[0] && eyeRenderTexture[1] && eyeRenderTexture[0]->TextureSet) {
 #endif
 				++count;
 				ld.Header.Type = ovrLayerType_EyeFov;
 				for (int eye = 0; eye < 2; eye++)
 				{
+#if OVR_PRODUCT_VERSION >= 1
+					int index;
+					ovr_GetTextureSwapChainCurrentIndex(hmd, eyeRenderTexture[eye]->TextureChain, &index);
+					if (eye == 0)
+						frame_index = eyeRenderTexture[0]->frame_index[index];
+					ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[index];
+#else
+					frame_index = eyeRenderTexture[0]->frame_index[eyeRenderTexture[0]->TextureSet->CurrentIndex];
+					ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex];
+#endif
+
 					eyeRenderTexture[eye]->UnsetRenderSurface();
 #if OVR_PRODUCT_VERSION >= 1
+					eyeRenderTexture[eye]->Commit();
 					ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureChain;
 #else
 					ld.ColorTexture[eye] = eyeRenderTexture[eye]->TextureSet;
 #endif
 					ld.Viewport[eye] = eyeRenderViewport[eye];
 					ld.Fov[eye] = g_eye_fov[eye];
-#if OVR_PRODUCT_VERSION >= 1
-					int index;
-					ovr_GetTextureSwapChainCurrentIndex(hmd, eyeRenderTexture[eye]->TextureChain, &index);
-					ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[index];
-#else
-					ld.RenderPose[eye] = eyeRenderTexture[eye]->eyePose[eyeRenderTexture[eye]->TextureSet->CurrentIndex];
-#endif
 				}
-#if OVR_PRODUCT_VERSION >= 1
-				int index;
-				ovr_GetTextureSwapChainCurrentIndex(hmd, eyeRenderTexture[0]->TextureChain, &index);
-				frame_index = eyeRenderTexture[0]->frame_index[index];
-#else
-				frame_index = eyeRenderTexture[0]->frame_index[eyeRenderTexture[0]->TextureSet->CurrentIndex];
-#endif
 				LayerList[count - 1] = &ld.Header;
 			}
 			ovrLayerQuad lg;
